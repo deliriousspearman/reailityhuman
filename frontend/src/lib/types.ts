@@ -119,8 +119,10 @@ export type TemplateCategory =
 	| 'Hypervisors'
 	| 'Mail'
 	| 'Storage'
-	| 'Apps'
-	| 'Security';
+	| 'Self-hosted apps'
+	| 'Developer tools'
+	| 'Security'
+	| 'Practice targets';
 
 export interface TemplateVersion {
 	version: string;
@@ -138,10 +140,12 @@ export interface MachineTemplate {
 	versions: TemplateVersion[];
 	resources: { cpu: number; memoryGB: number; diskGB: number };
 	access: Access[];
-	/** Port of the web interface when it isn't 443, e.g. 8006 for Proxmox. */
-	webPort?: number;
-	/** Default sign-in, shown on the machine's page. */
+	/** Web interface address, with {ip} for the machine's address. Default: https://{ip}/ */
+	webUrl?: string;
+	/** Default sign-in to the machine or app, shown on the machine's page. */
 	credentials?: string;
+	/** SSH user, when it isn't the user in `credentials` (e.g. an app whose sign-in is its own). */
+	sshUser?: string;
 	flags?: TemplateFlag[];
 }
 

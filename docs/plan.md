@@ -207,6 +207,10 @@ Added after the first design pass. Alongside Pro Labs, people can deploy **one m
 - **Later:** let people add extra private segments, so a pfSense can sit *between* networks rather than beside them.
 
 ### Templates
+- **Catalogue:** 39 templates in 11 categories: firewalls and routers, Linux, Windows, Windows Server (including a ready-made Active Directory domain), hypervisors, mail, storage, self-hosted apps (such as Vaultwarden, MinIO, WordPress and Keycloak), developer tools, security tools and practice targets.
+  - It's defined in `frontend/src/lib/mock/templates.ts` for now; the API will serve it later.
+  - Practice targets (Metasploitable, Juice Shop, DVWA) are vulnerable on purpose. Like everything else, they're only reachable inside their owner's personal network.
+- **Apps:** app templates are Ubuntu with the app installed. The machine page separates the app's own sign-in from the SSH user, and knows each app's web address (e.g. MinIO's console on port 9001).
 - **How they're stored:** each version is a vSphere template with a `clean` snapshot, deployed as a linked clone.
 - **Name and first sign-in:**
   - Linux: set by cloud-init.

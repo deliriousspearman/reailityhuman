@@ -17,9 +17,9 @@
 	const canControl = $derived(m ? store.canControlMachine(m) : false);
 	const busy = $derived(m ? !['running', 'stopped', 'expired'].includes(m.state) : true);
 	const keepBlocker = $derived(m ? store.keepBlocker(m) : null);
-	/** The default user name, from credentials like "admin / pfsense". */
-	const user = $derived(t?.credentials?.split(' / ')[0].replace(/^.*\\/, '') ?? 'root');
-	const webUrl = $derived(m && t ? `https://${m.ip}${t.webPort ? `:${t.webPort}` : ''}/` : '');
+	/** The SSH user: the template's, or the user in credentials like "admin / pfsense". */
+	const user = $derived(t?.sshUser ?? t?.credentials?.split(' / ')[0].replace(/^.*\\/, '') ?? 'root');
+	const webUrl = $derived(m && t ? (t.webUrl ?? 'https://{ip}/').replace('{ip}', m.ip) : '');
 
 	let request = $state<ConfirmRequest>();
 	let copied = $state('');

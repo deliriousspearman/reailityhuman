@@ -15,6 +15,11 @@
 		}),
 	);
 
+	// Grouped under category headings, in the catalogue's order; empty groups are left out.
+	const groups = $derived(
+		categories.map((c) => ({ category: c, items: shown.filter((t) => t.category === c) })).filter((g) => g.items.length),
+	);
+
 	function versionSummary(versions: { version: string }[]) {
 		const names = versions.map((v) => v.version);
 		return names.length > 3 ? `${names.slice(0, 3).join(', ')} and ${names.length - 3} more` : names.join(', ');
@@ -54,31 +59,37 @@
 	</div>
 </div>
 
-<div class="templates">
-	{#each shown as t (t.id)}
-		<article class="template">
-			<header>
-				<h3><a href="/machines/new/{t.id}">{t.name}</a></h3>
-				<span class="os" data-os={t.os.toLowerCase()}>{t.os}</span>
-			</header>
-			<p>{t.description}</p>
-			<p class="versions">{versionSummary(t.versions)}</p>
-			{#if t.flags?.length}
-				<ul class="flags">
-					{#each t.flags as f (f)}
-						<li class="tag" title={flagNotes[f].note}>{flagNotes[f].label}</li>
-					{/each}
-				</ul>
-			{/if}
-			<footer>
-				<span>{t.resources.cpu} vCPU, {t.resources.memoryGB} GB</span>
-				<span class="deploy">Deploy</span>
-			</footer>
-		</article>
-	{:else}
-		<p class="none">Nothing matches “{query}”. Try a shorter search or another category.</p>
-	{/each}
-</div>
+{#each groups as group (group.category)}
+	{@const slug = `cat-${group.category.toLowerCase().replace(/\W+/g, '-')}`}
+	<section class="group" aria-labelledby={slug}>
+		<h3 id={slug}>{group.category} <span>{group.items.length}</span></h3>
+		<div class="templates">
+			{#each group.items as t (t.id)}
+				<article class="template">
+					<header>
+						<h4><a href="/machines/new/{t.id}">{t.name}</a></h4>
+						<span class="os" data-os={t.os.toLowerCase()}>{t.os}</span>
+					</header>
+					<p>{t.description}</p>
+					<p class="versions">{versionSummary(t.versions)}</p>
+					{#if t.flags?.length}
+						<ul class="flags">
+							{#each t.flags as f (f)}
+								<li class="tag" title={flagNotes[f].note}>{flagNotes[f].label}</li>
+							{/each}
+						</ul>
+					{/if}
+					<footer>
+						<span>{t.resources.cpu} vCPU, {t.resources.memoryGB} GB</span>
+						<span class="deploy">Deploy</span>
+					</footer>
+				</article>
+			{/each}
+		</div>
+	</section>
+{:else}
+	<p class="none">Nothing matches “{query}”. Try a shorter search or another category.</p>
+{/each}
 
 <style>
 	.lead {
@@ -149,15 +160,31 @@
 		justify-content: space-between;
 		gap: 0.75rem;
 	}
-	.template h3 {
+	.group + .group {
+		margin-top: 1.75rem;
+	}
+	.group h3 {
+		display: flex;
+		align-items: baseline;
+		gap: 0.5rem;
+		margin-bottom: 0.75rem;
 		font-size: 1.1rem;
 	}
-	.template h3 a {
+	.group h3 span {
+		font: 600 0.8rem var(--lms-mono);
+		color: var(--lms-gray-3);
+	}
+	.template h4 {
+		margin: 0;
+		font: 700 1.1rem var(--lms-display);
+		color: var(--lms-white);
+	}
+	.template h4 a {
 		color: var(--lms-white);
 		text-decoration: none;
 	}
 	/* The whole card is clickable through the title link. */
-	.template h3 a::after {
+	.template h4 a::after {
 		content: '';
 		position: absolute;
 		inset: 0;
@@ -199,7 +226,6 @@
 		text-decoration: underline;
 	}
 	.none {
-		grid-column: 1 / -1;
 		color: var(--lms-gray-3);
 	}
 </style>
