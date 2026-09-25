@@ -215,7 +215,7 @@ class LabStore {
 	/** The signed-in person's own network for single machines. */
 	network: PersonalNetwork = { cidr: '10.99.7.0/24', endpoint: '192.0.2.60:51820' };
 	/** The ProLabs resource pool. */
-	capacity = { cpu: 64, memoryGB: 160, diskGB: 2000 };
+	capacity = { cpu: 96, memoryGB: 160, diskGB: 2000 };
 	/** Ticks every second, for countdowns and uptimes. */
 	now = $state(Date.now());
 	#nextJob = 1042;
