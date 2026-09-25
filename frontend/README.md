@@ -22,6 +22,9 @@ Use the account menu (top right) to preview the panel as an admin or a learner.
 | `/labs/<slug>` | A lab: join the shared copy or deploy your own |
 | `/instances/<id>` | A running instance: network map, machine controls, VPN file, activity |
 | `/instances` | Instances you can see |
+| `/machines` | Your single machines, and the templates to deploy more |
+| `/machines/new/<template>` | Deploy a machine: version, name, how long to keep it |
+| `/machines/<id>` | A machine: time left (extend or keep), sign-in details, VPN file, activity |
 | `/admin` | Capacity, every instance, the job queue |
 | `/login` | Sign in |
 

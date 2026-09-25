@@ -282,21 +282,6 @@
 		font: 500 0.7rem var(--lms-mono);
 		color: var(--lms-gray-3);
 	}
-	.os {
-		--os: var(--lms-gray-3);
-		padding: 0 0.4rem;
-		border: 1px solid var(--os);
-		border-radius: 4px;
-		font: 600 0.68rem var(--lms-mono);
-		color: var(--os);
-	}
-	.os[data-os='windows'] {
-		--os: var(--lms-lime-text);
-	}
-	.os[data-os='linux'] {
-		--os: var(--lms-medium);
-	}
-
 	/* Between networks: a dashed wire, since the VPN doesn't route there. */
 	.pivot {
 		position: relative;

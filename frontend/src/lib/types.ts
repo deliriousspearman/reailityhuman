@@ -76,6 +76,8 @@ export type JobState = 'queued' | 'running' | 'done' | 'failed';
 export interface Job {
 	id: string;
 	instanceId: string;
+	/** Set for single-machine jobs (then instanceId and lab are empty). */
+	machineId?: string;
 	lab: string;
 	action: string;
 	by: string;
@@ -92,4 +94,77 @@ export type Role = 'admin' | 'learner';
 export interface User {
 	username: string;
 	role: Role;
+}
+
+// Single machines ------------------------------------------------------------------------------------
+// One VM from a template (an OS or appliance), in its owner's personal network. Temporary by default:
+// it expires, is powered off, and is deleted a day later unless extended or kept permanently.
+
+export type Access = 'ssh' | 'rdp' | 'web' | 'console';
+
+/**
+ * Things that affect whether or how a template can be deployed:
+ * `nested`: runs VMs itself, so needs hardware virtualisation exposed to the guest;
+ * `licence`: needs a licence or activation (KMS/volume keys) on an offline network;
+ * `vtpm`: needs a virtual TPM, which needs a key provider in vCenter;
+ * `domain`: needs Active Directory, so it's deployed with a domain controller.
+ */
+export type TemplateFlag = 'nested' | 'licence' | 'vtpm' | 'domain';
+
+export type TemplateCategory =
+	| 'Firewalls and routers'
+	| 'Linux'
+	| 'Windows'
+	| 'Windows Server'
+	| 'Hypervisors'
+	| 'Mail'
+	| 'Storage'
+	| 'Apps'
+	| 'Security';
+
+export interface TemplateVersion {
+	version: string;
+	/** No longer receives updates from its vendor. Still useful for practising on old systems. */
+	eol?: boolean;
+}
+
+export interface MachineTemplate {
+	id: string;
+	name: string;
+	category: TemplateCategory;
+	os: OS;
+	description: string;
+	/** Newest first; the first is the default. */
+	versions: TemplateVersion[];
+	resources: { cpu: number; memoryGB: number; diskGB: number };
+	access: Access[];
+	/** Port of the web interface when it isn't 443, e.g. 8006 for Proxmox. */
+	webPort?: number;
+	/** Default sign-in, shown on the machine's page. */
+	credentials?: string;
+	flags?: TemplateFlag[];
+}
+
+export type SingleMachineState = 'deploying' | 'running' | 'stopping' | 'stopped' | 'resetting' | 'expired' | 'destroying';
+
+export interface SingleMachine {
+	id: string;
+	/** Hostname, chosen by the owner. */
+	name: string;
+	template: string;
+	version: string;
+	owner: string;
+	state: SingleMachineState;
+	createdAt: number;
+	/** null: kept permanently. */
+	expiresAt: number | null;
+	/** Address in the owner's personal network. */
+	ip: string;
+	log: LogLine[];
+}
+
+/** A person's own network, shared by all their single machines and reached over one WireGuard tunnel. */
+export interface PersonalNetwork {
+	cidr: string;
+	endpoint: string;
 }

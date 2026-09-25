@@ -198,7 +198,14 @@
 	</div>
 
 	<div class="lower">
-		<AccessPanel {lab} {instance} />
+		<AccessPanel
+			fileName="{lab.slug}-{instance.id}.conf"
+			label="{lab.title} ({instance.kind === 'shared' ? 'shared' : instance.id})"
+			endpoint={instance.endpoint}
+			cidr={(lab.networks.find((n) => n.entry) ?? lab.networks[0]).cidr}
+			ready={instance.state === 'running' || instance.state === 'resetting'}
+			expires={!!instance.expiresAt}
+		/>
 		<section aria-labelledby="activity-title">
 			<div class="section-heading">
 				<h2 id="activity-title">Activity</h2>

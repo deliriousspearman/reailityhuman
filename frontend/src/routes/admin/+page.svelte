@@ -1,5 +1,6 @@
 <script lang="ts">
 	import InstanceTable from '$lib/components/InstanceTable.svelte';
+	import MachineTable from '$lib/components/MachineTable.svelte';
 	import Meter from '$lib/components/Meter.svelte';
 	import Status from '$lib/components/Status.svelte';
 	import { ago, duration, type Tone } from '$lib/format';
@@ -29,7 +30,7 @@
 	<p class="lead">This page is for lab admins. <a href="/">Back to Pro Labs</a></p>
 {:else}
 	<h1>Admin</h1>
-	<p class="lead">Capacity of the ProLabs resource pool, every instance, and what the job worker is doing.</p>
+	<p class="lead">Capacity of the ProLabs resource pool, every lab instance and machine, and what the job worker is doing.</p>
 
 	<div class="section-heading"><h2>Capacity</h2></div>
 	<div class="meters">
@@ -40,12 +41,18 @@
 			unit="GB"
 			note="Room for {roomFor} more {roomFor === 1 ? 'copy' : 'copies'} of {biggest.title} ({biggest.resources.memoryGB} GB each)"
 		/>
-		<Meter label="CPU" used={used.cpu} total={cap.cpu} unit="vCPU" note="Stopped instances don't count" />
+		<Meter label="CPU" used={used.cpu} total={cap.cpu} unit="vCPU" note="Stopped labs and machines don't count" />
 		<Meter label="Storage" used={used.diskGB} total={cap.diskGB} unit="GB" note="Linked clones: only changes use space" />
 	</div>
 
-	<div class="section-heading"><h2>Instances</h2></div>
+	<div class="section-heading"><h2>Lab instances</h2></div>
 	<InstanceTable instances={store.instances} />
+
+	<div class="section-heading">
+		<h2>Machines</h2>
+		<p>{store.machines.filter((m) => m.expiresAt === null).length} kept permanently</p>
+	</div>
+	<MachineTable machines={store.machines} owners empty="Nobody has deployed a machine." />
 
 	<div class="section-heading">
 		<h2>Jobs</h2>
@@ -57,7 +64,7 @@
 				<tr>
 					<th scope="col">Job</th>
 					<th scope="col">Action</th>
-					<th scope="col">Lab</th>
+					<th scope="col">For</th>
 					<th scope="col">By</th>
 					<th scope="col">State</th>
 					<th scope="col">Started</th>
@@ -70,7 +77,9 @@
 						<th scope="row">{job.id}</th>
 						<td>{job.action}</td>
 						<td>
-							{#if store.instance(job.instanceId)}
+							{#if job.machineId}
+								{#if store.machine(job.machineId)}<a href="/machines/{job.machineId}">Machine</a>{:else}Machine{/if}
+							{:else if store.instance(job.instanceId)}
 								<a href="/instances/{job.instanceId}">{findLab(job.lab)?.title}</a>
 							{:else}
 								{findLab(job.lab)?.title}

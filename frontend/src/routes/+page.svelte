@@ -1,10 +1,11 @@
 <script lang="ts">
 	import LabCard from '$lib/components/LabCard.svelte';
-	import { duration, instanceStates } from '$lib/format';
+	import { duration, instanceStates, singleMachineStates } from '$lib/format';
 	import { findLab } from '$lib/mock/labs';
 	import { labs, store } from '$lib/mock/store.svelte';
 
-	// The hero terminal lists what's running for this person: their own copies, then the shared labs.
+	// The hero terminal lists what's running for this person: their own lab copies, the shared labs,
+	// then their machines.
 	const rows = $derived([...store.mine, ...store.instances.filter((i) => i.kind === 'shared')]);
 </script>
 
@@ -15,7 +16,7 @@
 		<h1>Pro Labs</h1>
 		<p>
 			Realistic networks of vulnerable machines. Join the shared lab, or start your own copy and reset it whenever you
-			like.
+			like. Need just one system? <a href="/machines">Deploy a single machine</a>.
 		</p>
 	</div>
 	<div class="terminal hero-terminal" role="img" aria-label="Your lab instances and their state">
@@ -31,6 +32,15 @@
 					<span class="t-note">
 						{#if inst.expiresAt}{duration(inst.expiresAt - store.now)} left{:else}{inst.connected} connected{/if}
 					</span>
+				</p>
+			{/each}
+			{#each store.myMachines as m (m.id)}
+				{@const state = singleMachineStates[m.state]}
+				<p>
+					<span class="t-name">{m.name}</span>
+					<span class="t-kind">machine</span>
+					<span class="t-state" data-tone={state.tone}>{state.label.toLowerCase()}</span>
+					<span class="t-note">{m.expiresAt === null ? 'kept' : m.state === 'expired' ? 'powered off' : `${duration(m.expiresAt - store.now)} left`}</span>
 				</p>
 			{/each}
 			<p><span class="prompt">$</span> <span class="cursor"></span></p>
@@ -107,6 +117,9 @@
 	}
 	.t-state[data-tone='error'] {
 		color: #ff3e3e;
+	}
+	.t-state[data-tone='warn'] {
+		color: #ffaf00;
 	}
 	.cursor {
 		display: inline-block;

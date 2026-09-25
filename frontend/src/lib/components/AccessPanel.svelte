@@ -1,27 +1,42 @@
 <script lang="ts">
-	// How to connect: a per-person WireGuard config for this instance. The real config (with the
-	// private key) comes from the API; this preview never shows the key.
+	// How to connect: a per-person WireGuard file for a lab instance or for the person's own network.
+	// The real file (with the private key) comes from the API; this preview never shows the key.
 	import { store } from '$lib/mock/store.svelte';
-	import type { Instance, Lab } from '$lib/types';
 	import Icon from './Icon.svelte';
 
-	let { lab, instance }: { lab: Lab; instance: Instance } = $props();
-
-	const entry = $derived(lab.networks.find((n) => n.entry) ?? lab.networks[0]);
-	const ready = $derived(instance.state === 'running' || instance.state === 'resetting');
-	const fileName = $derived(`${lab.slug}-${instance.id}.conf`);
+	let {
+		fileName,
+		label,
+		endpoint,
+		cidr,
+		ready,
+		expires = false,
+		lab = true,
+	}: {
+		fileName: string;
+		/** What the tunnel is for, written into the file as a comment. */
+		label: string;
+		endpoint: string;
+		/** The network the tunnel routes to, and where to start. */
+		cidr: string;
+		ready: boolean;
+		/** Whether the file stops working when the thing it connects to expires. */
+		expires?: boolean;
+		/** A lab: every copy uses the same addresses, so only one lab tunnel can be up at a time. */
+		lab?: boolean;
+	} = $props();
 
 	const config = $derived(
 		[
 			'[Interface]',
-			`# ${store.user.username} on ${lab.title} (${instance.kind === 'shared' ? 'shared' : instance.id})`,
+			`# ${store.user.username}: ${label}`,
 			'PrivateKey = <in the downloaded file>',
 			'Address = 10.254.1.7/32',
 			'',
 			'[Peer]',
 			'PublicKey = mJ3vT1bq0uXfZt6Lr8Hn2yWcQe5Pd9Ka4Sg7Vx1Bo0=',
-			`Endpoint = ${instance.endpoint}`,
-			`AllowedIPs = ${entry.cidr}`,
+			`Endpoint = ${endpoint}`,
+			`AllowedIPs = ${cidr}`,
 			'PersistentKeepalive = 25',
 		].join('\n'),
 	);
@@ -41,7 +56,7 @@
 
 	async function copy() {
 		try {
-			await navigator.clipboard.writeText(entry.cidr);
+			await navigator.clipboard.writeText(cidr);
 			copied = true;
 			setTimeout(() => (copied = false), 1500);
 		} catch {}
@@ -64,7 +79,7 @@
 		<li><span>Import it into the WireGuard app and activate the tunnel.</span></li>
 		<li>
 			<span>
-				Start from <code>{entry.cidr}</code>
+				{lab ? 'Start from' : 'Your machines are in'} <code>{cidr}</code>
 				<button class="btn btn-quiet btn-sm copy" type="button" onclick={copy}>
 					<Icon name="copy" />{copied ? 'Copied' : 'Copy'}
 				</button>
@@ -72,7 +87,7 @@
 		</li>
 	</ol>
 	{#if !ready}
-		<p class="note">The file is ready once the instance is running.</p>
+		<p class="note">The file is ready once it's running.</p>
 	{/if}
 
 	<div class="terminal">
@@ -80,8 +95,8 @@
 		<pre class="terminal-body">{config}</pre>
 	</div>
 	<p class="note">
-		Connect to one lab at a time: every copy of a lab uses the same addresses. Your file stops working when this
-		instance is destroyed{#if instance.expiresAt}&nbsp;or expires{/if}.
+		{#if lab}Connect to one lab at a time: every copy of a lab uses the same addresses.{/if}
+		Your file stops working when {expires ? 'this is destroyed or expires' : 'this is destroyed'}.
 	</p>
 </section>
 

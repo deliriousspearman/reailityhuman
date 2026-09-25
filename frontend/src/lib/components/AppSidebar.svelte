@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import { instanceStates } from '$lib/format';
+	import { duration, instanceStates, singleMachineStates } from '$lib/format';
 	import { labs, store } from '$lib/mock/store.svelte';
 	import { findLab } from '$lib/mock/labs';
 	import Icon from './Icon.svelte';
@@ -39,6 +39,25 @@
 						<span class="visually-hidden">{state.label}:</span>
 						{findLab(inst.lab)?.title}
 						<span class="kind">{inst.kind === 'shared' ? 'shared' : inst.owner === store.user.username ? 'yours' : inst.owner}</span>
+					</a>
+				</li>
+			{/each}
+		</ul>
+	</div>
+
+	<div class="group">
+		<a class="group-link" href="/machines" aria-current={current('/machines')} onclick={onnavigate}>
+			<Icon name="console" /> Machines
+		</a>
+		<ul>
+			{#each store.myMachines as m (m.id)}
+				{@const state = singleMachineStates[m.state]}
+				<li>
+					<a href="/machines/{m.id}" aria-current={current(`/machines/${m.id}`)} onclick={onnavigate}>
+						<span class="dot" data-tone={state.tone} title={state.label}></span>
+						<span class="visually-hidden">{state.label}:</span>
+						<span class="machine-name">{m.name}</span>
+						<span class="kind">{m.expiresAt === null ? 'kept' : m.state === 'expired' ? 'expired' : duration(m.expiresAt - store.now, true)}</span>
 					</a>
 				</li>
 			{/each}
@@ -126,6 +145,13 @@
 	}
 	.dot[data-tone='error'] {
 		background: var(--lab-error);
+	}
+	.dot[data-tone='warn'] {
+		background: var(--lab-warn);
+	}
+	.machine-name {
+		font-family: var(--lms-mono);
+		font-size: 0.85rem;
 	}
 
 	/* Mobile: a drawer under the header. */

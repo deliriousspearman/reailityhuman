@@ -184,8 +184,52 @@ resources: { cpu: 12, memoryGB: 24 }   # used by the capacity check
 - **UI:** Playwright smoke test (same approach as `lms/tests/browser/smoke.mjs`) on the catalogue and instance pages, in light and dark.
 - **Offline rehearsal:** install from the bundle on a VM with no internet access.
 
+## 9. Single machines
+
+Added after the first design pass. Alongside Pro Labs, people can deploy **one machine from a template**: an OS or appliance (pfSense, Ubuntu, Windows Server, ESXi…) to build and break things on. The prototype has the pages: `/machines`, `/machines/new/<template>` and `/machines/<id>`.
+
+### Lifecycle
+- **Duration:** chosen at deploy time (2 h, 4 h, 8 h, 1 d, 3 d or 7 d), or **permanently**.
+- **Expiry:** when time runs out, the machine is powered off and marked *expired*. It's deleted 24 hours later unless it's extended.
+  - This gives a grace period for anyone who missed the warning. Extending an expired machine starts it again.
+  - A banner warns when less than an hour is left.
+- **Extending:** +2 h or +1 day, as often as wanted. Or keep it permanently, and put it back on a timer later.
+- **Quotas (configurable):**
+  - Learners: up to 3 machines, 1 of them permanent.
+  - Admins: up to 10, 5 of them permanent.
+  - Permanent machines count against capacity indefinitely, so the limit matters.
+- **Other actions:** start, stop, reboot, reset to the clean snapshot, and destroy.
+
+### Personal network
+- **Layout:** each person gets one network (a VLAN slot plus a small gateway VM, like a lab instance). It's created with their first machine and removed with their last.
+- **Access:** all their machines join it, so a pfSense, a Windows server and a Kali box can reach each other. One WireGuard file reaches everything.
+- **Isolation:** kept apart from other people's networks and from the labs.
+- **Later:** let people add extra private segments, so a pfSense can sit *between* networks rather than beside them.
+
+### Templates
+- **How they're stored:** each version is a vSphere template with a `clean` snapshot, deployed as a linked clone.
+- **Name and first sign-in:**
+  - Linux: set by cloud-init.
+  - Windows: set by a vSphere customisation spec (sysprep).
+  - Appliances (pfSense, OPNsense, ESXi, TrueNAS, VyOS) can't be customised, so they keep documented defaults, shown on the machine page.
+- **Flags** on a template tell people, and the deploy job, what it needs:
+  - **Nested** (Proxmox, ESXi): expose hardware virtualisation to the guest (`vhv.enable`). The port group must let nested VMs talk: MAC learning on a vSphere 8 distributed switch, or promiscuous mode plus forged transmits. Nested VMs are slower.
+  - **Licence** (Windows, Windows Server, ESXi, Exchange): an offline network can't activate online.
+    - Windows needs a KMS host or volume keys in the lab network.
+    - ESXi runs on its 60-day evaluation.
+  - **vTPM** (Windows 11): needs a key provider in vCenter (the Native Key Provider is enough). Cloning then has to handle the TPM.
+  - **Two machines** (Exchange): Exchange needs Active Directory, so it's deployed as a pair with a domain controller.
+- **Old versions:** end-of-life versions (CentOS 6–8, Ubuntu 16.04–20.04, Windows 7, Server 2012 R2, ESXi 6.5–7.0, Exchange 2016/2019) are offered on purpose, for practising on old systems. They're clearly labelled and only reachable inside personal networks.
+
+### What this changes elsewhere
+- **Browser console becomes necessary rather than "later".** Appliances are set up from their console on first boot (pfSense interface assignment, ESXi's DCUI), and a firewall misconfiguration can lock out SSH and the web UI.
+  - Plan a WebMKS console proxied through the panel, so browsers never need to reach ESXi hosts directly.
+- **The expiry sweep is a scheduled worker job.** It powers off expired machines, deletes those past the grace period, and warns owners. Browser notifications are an option; email only if the offline network has a mail relay.
+- **Capacity:** machines share the ProLabs resource pool with lab instances and appear in the admin meters.
+
 ## Open items to confirm with the infra owner
 - vCenter version and licence edition (dvSwitch?), and whether NSX is present.
 - Number of hosts, total RAM, and datastore type and size.
 - A reserved VLAN range and the LAN subnet for the `lab-access` port group.
 - Windows licensing approach (KMS or volume keys).
+- For single machines: whether nested virtualisation is allowed on the cluster, and whether a key provider can be set up for vTPM (Windows 11).

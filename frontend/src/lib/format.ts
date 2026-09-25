@@ -1,15 +1,18 @@
-import type { InstanceState, MachineState } from './types';
+import type { InstanceState, MachineState, SingleMachineState } from './types';
 
-/** "45 s", "12 min", "2 h 40 min", "3 d 4 h": the same style as LMS lesson lengths ("1 h 5 min"). */
-export function duration(ms: number): string {
+/**
+ * "45 s", "12 min", "2 h 40 min", "3 d 4 h": the same style as LMS lesson lengths ("1 h 5 min").
+ * `short` keeps only the largest unit ("2 h"), for tight spaces like the sidebar.
+ */
+export function duration(ms: number, short = false): string {
 	const s = Math.max(0, Math.round(ms / 1000));
 	if (s < 60) return `${s} s`;
 	const min = Math.floor(s / 60);
 	if (min < 60) return `${min} min`;
 	const h = Math.floor(min / 60);
-	if (h < 24) return min % 60 ? `${h} h ${min % 60} min` : `${h} h`;
+	if (h < 24) return min % 60 && !short ? `${h} h ${min % 60} min` : `${h} h`;
 	const d = Math.floor(h / 24);
-	return h % 24 ? `${d} d ${h % 24} h` : `${d} d`;
+	return h % 24 && !short ? `${d} d ${h % 24} h` : `${d} d`;
 }
 
 export function ago(at: number, now: number): string {
@@ -49,3 +52,18 @@ export const instanceStates: Record<InstanceState, { label: string; tone: Tone }
 	destroying: { label: 'Destroying', tone: 'busy' },
 	error: { label: 'Error', tone: 'error' },
 };
+
+export const singleMachineStates: Record<SingleMachineState, { label: string; tone: Tone }> = {
+	deploying: { label: 'Starting', tone: 'busy' },
+	running: { label: 'Running', tone: 'up' },
+	stopping: { label: 'Stopping', tone: 'busy' },
+	stopped: { label: 'Stopped', tone: 'down' },
+	resetting: { label: 'Resetting', tone: 'busy' },
+	expired: { label: 'Expired', tone: 'warn' },
+	destroying: { label: 'Destroying', tone: 'busy' },
+};
+
+/** "2 h", "1 d", "3 d" for the duration choices. */
+export function hoursLabel(hours: number): string {
+	return hours < 24 ? `${hours} h` : `${hours / 24} d`;
+}
