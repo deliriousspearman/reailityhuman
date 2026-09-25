@@ -1,0 +1,48 @@
+# Caddy config for the lab panel (runs in the caddy container, see compose.yaml).
+#
+#   SITE_ADDRESS  address the panel is reached at, e.g. 192.0.2.10 or labs.example (from .env)
+#
+# Same approach as the LMS's deploy/Caddyfile: HTTPS from Caddy's internal CA (LAN only, devices
+# must trust its root certificate), and the same security headers.
+{
+	# The container can't add Caddy's CA to a trust store, and doesn't need to.
+	skip_install_trust
+	# Browsers send no server name (SNI) when the address is an IP, so say which certificate to use.
+	default_sni {$SITE_ADDRESS}
+}
+
+{$SITE_ADDRESS} {
+	# LAN-only site: certificates come from Caddy's own CA. Browsers warn until they trust its root,
+	# which is at /data/caddy/pki/authorities/local/root.crt in the caddy_data volume.
+	tls internal
+
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+		Cross-Origin-Opener-Policy "same-origin"
+		# SvelteKit's start-up script and the theme script in app.html are inline, hence
+		# 'unsafe-inline' for scripts; tighten to hashes once the pages settle. Svelte sets some
+		# inline styles (meter widths). Everything else, fonts included, is served from here.
+		Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'"
+		-Server
+	}
+
+	# Fingerprinted build assets never change.
+	header /_app/immutable/* Cache-Control "public, max-age=31536000, immutable"
+
+	# Pages must be revalidated on every visit: each deploy replaces the previous build's files.
+	@pages not path /_app/immutable/*
+	header @pages Cache-Control "no-cache"
+
+	# A single-page app: any path that isn't a file gets 200.html, which routes in the browser.
+	handle {
+		root * /srv/site
+		try_files {path} /200.html
+		file_server
+	}
+}

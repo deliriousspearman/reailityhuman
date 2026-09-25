@@ -7,7 +7,30 @@ lab slugs match its `labs/<slug>.md` pages.
 - [`frontend/`](frontend/): the panel UI (SvelteKit, static build). Currently a design prototype on mock data.
 - [`docs/plan.md`](docs/plan.md): the plan: stack, vSphere architecture, features, limitations and phases.
 
+- [`deploy/`](deploy/): server setup and deployment (Docker Compose, Caddy).
+
 The back end (FastAPI + pyVmomi + PostgreSQL, see the plan) comes next.
+
+## Deploying
+
+Once per server, on the server (Ubuntu 22.04/24.04):
+
+```sh
+sudo bash deploy/setup-server.sh   # Docker, full-size root volume, /srv/lab-deploy, docker group
+```
+
+Then from a development machine, for every release:
+
+```sh
+DEPLOY_HOST=192.0.2.10 SSH_KEY=~/.ssh/lab-deploy deploy/deploy.sh
+```
+
+The panel is served over HTTPS by Caddy with its own internal CA, the same as the LMS. Browsers warn
+until they trust its root certificate, which you can export with:
+
+```sh
+docker compose -f /srv/lab-deploy/compose.yaml exec caddy cat /data/caddy/pki/authorities/local/root.crt
+```
 
 ## Conventions
 

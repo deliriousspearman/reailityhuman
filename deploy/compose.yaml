@@ -1,0 +1,26 @@
+# The panel's services on the server, in /srv/lab-deploy (copied there by deploy/deploy.sh).
+# For now just Caddy serving the built frontend; the API, worker and PostgreSQL join later.
+# SITE_ADDRESS comes from .env next to this file (written by deploy.sh).
+name: lab-deploy
+
+services:
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - '80:80'
+      - '443:443'
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:?set SITE_ADDRESS in .env, e.g. SITE_ADDRESS=labs.example}
+    volumes:
+      # The folder, not the file: deploys replace the Caddyfile, and a single-file mount would keep
+      # showing the container the old one.
+      - ./caddy:/etc/caddy:ro
+      - ./site:/srv/site:ro
+      # Caddy's internal CA and certificates: keep them, or every browser has to trust a new root.
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:
