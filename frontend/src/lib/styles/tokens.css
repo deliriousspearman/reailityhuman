@@ -1,0 +1,75 @@
+/* Hacklab theme tokens, ported from the LMS (lms/src/styles/custom.css). The LMS names its colours
+   after Starlight's (--sl-*); here the same values use --lms-* names so the two sites can later share
+   one token file. Keep the values in sync with the LMS. Dark is the default; light is
+   :root[data-theme='light']. */
+
+:root {
+	--lms-display: 'Chakra Petch', var(--lms-font);
+	--lms-font: 'Figtree Variable', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+	--lms-mono: 'JetBrains Mono Variable', ui-monospace, 'SFMono-Regular', Menlo, Consolas, 'DejaVu Sans Mono',
+		'Liberation Mono', monospace;
+
+	--lms-white: #ffffff;
+	--lms-gray-1: #e4e9f4;
+	--lms-gray-2: #a4b1cd;
+	--lms-gray-3: #8494b5;
+	--lms-gray-4: #52627f;
+	--lms-gray-5: #2c3a52;
+	--lms-gray-6: #1a2332;
+	--lms-black: #111927;
+	--lms-accent-low: #2a3d12;
+	--lms-accent: #9fef00;
+	--lms-accent-high: #c5f467;
+	--lms-bg-nav: #1a2332;
+	--lms-bg-sidebar: #141d2b;
+	--lms-bg-code: #202c3f;
+	--lms-panel: #1a2332;
+	--lms-panel-2: #202c3f;
+	--lms-lime: #9fef00;
+	--lms-on-lime: #0e1a02;
+	--lms-lime-text: #9fef00;
+	--lms-easy: #9fef00;
+	--lms-medium: #ffaf00;
+	--lms-hard: #ff3e3e;
+
+	/* Machine and instance states (new for the lab panel). Always shown with a text label, never
+	   colour alone. Blue is the terminal palette's blue in the LMS. */
+	--lab-up: var(--lms-lime-text);
+	--lab-busy: #5cb2ff;
+	--lab-warn: var(--lms-medium);
+	--lab-down: var(--lms-gray-3);
+	--lab-error: var(--lms-hard);
+
+	/* The network map's wires. */
+	--lab-wire: var(--lms-gray-4);
+
+	--lab-radius: 10px;
+	--lab-radius-sm: 6px;
+	--lab-header-height: 3.75rem;
+	--lab-sidebar-width: 15rem;
+}
+
+:root[data-theme='light'] {
+	--lms-white: #0f1726;
+	--lms-gray-1: #1a2332;
+	--lms-gray-2: #34435c;
+	--lms-gray-3: #56657f;
+	--lms-gray-4: #8c99b0;
+	--lms-gray-5: #d3dae6;
+	--lms-gray-6: #e9edf4;
+	--lms-black: #f4f6fa;
+	--lms-accent-low: #e8f8c8;
+	--lms-accent: #5b8c00;
+	--lms-accent-high: #3d6200;
+	--lms-bg-nav: #ffffff;
+	--lms-bg-sidebar: #ffffff;
+	--lms-bg-code: #e9edf4;
+	--lms-panel: #ffffff;
+	--lms-panel-2: #f1f4f9;
+	--lms-lime-text: #3d6200;
+	--lms-easy: #4d8a00;
+	--lms-medium: #b86e00;
+	--lms-hard: #d12a2a;
+
+	--lab-busy: #1f6fc2;
+}
