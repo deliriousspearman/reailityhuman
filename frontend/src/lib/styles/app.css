@@ -72,8 +72,9 @@ samp {
 	white-space: nowrap;
 }
 
-/* Buttons. Primary is the LMS's lime fill; danger actions (reset, destroy) are outlined red so they
-   never look like the default choice. */
+/* Buttons, as the course site's: the display face, a lime fill for the primary action, and outlined
+   buttons that take the lime on hover. Danger actions (reset, destroy) are outlined red so they never
+   look like the default choice, and fill red on hover. */
 .btn {
 	display: inline-flex;
 	align-items: center;
@@ -81,17 +82,19 @@ samp {
 	gap: 0.5rem;
 	min-height: 2.5rem;
 	padding: 0.45rem 1rem;
-	border: 1px solid var(--lms-gray-5);
-	border-radius: var(--lab-radius-sm);
-	background: var(--lms-panel);
+	border: 1px solid var(--lms-gray-4);
+	border-radius: var(--lms-radius-sm);
+	background: transparent;
 	color: var(--lms-white);
-	font: 600 0.95rem var(--lms-font);
+	font: 700 0.95rem var(--lms-display);
+	letter-spacing: 0.01em;
 	text-decoration: none;
 	white-space: nowrap;
 	cursor: pointer;
 }
-.btn:hover {
-	border-color: var(--lms-gray-3);
+.btn:hover:not(:disabled) {
+	border-color: var(--lms-lime);
+	color: var(--lms-lime-text);
 }
 .btn:disabled {
 	opacity: 0.5;
@@ -108,21 +111,18 @@ samp {
 	color: var(--lms-on-lime);
 }
 .btn-primary:hover:not(:disabled) {
-	border-color: var(--lms-accent-high);
-	background: var(--lms-accent-high);
-}
-:root[data-theme='light'] .btn-primary:hover:not(:disabled) {
-	border-color: #8ad400;
-	background: #8ad400;
+	border-color: var(--lms-lime-soft);
+	background: var(--lms-lime-soft);
+	color: var(--lms-on-lime);
 }
 .btn-danger {
-	border-color: color-mix(in srgb, var(--lms-hard) 60%, transparent);
+	border-color: var(--lms-hard);
 	color: var(--lms-hard);
-	background: transparent;
 }
 .btn-danger:hover:not(:disabled) {
 	border-color: var(--lms-hard);
-	background: color-mix(in srgb, var(--lms-hard) 10%, transparent);
+	background: var(--lms-hard);
+	color: var(--lms-black);
 }
 .btn-quiet {
 	border-color: transparent;
@@ -130,7 +130,8 @@ samp {
 	color: var(--lms-gray-2);
 }
 .btn-quiet:hover:not(:disabled) {
-	border-color: var(--lms-gray-5);
+	border-color: transparent;
+	background: var(--lms-panel-2);
 	color: var(--lms-white);
 }
 .btn-sm {
@@ -144,7 +145,7 @@ samp {
 	--chip: var(--lms-easy);
 	flex-shrink: 0;
 	padding: 0.2rem 0.55rem;
-	border-radius: 4px;
+	border-radius: var(--lms-radius-xs);
 	border: 1px solid var(--chip);
 	background: color-mix(in srgb, var(--chip) 12%, transparent);
 	color: var(--chip);
@@ -159,8 +160,8 @@ samp {
 .tag {
 	display: inline-block;
 	padding: 0.15rem 0.5rem;
-	border: 1px solid var(--lms-gray-5);
-	border-radius: 4px;
+	border: var(--lms-border-width) solid var(--lms-gray-5);
+	border-radius: var(--lms-radius-xs);
 	font: 600 0.75rem var(--lms-mono);
 	color: var(--lms-gray-2);
 }
@@ -174,7 +175,7 @@ samp {
 	--os: var(--lms-gray-3);
 	padding: 0 0.4rem;
 	border: 1px solid var(--os);
-	border-radius: 4px;
+	border-radius: var(--lms-radius-xs);
 	font: 600 0.68rem var(--lms-mono);
 	color: var(--os);
 	white-space: nowrap;
@@ -195,9 +196,9 @@ samp {
 	gap: 0.5rem 1rem;
 	margin: 2.25rem 0 1rem;
 	padding: 0.7rem 1rem;
-	border: 1px solid var(--lms-gray-5);
+	border: var(--lms-border-width) solid var(--lms-gray-5);
 	border-left: 3px solid var(--lms-lime);
-	border-radius: var(--lab-radius-sm);
+	border-radius: var(--lms-radius-sm);
 	background: var(--lms-panel);
 }
 .section-heading h2 {
@@ -209,8 +210,8 @@ samp {
 }
 
 .panel {
-	border: 1px solid var(--lms-gray-5);
-	border-radius: var(--lab-radius);
+	border: var(--lms-border-width) solid var(--lms-gray-5);
+	border-radius: var(--lms-radius-lg);
 	background: var(--lms-panel);
 }
 
@@ -224,9 +225,9 @@ samp {
 .stats > div {
 	flex: 1 1 10rem;
 	padding: 0.75rem 1rem;
-	border: 1px solid var(--lms-gray-5);
+	border: var(--lms-border-width) solid var(--lms-gray-5);
 	border-top: 3px solid var(--lms-lime);
-	border-radius: var(--lab-radius-sm);
+	border-radius: var(--lms-radius-sm);
 	background: var(--lms-panel);
 }
 .stats dt {
@@ -264,8 +265,8 @@ samp {
 /* Tables, as the LMS's lab machine table */
 .table-wrap {
 	overflow-x: auto;
-	border: 1px solid var(--lms-gray-5);
-	border-radius: 8px;
+	border: var(--lms-border-width) solid var(--lms-gray-5);
+	border-radius: var(--lms-radius-md);
 }
 .table {
 	width: 100%;
@@ -314,7 +315,7 @@ samp {
 /* Terminal window: dark in both themes, as the LMS hero and terminal blocks. */
 .terminal {
 	border: 1px solid #2c3a52;
-	border-radius: var(--lab-radius);
+	border-radius: var(--lms-radius-lg);
 	overflow: hidden;
 	background: #0d1420;
 	box-shadow: 0 1rem 2rem -1rem rgb(0 0 0 / 0.5);
@@ -357,7 +358,7 @@ samp {
 	gap: 0.75rem 1.5rem;
 	padding: 0.9rem 1.25rem;
 	border: 1px solid var(--lms-accent);
-	border-radius: 0.5rem;
+	border-radius: var(--lms-radius-md);
 	background: linear-gradient(90deg, var(--lms-accent-low), transparent 70%);
 }
 .banner-warn {
@@ -384,8 +385,8 @@ samp {
 	width: 100%;
 	min-height: 2.5rem;
 	padding: 0.4rem 0.75rem;
-	border: 1px solid var(--lms-gray-5);
-	border-radius: var(--lab-radius-sm);
+	border: var(--lms-border-width) solid var(--lms-gray-5);
+	border-radius: var(--lms-radius-sm);
 	background: var(--lms-black);
 	color: var(--lms-white);
 	font: inherit;
@@ -393,6 +394,11 @@ samp {
 .input:hover,
 .select:hover {
 	border-color: var(--lms-gray-4);
+}
+.input:focus-visible,
+.select:focus-visible {
+	outline-offset: 1px;
+	border-color: var(--lms-lime);
 }
 
 @media (prefers-reduced-motion: reduce) {

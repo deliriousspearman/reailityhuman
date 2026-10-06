@@ -58,13 +58,22 @@
 		flex-direction: column;
 		gap: 0.75rem;
 		padding: 1.25rem;
-		border: 1px solid var(--lms-gray-5);
-		border-radius: var(--lab-radius);
+		border: var(--lms-border-width) solid var(--lms-gray-5);
+		border-radius: var(--lms-radius-lg);
 		background: var(--lms-panel);
 	}
+	/* Hardline: the card lifts onto a solid lime shadow. */
 	.lab-card:hover {
 		border-color: var(--lms-lime);
-		box-shadow: 0 0 0 1px var(--lms-lime);
+		box-shadow: var(--lms-hover-shadow);
+		translate: -2px -2px;
+	}
+	@media (prefers-reduced-motion: no-preference) {
+		.lab-card {
+			transition:
+				translate 0.12s,
+				box-shadow 0.12s;
+		}
 	}
 	header {
 		display: flex;
@@ -82,8 +91,8 @@
 		flex-shrink: 0;
 		width: 3.5rem;
 		height: 3.5rem;
-		border-radius: 8px;
-		border: 1px solid var(--lms-gray-5);
+		border-radius: var(--lms-radius-md);
+		border: var(--lms-border-width) solid var(--lms-gray-5);
 		background: #0d1420;
 	}
 	h2 {

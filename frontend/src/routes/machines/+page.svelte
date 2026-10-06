@@ -118,8 +118,8 @@
 	}
 	.chip {
 		padding: 0.3rem 0.75rem;
-		border: 1px solid var(--lms-gray-5);
-		border-radius: 999px;
+		border: var(--lms-border-width) solid var(--lms-gray-5);
+		border-radius: var(--lms-radius-pill);
 		background: var(--lms-panel);
 		color: var(--lms-gray-2);
 		font: 600 0.8rem var(--lms-font);
@@ -146,13 +146,22 @@
 		flex-direction: column;
 		gap: 0.6rem;
 		padding: 1rem 1.1rem;
-		border: 1px solid var(--lms-gray-5);
-		border-radius: var(--lab-radius);
+		border: var(--lms-border-width) solid var(--lms-gray-5);
+		border-radius: var(--lms-radius-lg);
 		background: var(--lms-panel);
 	}
+	/* Hardline: the card lifts onto a solid lime shadow. */
 	.template:hover {
 		border-color: var(--lms-lime);
-		box-shadow: 0 0 0 1px var(--lms-lime);
+		box-shadow: var(--lms-hover-shadow);
+		translate: -2px -2px;
+	}
+	@media (prefers-reduced-motion: no-preference) {
+		.template {
+			transition:
+				translate 0.12s,
+				box-shadow 0.12s;
+		}
 	}
 	.template header {
 		display: flex;

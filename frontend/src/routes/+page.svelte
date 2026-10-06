@@ -68,7 +68,7 @@
 		}
 	}
 	h1 {
-		font-size: clamp(2.75rem, 1.5rem + 4vw, 4.25rem);
+		font-size: clamp(2.75rem, 1.5rem + 4vw, 4.5rem);
 		line-height: 1;
 	}
 	.hero-text p {
@@ -79,7 +79,7 @@
 	}
 	.hero-terminal {
 		box-shadow:
-			0 0 0 1px rgb(159 239 0 / 0.08),
+			0 0 0 1px color-mix(in srgb, var(--lms-lime) 8%, transparent),
 			0 1.5rem 3rem -1rem rgb(0 0 0 / 0.6);
 	}
 	.hero-terminal .terminal-body {

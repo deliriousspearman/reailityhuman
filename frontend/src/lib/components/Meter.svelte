@@ -38,8 +38,8 @@
 		display: grid;
 		gap: 0.5rem;
 		padding: 1rem;
-		border: 1px solid var(--lms-gray-5);
-		border-radius: var(--lab-radius-sm);
+		border: var(--lms-border-width) solid var(--lms-gray-5);
+		border-radius: var(--lms-radius-sm);
 		background: var(--lms-panel);
 	}
 	.meter[data-tone='warn'] {
@@ -88,14 +88,14 @@
 	/* Track and fill: thin, rounded ends. */
 	.bar {
 		height: 0.5rem;
-		border-radius: 999px;
+		border-radius: var(--lms-radius-pill);
 		background: var(--lms-gray-5);
 		overflow: hidden;
 	}
 	.bar span {
 		display: block;
 		height: 100%;
-		border-radius: 999px;
+		border-radius: var(--lms-radius-pill);
 		background: var(--tone);
 		transition: width 0.4s ease;
 	}

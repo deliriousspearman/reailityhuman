@@ -181,8 +181,8 @@
 	.picture {
 		width: 4.5rem;
 		height: 4.5rem;
-		border-radius: 10px;
-		border: 1px solid var(--lms-gray-5);
+		border-radius: var(--lms-radius-lg);
+		border: var(--lms-border-width) solid var(--lms-gray-5);
 		background: #0d1420;
 	}
 	.lead {

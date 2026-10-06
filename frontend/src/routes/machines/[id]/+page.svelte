@@ -302,7 +302,7 @@
 		gap: 0.6rem;
 		padding: 0.55rem 0.7rem;
 		border: 0;
-		border-radius: 4px;
+		border-radius: var(--lms-radius-xs);
 		background: none;
 		color: var(--lms-gray-1);
 		font: 600 0.9rem var(--lms-font);
@@ -345,8 +345,8 @@
 		margin: 0;
 		padding: 0;
 		list-style: none;
-		border: 1px solid var(--lms-gray-5);
-		border-radius: 8px;
+		border: var(--lms-border-width) solid var(--lms-gray-5);
+		border-radius: var(--lms-radius-md);
 	}
 	.ways li {
 		display: flex;

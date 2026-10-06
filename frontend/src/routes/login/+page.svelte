@@ -57,7 +57,7 @@
 		place-items: center;
 		width: 1.8rem;
 		height: 1.8rem;
-		border-radius: 6px;
+		border-radius: var(--lms-radius-sm);
 		background: var(--lms-lime);
 		color: var(--lms-on-lime);
 		font: 700 0.75rem var(--lms-mono);

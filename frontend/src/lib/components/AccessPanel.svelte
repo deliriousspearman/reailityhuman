@@ -137,7 +137,7 @@
 		width: 1.5rem;
 		height: 1.5rem;
 		border: 1px solid var(--lms-lime);
-		border-radius: 50%;
+		border-radius: var(--lms-radius-xs);
 		font: 700 0.75rem var(--lms-mono);
 		color: var(--lms-lime-text);
 	}

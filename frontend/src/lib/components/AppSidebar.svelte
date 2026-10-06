@@ -86,7 +86,7 @@
 		align-items: center;
 		gap: 0.6rem;
 		padding: 0.4rem 0.6rem;
-		border-radius: 4px;
+		border-radius: var(--lms-radius-xs);
 		font: 700 1rem var(--lms-display);
 		color: var(--lms-white);
 		text-decoration: none;
@@ -106,7 +106,7 @@
 		align-items: center;
 		gap: 0.5rem;
 		padding: 0.3rem 0.6rem;
-		border-radius: 4px;
+		border-radius: var(--lms-radius-xs);
 		color: var(--lms-gray-2);
 		font-size: 0.9rem;
 		text-decoration: none;

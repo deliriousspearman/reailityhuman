@@ -93,8 +93,8 @@
 	.map {
 		--wire-gap: 1.75rem;
 		padding: 1.25rem;
-		border: 1px solid var(--lms-gray-5);
-		border-radius: var(--lab-radius);
+		border: var(--lms-border-width) solid var(--lms-gray-5);
+		border-radius: var(--lms-radius-lg);
 		/* A faint dot grid, like a network diagram's canvas. */
 		background:
 			radial-gradient(circle, color-mix(in srgb, var(--lms-gray-4) 35%, transparent) 1px, transparent 1.2px) 0 0 / 18px
@@ -113,8 +113,8 @@
 		display: grid;
 		gap: 0.1rem;
 		padding: 0.55rem 0.85rem;
-		border: 1px solid var(--lms-gray-5);
-		border-radius: var(--lab-radius-sm);
+		border: var(--lms-border-width) solid var(--lms-gray-5);
+		border-radius: var(--lms-radius-sm);
 		background: var(--lms-panel);
 		font-size: 0.8rem;
 	}
@@ -225,8 +225,8 @@
 		width: 100%;
 		height: 100%;
 		padding: 0.65rem 0.75rem 0.6rem;
-		border: 1px solid var(--lms-gray-5);
-		border-radius: var(--lab-radius-sm);
+		border: var(--lms-border-width) solid var(--lms-gray-5);
+		border-radius: var(--lms-radius-sm);
 		background: var(--lms-panel);
 		color: inherit;
 		font: inherit;
@@ -238,7 +238,6 @@
 	}
 	.machine[aria-pressed='true'] {
 		border-color: var(--lms-lime);
-		box-shadow: 0 0 0 1px var(--lms-lime);
 	}
 	.machine[data-tone='error'] {
 		border-left: 3px solid var(--lab-error);

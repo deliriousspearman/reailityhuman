@@ -244,8 +244,8 @@
 		align-items: center;
 		gap: 0.5rem;
 		padding: 0.5rem 0.85rem;
-		border: 1px solid var(--lms-gray-5);
-		border-radius: var(--lab-radius-sm);
+		border: var(--lms-border-width) solid var(--lms-gray-5);
+		border-radius: var(--lms-radius-sm);
 		background: var(--lms-panel);
 		color: var(--lms-gray-1);
 		font: 600 0.9rem var(--lms-mono);
@@ -276,7 +276,7 @@
 	.eol {
 		padding: 0 0.35rem;
 		border: 1px solid var(--lms-medium);
-		border-radius: 4px;
+		border-radius: var(--lms-radius-xs);
 		font-size: 0.68rem;
 		color: var(--lms-medium);
 	}

@@ -43,9 +43,9 @@
 	dialog {
 		width: min(28rem, calc(100vw - 2rem));
 		padding: 1.5rem;
-		border: 1px solid var(--lms-gray-5);
+		border: var(--lms-border-width) solid var(--lms-gray-5);
 		border-top: 3px solid var(--lms-lime);
-		border-radius: var(--lab-radius);
+		border-radius: var(--lms-radius-lg);
 		background: var(--lms-panel);
 		color: var(--lms-gray-2);
 		box-shadow: 0 1.5rem 3rem -1rem rgb(0 0 0 / 0.6);

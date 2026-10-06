@@ -1,7 +1,7 @@
-/* Hacklab theme tokens, ported from the LMS (lms/src/styles/custom.css). The LMS names its colours
-   after Starlight's (--sl-*); here the same values use --lms-* names so the two sites can later share
-   one token file. Keep the values in sync with the LMS. Dark is the default; light is
-   :root[data-theme='light']. */
+/* Theme tokens, from the course site's Hardline Classic theme (docu-codex: src/css/site/theme.css for
+   the Hacklab colours, src/css/themes/hardline.css and hardline-classic.css for the shape). The course
+   site names its colours after Starlight's (--sl-*); here the same values use --lms-* names. Keep the
+   values in sync with the course site. Dark is the default; light is :root[data-theme='light']. */
 
 :root {
 	--lms-display: 'Chakra Petch', var(--lms-font);
@@ -28,6 +28,8 @@
 	--lms-lime: #9fef00;
 	--lms-on-lime: #0e1a02;
 	--lms-lime-text: #9fef00;
+	/* The lighter tint the lime fill turns on hover, in both modes. */
+	--lms-lime-soft: #c5f467;
 	--lms-easy: #9fef00;
 	--lms-medium: #ffaf00;
 	--lms-hard: #ff3e3e;
@@ -43,9 +45,17 @@
 	/* The network map's wires. */
 	--lab-wire: var(--lms-gray-4);
 
-	--lab-radius: 10px;
-	--lab-radius-sm: 6px;
-	--lab-header-height: 3.75rem;
+	/* Shape (Hardline): square corners, 2px card and panel outlines, and cards that lift onto a solid
+	   lime shadow on hover. Chips, buttons and hairlines stay 1px. */
+	--lms-radius-xs: 0px;
+	--lms-radius-sm: 0px;
+	--lms-radius-md: 2px;
+	--lms-radius-lg: 2px;
+	--lms-radius-pill: 0px;
+	--lms-border-width: 2px;
+	--lms-hover-shadow: 4px 4px 0 var(--lms-lime);
+
+	--lab-header-height: 4rem;
 	--lab-sidebar-width: 15rem;
 }
 

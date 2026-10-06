@@ -87,7 +87,7 @@
 		}
 	}
 
-	/* Logo: a prompt in a lime tile, as the LMS. */
+	/* Logo: a prompt in a lime tile, as the course site. */
 	.site-title {
 		display: flex;
 		align-items: center;
@@ -103,7 +103,7 @@
 		place-items: center;
 		width: 1.9rem;
 		height: 1.9rem;
-		border-radius: 6px;
+		border-radius: var(--lms-radius-sm);
 		background: var(--lms-lime);
 		color: var(--lms-on-lime);
 		font: 700 0.8rem var(--lms-mono);
@@ -115,18 +115,21 @@
 		gap: 0.5rem;
 		margin-inline-start: auto;
 	}
+	/* As the course site's section links. */
 	.courses-link {
 		display: inline-flex;
 		align-items: center;
 		gap: 0.35rem;
-		padding: 0.4rem 0.6rem;
+		padding: 0.35rem 0.75rem;
+		border-radius: var(--lms-radius-sm);
 		color: var(--lms-gray-2);
-		font-size: 0.9rem;
-		font-weight: 600;
+		font: 700 1rem var(--lms-display);
 		text-decoration: none;
+		white-space: nowrap;
 	}
 	.courses-link:hover {
 		color: var(--lms-white);
+		background: var(--lms-panel-2);
 	}
 	.courses-link :global(svg) {
 		width: 0.9rem;
@@ -155,7 +158,7 @@
 		min-height: 2.25rem;
 		padding: 0.3rem 0.7rem 0.3rem 2.1rem;
 		border: 1px solid transparent;
-		border-radius: var(--lab-radius-sm);
+		border-radius: var(--lms-radius-sm);
 		background: transparent;
 		color: inherit;
 		font: 600 0.875rem var(--lms-font);
@@ -173,8 +176,12 @@
 		}
 	}
 
+	/* A divider before the account menu, as before the course site's last header item. */
 	.user-menu {
 		position: relative;
+		padding-inline-start: 0.75rem;
+		margin-inline-start: 0.25rem;
+		border-inline-start: 1px solid var(--lms-gray-5);
 	}
 	.user-menu summary {
 		display: flex;
@@ -182,7 +189,7 @@
 		gap: 0.5rem;
 		padding: 0.25rem 0.5rem 0.25rem 0.25rem;
 		border: 1px solid transparent;
-		border-radius: 999px;
+		border-radius: var(--lms-radius-pill);
 		color: var(--lms-gray-1);
 		font-weight: 600;
 		font-size: 0.9rem;
@@ -201,7 +208,7 @@
 		place-items: center;
 		width: 1.9rem;
 		height: 1.9rem;
-		border-radius: 50%;
+		border-radius: var(--lms-radius-sm);
 		background: var(--lms-panel-2);
 		border: 1px solid var(--lms-gray-5);
 		font: 700 0.85rem var(--lms-mono);
@@ -232,7 +239,7 @@
 		margin: 0;
 		padding: 0.6rem 0.75rem 0.7rem;
 		border: 1px dashed var(--lms-gray-5);
-		border-radius: var(--lab-radius-sm);
+		border-radius: var(--lms-radius-sm);
 		font-size: 0.875rem;
 	}
 	legend {
