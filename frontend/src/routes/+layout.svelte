@@ -50,9 +50,11 @@
 			height: calc(100dvh - var(--lab-header-height));
 		}
 	}
+	/* Centred in the space beside the sidebar, so wide screens don't leave an empty strip on one side. */
 	main {
 		width: 100%;
-		max-width: 80rem;
+		max-width: 96rem;
+		margin-inline: auto;
 		padding: 1.5rem 1rem 4rem;
 	}
 	@media (min-width: 40rem) {
