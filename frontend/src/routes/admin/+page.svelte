@@ -32,7 +32,7 @@
 	<h1>Admin</h1>
 	<p class="lead">Capacity of the ProLabs resource pool, every lab instance and machine, and what the job worker is doing.</p>
 
-	<div class="section-heading"><h2>Capacity</h2></div>
+	<div class="section-heading"><h2 id="capacity">Capacity</h2></div>
 	<div class="meters">
 		<Meter
 			label="Memory"
@@ -45,17 +45,17 @@
 		<Meter label="Storage" used={used.diskGB} total={cap.diskGB} unit="GB" note="Linked clones: only changes use space" />
 	</div>
 
-	<div class="section-heading"><h2>Lab instances</h2></div>
+	<div class="section-heading"><h2 id="lab-instances">Lab instances</h2></div>
 	<InstanceTable instances={store.instances} />
 
 	<div class="section-heading">
-		<h2>Machines</h2>
+		<h2 id="machines">Machines</h2>
 		<p>{store.machines.filter((m) => m.expiresAt === null).length} kept permanently</p>
 	</div>
 	<MachineTable machines={store.machines} owners empty="Nobody has deployed a machine." />
 
 	<div class="section-heading">
-		<h2>Jobs</h2>
+		<h2 id="jobs">Jobs</h2>
 		<p>Deploys, resets and power changes, newest first</p>
 	</div>
 	<div class="table-wrap">

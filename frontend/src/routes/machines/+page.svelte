@@ -2,6 +2,7 @@
 	import MachineTable from '$lib/components/MachineTable.svelte';
 	import { store } from '$lib/mock/store.svelte';
 	import { categories, flagNotes, templates } from '$lib/mock/templates';
+	import { categorySlug } from '$lib/nav';
 
 	let query = $state('');
 	let category = $state<string>('All');
@@ -60,7 +61,7 @@
 </div>
 
 {#each groups as group (group.category)}
-	{@const slug = `cat-${group.category.toLowerCase().replace(/\W+/g, '-')}`}
+	{@const slug = categorySlug(group.category)}
 	<section class="group" aria-labelledby={slug}>
 		<h3 id={slug}>{group.category} <span>{group.items.length}</span></h3>
 		<div class="templates">

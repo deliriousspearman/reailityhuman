@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
+	import { page } from '$app/state';
 	import { store } from '$lib/mock/store.svelte';
+	import { sectionFor, sections } from '$lib/nav';
 	import { theme, type ThemeChoice } from '$lib/theme.svelte';
 	import Icon from './Icon.svelte';
 
@@ -8,6 +10,14 @@
 
 	// Where the course site lives; set per deployment once the panel has config.
 	const LMS_URL = 'https://learn.example/';
+
+	const section = $derived(sectionFor(page.url.pathname));
+
+	// A count of what's running beside Machines and Instances, now the sidebar only lists the current section.
+	const running = $derived({
+		machines: store.myMachines.filter((m) => m.state === 'running').length,
+		instances: store.mine.filter((i) => i.state === 'running').length,
+	} as Partial<Record<string, number>>);
 
 	let userMenu: HTMLDetailsElement | undefined = $state();
 
@@ -30,8 +40,17 @@
 
 	<a class="site-title" href="/">Codex Labs</a>
 
+	<nav class="sections" aria-label="Sections">
+		{#each sections.filter((s) => !s.adminOnly || store.isAdmin) as s (s.id)}
+			<a class="nav-link" href={s.href} aria-current={s.id === section ? 'true' : undefined}>
+				{s.label}
+				{#if running[s.id]}<span class="count" title="{running[s.id]} running">{running[s.id]}</span>{/if}
+			</a>
+		{/each}
+	</nav>
+
 	<div class="right">
-		<a class="courses-link" href={LMS_URL}>Courses <Icon name="external" /></a>
+		<a class="nav-link" href={LMS_URL}>Courses <Icon name="external" /></a>
 
 		<label class="theme-select">
 			<span class="visually-hidden">Theme</span>
@@ -115,8 +134,18 @@
 		gap: 0.5rem;
 		margin-inline-start: auto;
 	}
+	.sections {
+		display: flex;
+		gap: 0.25rem;
+		margin-inline-start: 1rem;
+	}
+	@media (max-width: 39.99rem) {
+		.sections {
+			display: none;
+		}
+	}
 	/* As the course site's section links. */
-	.courses-link {
+	.nav-link {
 		display: inline-flex;
 		align-items: center;
 		gap: 0.35rem;
@@ -127,16 +156,30 @@
 		text-decoration: none;
 		white-space: nowrap;
 	}
-	.courses-link:hover {
+	.nav-link:hover {
 		color: var(--lms-white);
 		background: var(--lms-panel-2);
 	}
-	.courses-link :global(svg) {
+	.nav-link :global(svg) {
 		width: 0.9rem;
 		height: 0.9rem;
 	}
+	.nav-link[aria-current='true'] {
+		color: var(--lms-lime-text);
+		background: var(--lms-accent-low);
+	}
+	.count {
+		min-width: 1.2rem;
+		padding: 0 0.3rem;
+		border-radius: var(--lms-radius-pill);
+		background: var(--lms-panel-2);
+		border: 1px solid var(--lms-gray-5);
+		font: 600 0.7rem/1.1rem var(--lms-mono);
+		text-align: center;
+		color: var(--lms-gray-2);
+	}
 	@media (max-width: 40rem) {
-		.courses-link,
+		.right > .nav-link,
 		.user-name {
 			display: none;
 		}

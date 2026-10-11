@@ -3,72 +3,96 @@
 	import { duration, instanceStates, singleMachineStates } from '$lib/format';
 	import { labs, store } from '$lib/mock/store.svelte';
 	import { findLab } from '$lib/mock/labs';
+	import { categories } from '$lib/mock/templates';
+	import { adminSections, categorySlug, sectionFor, sections } from '$lib/nav';
 	import Icon from './Icon.svelte';
 
 	let { open = false, onnavigate }: { open?: boolean; onnavigate?: () => void } = $props();
 
-	const current = (href: string) => (page.url.pathname === href ? 'page' : undefined);
+	const current = (href: string) => (page.url.pathname + page.url.hash === href ? 'page' : undefined);
 
-	// Instances this person uses: their own copies first, then the shared labs.
-	const yours = $derived([
-		...store.mine,
-		...store.instances.filter((i) => i.kind === 'shared'),
-	]);
+	// Only the section you're in is listed; the header links to the others.
+	const section = $derived(sectionFor(page.url.pathname));
+	const head = $derived(sections.find((s) => s.id === section)!);
+	const visibleSections = $derived(sections.filter((s) => !s.adminOnly || store.isAdmin));
+
+	// Learners see their own copies first, then the shared labs; admins see everything, as on /instances.
+	const instances = $derived(
+		store.isAdmin ? store.instances : [...store.mine, ...store.instances.filter((i) => i.kind === 'shared')],
+	);
 </script>
 
-<nav id="app-sidebar" class="sidebar" class:open aria-label="Main">
+<nav id="app-sidebar" class="sidebar" class:open aria-label="{head.label} menu">
+	<!-- On phones the header has no room for the section links, so the drawer carries them. -->
+	<ul class="section-links">
+		{#each visibleSections as s (s.id)}
+			<li>
+				<a href={s.href} aria-current={s.id === section ? 'true' : undefined} onclick={onnavigate}>
+					<Icon name={s.icon} /> {s.label}
+				</a>
+			</li>
+		{/each}
+	</ul>
+
 	<div class="group">
-		<a class="group-link" href="/machines" aria-current={current('/machines')} onclick={onnavigate}>
-			<Icon name="console" /> Machines
+		<a class="group-link" href={head.href} aria-current={current(head.href)} onclick={onnavigate}>
+			<Icon name={head.icon} /> {head.label}
 		</a>
-		<ul>
-			{#each store.myMachines as m (m.id)}
-				{@const state = singleMachineStates[m.state]}
-				<li>
-					<a href="/machines/{m.id}" aria-current={current(`/machines/${m.id}`)} onclick={onnavigate}>
-						<span class="dot" data-tone={state.tone} title={state.label}></span>
-						<span class="visually-hidden">{state.label}:</span>
-						<span class="machine-name">{m.name}</span>
-						<span class="kind">{m.expiresAt === null ? 'kept' : m.state === 'expired' ? 'expired' : duration(m.expiresAt - store.now, true)}</span>
-					</a>
-				</li>
-			{/each}
-		</ul>
-	</div>
 
-	<div class="group">
-		<a class="group-link" href="/" aria-current={current('/')} onclick={onnavigate}><Icon name="labs" /> Pro Labs</a>
-		<ul>
-			{#each labs as lab (lab.slug)}
-				<li><a href="/labs/{lab.slug}" aria-current={current(`/labs/${lab.slug}`)} onclick={onnavigate}>{lab.title}</a></li>
-			{/each}
-		</ul>
+		{#if section === 'machines'}
+			<p class="sub">Your machines</p>
+			<ul>
+				{#each store.myMachines as m (m.id)}
+					{@const state = singleMachineStates[m.state]}
+					<li>
+						<a href="/machines/{m.id}" aria-current={current(`/machines/${m.id}`)} onclick={onnavigate}>
+							<span class="dot" data-tone={state.tone} title={state.label}></span>
+							<span class="visually-hidden">{state.label}:</span>
+							<span class="machine-name">{m.name}</span>
+							<span class="kind">{m.expiresAt === null ? 'kept' : m.state === 'expired' ? 'expired' : duration(m.expiresAt - store.now, true)}</span>
+						</a>
+					</li>
+				{:else}
+					<li class="none">None yet</li>
+				{/each}
+			</ul>
+			<p class="sub">Deploy</p>
+			<ul>
+				{#each categories as c (c)}
+					{@const href = `/machines#${categorySlug(c)}`}
+					<li><a {href} aria-current={current(href)} onclick={onnavigate}>{c}</a></li>
+				{/each}
+			</ul>
+		{:else if section === 'labs'}
+			<ul>
+				{#each labs as lab (lab.slug)}
+					<li><a href="/labs/{lab.slug}" aria-current={current(`/labs/${lab.slug}`)} onclick={onnavigate}>{lab.title}</a></li>
+				{/each}
+			</ul>
+		{:else if section === 'instances'}
+			<ul>
+				{#each instances as inst (inst.id)}
+					{@const state = instanceStates[inst.state]}
+					<li>
+						<a href="/instances/{inst.id}" aria-current={current(`/instances/${inst.id}`)} onclick={onnavigate}>
+							<span class="dot" data-tone={state.tone} title={state.label}></span>
+							<span class="visually-hidden">{state.label}:</span>
+							{findLab(inst.lab)?.title}
+							<span class="kind">{inst.kind === 'shared' ? 'shared' : inst.owner === store.user.username ? 'yours' : inst.owner}</span>
+						</a>
+					</li>
+				{:else}
+					<li class="none">None running</li>
+				{/each}
+			</ul>
+		{:else if section === 'admin' && store.isAdmin}
+			<ul>
+				{#each adminSections as a (a.id)}
+					<li><a href="/admin#{a.id}" aria-current={current(`/admin#${a.id}`)} onclick={onnavigate}>{a.label}</a></li>
+				{/each}
+			</ul>
+		{/if}
 	</div>
-
-	<div class="group">
-		<a class="group-link" href="/instances" aria-current={current('/instances')} onclick={onnavigate}>
-			<Icon name="instances" /> Instances
-		</a>
-		<ul>
-			{#each yours as inst (inst.id)}
-				{@const state = instanceStates[inst.state]}
-				<li>
-					<a href="/instances/{inst.id}" aria-current={current(`/instances/${inst.id}`)} onclick={onnavigate}>
-						<span class="dot" data-tone={state.tone} title={state.label}></span>
-						<span class="visually-hidden">{state.label}:</span>
-						{findLab(inst.lab)?.title}
-						<span class="kind">{inst.kind === 'shared' ? 'shared' : inst.owner === store.user.username ? 'yours' : inst.owner}</span>
-					</a>
-				</li>
-			{/each}
-		</ul>
-	</div>
-
-	{#if store.isAdmin}
-		<div class="group">
-			<a class="group-link" href="/admin" aria-current={current('/admin')} onclick={onnavigate}><Icon name="admin" /> Admin</a>
-		</div>
-	{/if}
 </nav>
 
 <style>
@@ -124,6 +148,41 @@
 	a[aria-current='page'] :global(svg) {
 		color: inherit;
 	}
+	.sub {
+		margin: 0.9rem 0 0;
+		padding-inline-start: 2.2rem;
+		font: 600 0.7rem var(--lms-mono);
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
+		color: var(--lms-gray-3);
+	}
+	.none {
+		padding: 0.3rem 0.6rem;
+		font-size: 0.85rem;
+		color: var(--lms-gray-3);
+	}
+
+	/* Section links: drawer-only, below the width where the header shows them. */
+	.section-links {
+		display: none;
+		margin: 0;
+		padding: 0 0 1rem;
+		border-left: 0;
+		border-bottom: 1px solid var(--lms-gray-5);
+	}
+	.section-links a {
+		gap: 0.6rem;
+		font: 700 0.95rem var(--lms-display);
+	}
+	.section-links a[aria-current='true'] {
+		color: var(--lms-lime-text);
+	}
+	@media (max-width: 39.99rem) {
+		.section-links {
+			display: grid;
+		}
+	}
+
 	.kind {
 		margin-inline-start: auto;
 		font: 500 0.7rem var(--lms-mono);
