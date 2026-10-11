@@ -1,0 +1,46 @@
+# Checks and builds the panel on every push, and deploys it from the default branch with
+# deploy/deploy.sh, the same script used for manual deploys.
+#
+# Required CI/CD variables (Settings → CI/CD → Variables, mark as Protected):
+#   DEPLOY_HOST       server address
+#   SITE_ADDRESS      address browsers use for the panel (usually the same as DEPLOY_HOST)
+#   SSH_PRIVATE_KEY   type "File": private key of DEPLOY_USER on the server
+#   SSH_KNOWN_HOSTS   type "File": output of `ssh-keyscan <DEPLOY_HOST>`
+# Optional:
+#   DEPLOY_USER       SSH user in the docker group (default: user)
+
+stages: [build, deploy]
+
+build:
+  stage: build
+  image: node:22-alpine
+  cache:
+    key:
+      files: [frontend/package-lock.json]
+    paths: [.npm/]
+  script:
+    - cd frontend
+    - npm ci --cache ../.npm --prefer-offline --no-audit --no-fund
+    - npm run check
+    - npm run build
+  artifacts:
+    paths: [frontend/build/]
+    expire_in: 1 week
+
+deploy:
+  stage: deploy
+  image: alpine:3
+  needs: [build]
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  resource_group: production
+  environment:
+    name: production
+    url: https://${SITE_ADDRESS}
+  before_script:
+    - apk add --no-cache bash openssh-client rsync
+    - install -d -m 700 ~/.ssh
+    - cp "$SSH_KNOWN_HOSTS" ~/.ssh/known_hosts
+    - chmod 600 "$SSH_PRIVATE_KEY"
+  script:
+    - SKIP_BUILD=1 SSH_KEY="$SSH_PRIVATE_KEY" deploy/deploy.sh

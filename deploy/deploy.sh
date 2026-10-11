@@ -7,6 +7,7 @@
 #   DEPLOY_USER   SSH user in the docker group (default: user)
 #   SSH_KEY       private key for that user (optional; otherwise your SSH defaults)
 #   SITE_ADDRESS  address browsers use for the panel (default: DEPLOY_HOST)
+#   SKIP_BUILD    set to 1 to deploy frontend/build as it is (CI builds it in an earlier job)
 #
 # Copies the built frontend, compose.yaml and the Caddyfile to /srv/lab-deploy, then starts or
 # updates the containers. Safe to re-run.
@@ -22,8 +23,11 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd)
 SSH=(ssh -o BatchMode=yes)
 [[ -n ${SSH_KEY:-} ]] && SSH+=(-i "$SSH_KEY" -o IdentitiesOnly=yes)
 
-echo "==> Building the frontend"
-(cd "$ROOT/frontend" && npm ci --no-audit --no-fund --loglevel=error && npm run build >/dev/null)
+if [[ ${SKIP_BUILD:-} != 1 ]]; then
+	echo "==> Building the frontend"
+	(cd "$ROOT/frontend" && npm ci --no-audit --no-fund --loglevel=error && npm run build >/dev/null)
+fi
+[[ -f $ROOT/frontend/build/200.html ]] || { echo "No build in frontend/build" >&2; exit 1; }
 
 echo "==> Copying to $TARGET:$REMOTE"
 rsync -az --delete -e "${SSH[*]}" "$ROOT/frontend/build/" "$TARGET:$REMOTE/site/"
