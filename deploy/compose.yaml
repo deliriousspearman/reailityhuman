@@ -1,7 +1,13 @@
-# The panel's services on the server, in /srv/lab-deploy (copied there by deploy/deploy.sh).
-# For now just Caddy serving the built frontend; the API, worker and PostgreSQL join later.
-# SITE_ADDRESS comes from .env next to this file (written by deploy.sh).
+# The panel's services on the server, in /srv/lab-deploy (copied there by deploy/deploy.sh):
+# Caddy serving the built frontend and proxying /api, the API, the job worker, and PostgreSQL.
+# SITE_ADDRESS comes from .env next to this file (written by deploy.sh); everything else the API and
+# worker need (vCenter, database password) is in lab-deploy.env, written once on the server.
 name: lab-deploy
+
+x-backend: &backend
+  image: lab-deploy-backend
+  restart: unless-stopped
+  env_file: lab-deploy.env
 
 services:
   caddy:
@@ -21,6 +27,44 @@ services:
       - caddy_data:/data
       - caddy_config:/config
 
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    env_file: lab-deploy.env
+    environment:
+      POSTGRES_USER: labdeploy
+      POSTGRES_DB: labdeploy
+    volumes:
+      - postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD', 'pg_isready', '-U', 'labdeploy']
+      interval: 5s
+      retries: 12
+
+  # Runs the database migrations, then serves the API on :8000 (Caddy proxies /api to it).
+  api:
+    <<: *backend
+    build: ./backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD', 'python', '-c', "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/config')"]
+      interval: 10s
+      start_period: 30s
+      retries: 6
+
+  # Deploys, power changes and the per-minute expiry sweep. Starts once the API has migrated.
+  worker:
+    <<: *backend
+    command: ['procrastinate', '--app=app.jobs.app', 'worker', '--concurrency=4']
+    # Same image as the API, built locally by it; there's nothing to pull.
+    pull_policy: never
+    depends_on:
+      api:
+        condition: service_healthy
+
 volumes:
   caddy_data:
   caddy_config:
+  postgres:

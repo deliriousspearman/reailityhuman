@@ -9,8 +9,12 @@
 #   SITE_ADDRESS  address browsers use for the panel (default: DEPLOY_HOST)
 #   SKIP_BUILD    set to 1 to deploy frontend/build as it is (CI builds it in an earlier job)
 #
-# Copies the built frontend, compose.yaml and the Caddyfile to /srv/lab-deploy, then starts or
-# updates the containers. Safe to re-run.
+# Copies the built frontend, the backend source, compose.yaml and the Caddyfile to /srv/lab-deploy,
+# then builds the backend image on the server and starts or updates the containers. Safe to re-run.
+#
+# The first deploy creates /srv/lab-deploy/lab-deploy.env (see deploy/lab-deploy.env.example) with a
+# generated database password and no vCenter settings: the panel runs, but can't deploy machines
+# until the VCENTER_* lines there are filled in. Later deploys never touch that file.
 set -euo pipefail
 
 : "${DEPLOY_HOST:?set DEPLOY_HOST to the server address}"
@@ -31,7 +35,9 @@ fi
 
 echo "==> Copying to $TARGET:$REMOTE"
 rsync -az --delete -e "${SSH[*]}" "$ROOT/frontend/build/" "$TARGET:$REMOTE/site/"
-rsync -az -e "${SSH[*]}" "$ROOT/deploy/compose.yaml" "$TARGET:$REMOTE/"
+rsync -az --delete --exclude __pycache__ --exclude .pytest_cache --exclude '*.egg-info' \
+	-e "${SSH[*]}" "$ROOT/backend/" "$TARGET:$REMOTE/backend/"
+rsync -az -e "${SSH[*]}" "$ROOT/deploy/compose.yaml" "$ROOT/deploy/lab-deploy.env.example" "$TARGET:$REMOTE/"
 rsync -az --mkpath -e "${SSH[*]}" "$ROOT/deploy/Caddyfile" "$TARGET:$REMOTE/caddy/"
 
 echo "==> Starting containers"
@@ -40,7 +46,19 @@ set -euo pipefail
 cd "$1"
 printf 'SITE_ADDRESS=%s\n' "$2" >.env
 rm -f Caddyfile # before caddy/ existed, the Caddyfile sat here
-docker compose up -d --remove-orphans --quiet-pull
+if [[ ! -f lab-deploy.env ]]; then
+	password=$(head -c 32 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c 32)
+	sed -e "s/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=$password/" \
+		-e "s|^DATABASE_URL=.*|DATABASE_URL=postgresql://labdeploy:$password@postgres/labdeploy|" \
+		-e 's/^VCENTER_HOST=.*/VCENTER_HOST=/' -e 's/^VCENTER_USER=.*/VCENTER_USER=/' \
+		lab-deploy.env.example >lab-deploy.env
+	chmod 600 lab-deploy.env
+	echo "  Created $1/lab-deploy.env. Fill in the VCENTER_* settings to deploy machines."
+fi
+echo "  Building the backend image"
+docker compose build --quiet api
+# --wait: fail the deploy if the API doesn't come up healthy (e.g. a migration fails).
+docker compose up -d --remove-orphans --quiet-pull --wait --wait-timeout 180
 # Pick up Caddyfile changes without a restart. A bad config fails the deploy here.
 if ! out=$(docker compose exec -T caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile 2>&1); then
 	echo "$out" >&2

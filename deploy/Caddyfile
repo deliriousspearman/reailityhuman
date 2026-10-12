@@ -36,8 +36,14 @@
 	header /_app/immutable/* Cache-Control "public, max-age=31536000, immutable"
 
 	# Pages must be revalidated on every visit: each deploy replaces the previous build's files.
-	@pages not path /_app/immutable/*
+	@pages not path /_app/immutable/* /api/*
 	header @pages Cache-Control "no-cache"
+
+	# The API (FastAPI, in the api container). Its responses must never be cached.
+	handle /api/* {
+		header Cache-Control "no-store"
+		reverse_proxy api:8000
+	}
 
 	# A single-page app: any path that isn't a file gets 200.html, which routes in the browser.
 	handle {

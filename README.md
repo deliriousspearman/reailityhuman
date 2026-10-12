@@ -4,12 +4,30 @@ A web panel that deploys, resets and tears down Pro Labs (HackTheBox-style netwo
 machines) on VMware vSphere, for a LAN without internet access. The labs are advertised on the LMS;
 lab slugs match its `labs/<slug>.md` pages.
 
-- [`frontend/`](frontend/): the panel UI (SvelteKit, static build). Currently a design prototype on mock data.
+What works so far is **single machines**: deploy one VM from a template (Ubuntu 22.04 for now) onto
+the LAN, then start, stop, reboot, reset, extend and destroy it. Pro Labs, the VPN and sign-in come
+later; the panel shows them greyed out.
+
+- [`frontend/`](frontend/): the panel UI (SvelteKit, static build).
+- [`backend/`](backend/): the API and job worker (FastAPI, pyVmomi, PostgreSQL with Procrastinate).
+  [`backend/templates.yaml`](backend/templates.yaml) lists what can be deployed.
+- [`deploy/`](deploy/): server setup and deployment (Docker Compose, Caddy).
+- [`docs/setup-vsphere.md`](docs/setup-vsphere.md): the one-off vCenter setup and how to build the
+  Ubuntu template.
 - [`docs/plan.md`](docs/plan.md): the plan: stack, vSphere architecture, features, limitations and phases.
 
-- [`deploy/`](deploy/): server setup and deployment (Docker Compose, Caddy).
+**No sign-in yet:** anyone who can reach the panel can deploy and destroy machines and read their
+passwords. Keep it on a trusted network until accounts exist.
 
-The back end (FastAPI + pyVmomi + PostgreSQL, see the plan) comes next.
+## Developing
+
+```sh
+# Backend tests, against PostgreSQL and vcsim (VMware's vCenter simulator), in Docker:
+docker compose -f backend/compose.test.yaml run --rm --build tests
+
+# Frontend, with /api proxied to an API on localhost:8000:
+cd frontend && npm install && npm run dev
+```
 
 ## Deploying
 
@@ -20,8 +38,12 @@ sudo bash deploy/setup-server.sh   # Docker, full-size root volume, /srv/lab-dep
 ```
 
 After that, every push to `main` deploys itself: the GitLab pipeline ([`.gitlab-ci.yml`](.gitlab-ci.yml))
-checks and builds the panel, then runs `deploy/deploy.sh` against the server. The CI/CD variables it
-needs are listed at the top of that file.
+checks and builds the panel and tests the backend, then runs `deploy/deploy.sh` against the server.
+The CI/CD variables it needs are listed at the top of that file.
+
+The first deploy creates `/srv/lab-deploy/lab-deploy.env` on the server, with a generated database
+password. Fill in its vCenter settings ([`docs/setup-vsphere.md`](docs/setup-vsphere.md)) before
+deploying machines.
 
 To deploy by hand from a development machine instead:
 
