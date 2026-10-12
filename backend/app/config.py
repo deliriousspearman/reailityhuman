@@ -3,6 +3,7 @@
 from functools import lru_cache
 from pathlib import Path
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -32,6 +33,9 @@ class Settings(BaseSettings):
     # Machines that may exist at once, and how many of those may be kept permanently.
     max_machines: int = 10
     max_permanent: int = 3
+    # How far machines may overcommit the cluster's memory: 1.5 lets VMs be configured with 1.5x
+    # the physical memory, and ESXi reclaims what they don't use (ballooning, compression).
+    memory_overcommit: float = Field(default=1.0, ge=1.0)
     # How long an expired machine is kept (powered off) before it's deleted.
     grace_minutes: int = 24 * 60
     # How long a deploy waits for the machine to report an IP address.

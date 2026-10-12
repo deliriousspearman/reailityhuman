@@ -134,7 +134,7 @@ _capacity_cache: tuple[float, dict] | None = None
 
 @router.get("/capacity")
 def capacity() -> dict:
-    """The cluster's capacity and use, cached for 30 s."""
+    """The cluster's capacity and use, cached for 30 s. Memory includes MEMORY_OVERCOMMIT."""
     global _capacity_cache
     if _capacity_cache and time.monotonic() - _capacity_cache[0] < 30:
         return _capacity_cache[1]
@@ -144,7 +144,7 @@ def capacity() -> dict:
     except VSphereError as e:
         raise HTTPException(503, str(e)) from e
     out = {
-        "total": {"cpu": c.cpu, "memoryGB": c.memory_gb, "diskGB": c.disk_gb},
+        "total": {"cpu": c.cpu, "memoryGB": int(c.memory_gb * settings().memory_overcommit), "diskGB": c.disk_gb},
         "used": {"cpu": c.used_cpu, "memoryGB": c.used_memory_gb, "diskGB": c.used_disk_gb},
     }
     _capacity_cache = (time.monotonic(), out)

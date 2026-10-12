@@ -185,6 +185,11 @@ database password already filled in. Set the `VCENTER_*` lines:
 | `VCENTER_DATASTORE` | Datastore name | — |
 | `VCENTER_NETWORK` | The LAN port group | e.g. `VM Network` |
 
+On a small host where vCenter itself holds most of the memory (vCenter 8 "Tiny" takes 14 GB), the
+panel would see almost no memory free. `MEMORY_OVERCOMMIT=1.5` lets machines be given 1.5× the
+host's memory; ESXi reclaims what vCenter and the machines don't use. Set it back to `1` once the
+host has room.
+
 Then apply it, on the server:
 
 ```sh

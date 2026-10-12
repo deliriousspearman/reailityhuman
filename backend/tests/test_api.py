@@ -33,6 +33,18 @@ def test_health():
     assert client.get("/api/health").json() == {"database": "ok", "vcenter": "ok"}
 
 
+def test_memory_overcommit(monkeypatch):
+    from app import api
+    from app.config import settings
+
+    monkeypatch.setattr(api, "_capacity_cache", None)
+    physical = client.get("/api/capacity").json()["total"]["memoryGB"]
+    monkeypatch.setattr(api, "_capacity_cache", None)
+    monkeypatch.setattr(settings(), "memory_overcommit", 1.5)
+    assert client.get("/api/capacity").json()["total"]["memoryGB"] == int(physical * 1.5)
+    monkeypatch.setattr(api, "_capacity_cache", None)
+
+
 def test_deploy_then_lifecycle(queued):
     m = deploy(queued)
     assert m["state"] == "running"
