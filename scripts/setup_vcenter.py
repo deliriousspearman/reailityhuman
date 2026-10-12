@@ -32,7 +32,7 @@ import sys
 
 try:
     from pyVim.connect import Disconnect, SmartConnect
-    from pyVmomi import vim
+    from pyVmomi import vim, vmodl
 except ImportError:
     sys.exit("pyVmomi isn't installed. Install it with:  pip install pyvmomi")
 
@@ -123,15 +123,28 @@ def principal(user):
     return f"{(domain or 'vsphere.local').upper()}\\{name}"
 
 
+def _bare(name):
+    """The user name without its domain, whichever way it's written: "VSPHERE.LOCAL\\svc",
+    "svc@vsphere.local" or "svc"."""
+    return name.rpartition("\\")[2].partition("@")[0].lower()
+
+
 def user_exists(content, user):
+    """True if vCenter knows the account, False if it says it doesn't, None if it can't tell (the
+    search behaves differently across vCenter versions)."""
     domain, _, name = principal(user).partition("\\")
-    try:
-        found = content.userDirectory.RetrieveUserGroups(
-            domain=domain, searchStr=name, exactMatch=True, findUsers=True, findGroups=False
-        )
-    except vim.fault.NotFound:
-        return False
-    return any(r.principal.lower() == name.lower() for r in found or [])
+    searched = False
+    for dom in dict.fromkeys((domain, domain.lower())):
+        try:
+            found = content.userDirectory.RetrieveUserGroups(
+                domain=dom, searchStr=name, exactMatch=False, findUsers=True, findGroups=False
+            )
+        except (vim.fault.NotFound, vmodl.fault.InvalidArgument):
+            continue
+        searched = True
+        if any(_bare(r.principal) == name.lower() for r in found or []):
+            return True
+    return False if searched else None
 
 
 def child_folder(parent, name):
@@ -199,11 +212,16 @@ def main():
         if "@" not in account and "\\" not in account:
             account += "@vsphere.local"
         who = principal(account)
-        if not user_exists(content, account):
-            sys.exit(
-                f"\n{account} doesn't exist yet. Create it in the vSphere Client under Administration → "
-                "Single Sign On → Users and Groups, then run this again."
+        exists = user_exists(content, account)
+        if not exists:
+            print(
+                f"\nvCenter's user search didn't find {account}. If you haven't created it yet, do that in "
+                "the vSphere Client under Administration → Single Sign On → Users and Groups. If you have, "
+                "carry on: vCenter refuses permissions for an account that doesn't exist, so nothing is "
+                "granted to the wrong one."
             )
+            if not yes("Carry on anyway?", False):
+                sys.exit("Nothing changed.")
 
         print(f"""
 About to:
@@ -349,5 +367,7 @@ if __name__ == "__main__":
         main()
     except KeyboardInterrupt:
         sys.exit("\nStopped.")
+    except vim.fault.UserNotFound as e:
+        sys.exit(f"vCenter says the account doesn't exist: {getattr(e, 'msg', e)}. Check its name and domain.")
     except vim.fault.VimFault as e:
         sys.exit(f"vCenter refused: {getattr(e, 'msg', e)}")
