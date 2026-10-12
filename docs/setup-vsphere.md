@@ -119,47 +119,41 @@ The template therefore needs cloud-init and VMware Tools, with all trace of its 
 
 ### Prepare it
 
-Update it, and make sure VMware Tools and cloud-init are installed:
+[`scripts/template-prepare.sh`](../scripts/template-prepare.sh) does this part. Piped over SSH,
+`sudo` can't ask for a password, so first let `builder` use it without one (on the VM; the clean-up
+step removes it):
 
 ```sh
-sudo apt update && sudo apt full-upgrade -y
-sudo apt install -y open-vm-tools cloud-init
+echo 'builder ALL=(ALL) NOPASSWD:ALL' | sudo tee /etc/sudoers.d/builder
 ```
 
-The installer only gives the root volume half the disk. Give it the rest:
+Then, from a machine with this repo:
 
 ```sh
-sudo lvextend -r -l +100%FREE /dev/ubuntu-vg/ubuntu-lv
+ssh builder@<vm address> 'sudo bash -s' < scripts/template-prepare.sh
 ```
 
-Let cloud-init run on clones, configure the network and read its data from vCenter. The installer
-turned all three off. While `cloud-init.disabled` exists, clones get no hostname, user or password.
-
-```sh
-sudo rm -f /etc/cloud/cloud-init.disabled \
-           /etc/cloud/cloud.cfg.d/99-installer.cfg \
-           /etc/cloud/cloud.cfg.d/00-subiquity-disable-cloudinit-networking.cfg \
-           /etc/cloud/cloud.cfg.d/90-installer-network.cfg
-echo 'datasource_list: [VMware, NoCloud, None]' | sudo tee /etc/cloud/cloud.cfg.d/99-vmware.cfg
-sudo rm -f /etc/netplan/00-installer-config.yaml /etc/netplan/50-cloud-init.yaml
-```
+It updates every package, installs VMware Tools (`open-vm-tools`) and cloud-init, grows the root
+volume into the whole disk (the installer only uses half), and lets cloud-init run on clones and
+read its data from vCenter. The installer turned cloud-init off: while
+`/etc/cloud/cloud-init.disabled` exists, clones get no hostname, user or password. It's safe to
+re-run.
 
 Optionally, install anything every machine should have, now.
 
 ### Clean it, and shut it down
 
-This forgets the template's own identity so each clone gets its own. It also deletes `builder` and
-powers off, so run it as one command. Your SSH session ends.
+[`scripts/template-clean.sh`](../scripts/template-clean.sh) forgets the template's own identity so
+each clone gets its own: it resets cloud-init, empties the machine-id, and deletes the SSH host keys
+and the installer's network config. It then deletes `builder` (with its sudoers file) and powers
+off, so your SSH session ends and there's no way back in. Without `--yes` it only says what it would
+do.
 
 ```sh
-sudo sh -c 'cloud-init clean --logs --seed --machine-id
-  truncate -s 0 /etc/machine-id; rm -f /var/lib/dbus/machine-id
-  rm -f /etc/ssh/ssh_host_*
-  userdel -r -f builder
-  shutdown -h now'
+ssh builder@<vm address> 'sudo bash -s -- --yes' < scripts/template-clean.sh
 ```
 
-Keep the machine-id step: without it, clones can end up sharing one DHCP lease. (The panel also asks
+The machine-id reset matters: without it, clones can end up sharing one DHCP lease. (The panel also asks
 for leases by MAC address, but don't rely on that alone.)
 
 ### Snapshot it, and make it a template

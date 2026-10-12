@@ -13,6 +13,7 @@ later; the panel shows them greyed out.
   [`backend/templates.yaml`](backend/templates.yaml) lists what can be deployed.
 - [`deploy/`](deploy/): server setup and deployment (Docker Compose, Caddy).
 - [`scripts/setup_vcenter.py`](scripts/setup_vcenter.py): prepares vCenter (folders, roles, permissions).
+- [`scripts/template-prepare.sh`](scripts/template-prepare.sh) and [`scripts/template-clean.sh`](scripts/template-clean.sh): turn a fresh Ubuntu VM into a template.
 - [`docs/setup-vsphere.md`](docs/setup-vsphere.md): the one-off vCenter setup and how to build the
   Ubuntu template.
 - [`docs/plan.md`](docs/plan.md): the plan: stack, vSphere architecture, features, limitations and phases.
