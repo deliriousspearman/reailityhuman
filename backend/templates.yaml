@@ -1,0 +1,15 @@
+# Template versions the panel can deploy. Everything else in the frontend's catalogue
+# (frontend/src/lib/templates.ts) shows as "coming soon".
+#
+#   vsphere   the vSphere template, under the datacenter's VM folder. It needs a snapshot named
+#             "clean" (machines are linked clones of it), cloud-init and open-vm-tools. How to
+#             build one: docs/setup-vsphere.md.
+#   username  the account cloud-init creates; its password is generated for each machine.
+
+- template: ubuntu
+  version: "22.04"
+  vsphere: ProLabs/Templates/tpl-ubuntu-22.04
+  cpu: 2
+  memoryGB: 2
+  diskGB: 20
+  username: ubuntu

@@ -1,0 +1,28 @@
+# Runs the backend tests locally against PostgreSQL and vcsim (VMware's vCenter simulator):
+#
+#   docker compose -f backend/compose.test.yaml run --rm --build tests
+#
+# CI runs the same tests with the same services (.gitlab-ci.yml, job "backend-test").
+name: lab-deploy-test
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: labdeploy
+      POSTGRES_PASSWORD: labdeploy
+      POSTGRES_DB: labdeploy
+    tmpfs: [/var/lib/postgresql/data]
+
+  vcsim:
+    image: vmware/vcsim:v0.53.0
+
+  tests:
+    build: .
+    user: root
+    depends_on: [postgres, vcsim]
+    environment:
+      DATABASE_URL: postgresql://labdeploy:labdeploy@postgres/labdeploy
+      VCSIM_URL: vcsim:8989
+    volumes: ['.:/app']
+    command: sh -c "pip install -q httpx==0.28.1 pytest==9.1.1 && pytest -q"
