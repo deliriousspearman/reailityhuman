@@ -2,7 +2,7 @@
 
 What to do once, by hand, before the panel can deploy machines:
 
-1. Prepare vCenter: folders and a service account.
+1. Prepare vCenter: an account, folders and permissions (mostly scripted).
 2. Build the Ubuntu 22.04 template.
 3. Give the panel the vCenter details.
 4. Deploy a test machine.
@@ -12,27 +12,56 @@ others, change them in `lab-deploy.env` and `backend/templates.yaml` to match.
 
 ## 1. vCenter
 
-### Folders
+vCenter needs a datacenter with your ESXi host in it. On a fresh vCenter, first create a datacenter
+(right-click the vCenter → **New Datacenter**) and a cluster in it (**New Cluster**, with DRS, HA and
+vSAN off, and "Manage all hosts in the cluster with a single image" unticked), then add the host
+(right-click the cluster → **Add Hosts**).
 
-In **VMs and Templates**, under your datacenter, create a folder `Labs` with two folders inside it:
+The panel then needs:
 
-- `Labs/Templates`: the templates machines are cloned from.
-- `Labs/Machines`: where the panel puts machines. Leave other VMs out of it. The panel looks
-  machines up by name here, and its capacity figures count everything on the cluster.
+- **Folders:** `Labs/Templates` for templates, and `Labs/Machines` for its machines. Keep other VMs
+  out of `Labs/Machines`, because the panel treats everything there as its own.
+- **An account of its own:** what it can do is then limited and easy to audit.
 
-Optionally, create a resource pool (e.g. `Labs`) in the cluster to cap what machines can use, and
-set `VCENTER_RESOURCE_POOL` to its name.
+### Create the panel's account
 
-### Service account
+This step is manual (vCenter's API for it isn't covered by pyVmomi):
 
-The panel signs in to vCenter as its own account, so what it can do is limited and easy to audit.
-Using `administrator@vsphere.local` works for a first test, but switch to this account before
-anyone else uses the panel.
+1. Go to **Administration → Single Sign On → Users and Groups**.
+2. On the **Users** tab, set the domain to `vsphere.local` and click **Add**.
+3. Create `svc-labdeploy` with a strong password.
 
-1. **Create the user.** In **Administration → Single Sign On → Users and Groups**, create
-   `svc-labdeploy` in `vsphere.local`.
-2. **Create a role.** In **Administration → Access Control → Roles**, create a role
-   `Lab Deploy` with these privileges:
+### Folders, roles and permissions: run the script
+
+[`scripts/setup_vcenter.py`](../scripts/setup_vcenter.py) does the rest. Run it from any Linux
+machine that can reach vCenter on port 443:
+
+```sh
+python3 -m venv ~/labdeploy-setup && ~/labdeploy-setup/bin/pip install pyvmomi
+~/labdeploy-setup/bin/python scripts/setup_vcenter.py
+```
+
+It asks for the vCenter address and an administrator's password (used for that run only), and lets
+you pick the datacenter, cluster, datastore and port group. It shows what it will change and waits
+for you to confirm. Then it:
+
+- creates the folders;
+- creates two roles:
+  - **Lab Deploy:** what the panel does to its machines;
+  - **Lab Deploy (placement):** only lets it put VMs in the cluster;
+- grants the account permissions (see the table below);
+- checks the account's effective privileges, including that it can't touch a VM outside `Labs`;
+- prints the `VCENTER_*` settings for part 3.
+
+It's safe to re-run, e.g. after a new version of the panel needs another privilege.
+
+<details>
+<summary>Doing it by hand instead</summary>
+
+1. Create the folders in **VMs and Templates**:
+   - right-click the datacenter → **New Folder → New VM and Template Folder** → `Labs`;
+   - inside `Labs`, create `Templates` and `Machines` the same way.
+2. In **Administration → Access Control → Roles**, create the role `Lab Deploy` with these privileges:
 
    | Category | Privileges |
    |---|---|
@@ -45,15 +74,22 @@ anyone else uses the panel.
    | Virtual machine → Provisioning | Clone template; Clone virtual machine; Deploy template |
    | Virtual machine → Snapshot management | Create snapshot; Revert to snapshot |
 
-3. **Grant the role.** Give `svc-labdeploy` the `Lab Deploy` role, with **Propagate to children**
-   ticked, on each of these:
-   - the `Labs` folder;
-   - the cluster (or the `Labs` resource pool);
-   - the datastore machines go on;
-   - the LAN port group machines join (on a distributed switch, grant it on the port group itself).
+3. Create a second role, `Lab Deploy (placement)`, with only **Resource → Assign virtual machine to
+   resource pool**.
+4. On each object below, open the **Permissions** tab and add `svc-labdeploy` (domain `vsphere.local`):
 
-   Grant **Read-only** on the datacenter, without propagating, so the panel can find its way to
-   these objects.
+   | Object | Role | Propagate to children |
+   |---|---|---|
+   | The datacenter | Read-only | Yes |
+   | The `Labs` folder | Lab Deploy | Yes |
+   | The datastore machines go on | Lab Deploy | Yes |
+   | The LAN port group | Lab Deploy | Yes |
+   | The cluster (or host) | Lab Deploy (placement) | Yes |
+
+   Don't give the cluster the full `Lab Deploy` role. VMs inherit permissions from their cluster,
+   so that would let the panel power off or delete every VM on it, vCenter included.
+
+</details>
 
 ## 2. The Ubuntu 22.04 template
 

@@ -12,6 +12,7 @@ later; the panel shows them greyed out.
 - [`backend/`](backend/): the API and job worker (FastAPI, pyVmomi, PostgreSQL with Procrastinate).
   [`backend/templates.yaml`](backend/templates.yaml) lists what can be deployed.
 - [`deploy/`](deploy/): server setup and deployment (Docker Compose, Caddy).
+- [`scripts/setup_vcenter.py`](scripts/setup_vcenter.py): prepares vCenter (folders, roles, permissions).
 - [`docs/setup-vsphere.md`](docs/setup-vsphere.md): the one-off vCenter setup and how to build the
   Ubuntu template.
 - [`docs/plan.md`](docs/plan.md): the plan: stack, vSphere architecture, features, limitations and phases.
