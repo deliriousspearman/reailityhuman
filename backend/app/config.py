@@ -21,11 +21,11 @@ class Settings(BaseSettings):
     vcenter_datacenter: str = ""
     # Cluster (or standalone host) that machines run on, under the datacenter's host folder.
     vcenter_cluster: str = ""
-    # Optional resource pool inside the cluster, e.g. "ProLabs". Default: the cluster's root pool.
+    # Optional resource pool inside the cluster, e.g. "Labs". Default: the cluster's root pool.
     vcenter_resource_pool: str = ""
     vcenter_datastore: str = ""
     # VM folder for machines, under the datacenter's VM folder.
-    vcenter_folder: str = "ProLabs/Machines"
+    vcenter_folder: str = "Labs/Machines"
     # Port group machines join (the LAN, with DHCP).
     vcenter_network: str = ""
 

@@ -1,5 +1,5 @@
 """Test setup: PostgreSQL and vcsim from compose.test.yaml (or CI services), settings pointing at them,
-and a vcsim inventory shaped like the real one (ProLabs folders and an Ubuntu template)."""
+and a vcsim inventory shaped like the real one (Labs folders and an Ubuntu template)."""
 
 import os
 
@@ -14,7 +14,7 @@ os.environ.update(
     VCENTER_CLUSTER="DC0_C0",
     VCENTER_DATASTORE="LocalDS_0",
     VCENTER_NETWORK="VM Network",
-    VCENTER_FOLDER="ProLabs/Machines",
+    VCENTER_FOLDER="Labs/Machines",
     # vcsim VMs never report an IP; don't wait for one.
     IP_TIMEOUT_SECONDS="0",
 )
@@ -31,7 +31,7 @@ from app import jobs  # noqa: E402
 from app.db import engine  # noqa: E402
 from app.vsphere import connect, wait  # noqa: E402
 
-TEMPLATE = "ProLabs/Templates/tpl-ubuntu-22.04"
+TEMPLATE = "Labs/Templates/tpl-ubuntu-22.04"
 
 
 def _wait_for_vcsim(timeout: float = 30) -> None:
@@ -48,16 +48,16 @@ def _wait_for_vcsim(timeout: float = 30) -> None:
 
 @pytest.fixture(scope="session", autouse=True)
 def inventory():
-    """ProLabs/Templates/tpl-ubuntu-22.04 (one of vcsim's VMs, with a "clean" snapshot) and
-    ProLabs/Machines, as docs/setup-vsphere.md has people set up."""
+    """Labs/Templates/tpl-ubuntu-22.04 (one of vcsim's VMs, with a "clean" snapshot) and
+    Labs/Machines, as docs/setup-vsphere.md has people set up."""
     _wait_for_vcsim()
     with connect() as vc:
         if vc._path(f"DC0/vm/{TEMPLATE}"):
             return
         root = vc.datacenter.vmFolder
-        prolabs = root.CreateFolder("ProLabs")
-        templates = prolabs.CreateFolder("Templates")
-        prolabs.CreateFolder("Machines")
+        labs = root.CreateFolder("Labs")
+        templates = labs.CreateFolder("Templates")
+        labs.CreateFolder("Machines")
         vm = vc._path("DC0/vm/DC0_C0_RP0_VM0")
         vc.power_off(vm)
         wait(vm.Rename_Task("tpl-ubuntu-22.04"), "Rename")

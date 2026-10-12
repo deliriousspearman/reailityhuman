@@ -8,7 +8,7 @@
 
 - template: ubuntu
   version: "22.04"
-  vsphere: ProLabs/Templates/tpl-ubuntu-22.04
+  vsphere: Labs/Templates/tpl-ubuntu-22.04
   cpu: 2
   memoryGB: 2
   diskGB: 20

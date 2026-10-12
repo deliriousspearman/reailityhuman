@@ -35,7 +35,7 @@ def test_clone_power_reset_destroy():
 def test_clone_needs_clean_snapshot_and_unique_name():
     with connect() as vc:
         with pytest.raises(VSphereError, match="not found"):
-            vc.clone("ProLabs/Templates/nope", "x-1", 1, 1, {})
+            vc.clone("Labs/Templates/nope", "x-1", 1, 1, {})
         vc.clone(TEMPLATE, "dup-1", 1, 1, {})
         with pytest.raises(VSphereError, match="already exists"):
             vc.clone(TEMPLATE, "dup-1", 1, 1, {})

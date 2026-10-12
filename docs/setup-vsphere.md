@@ -7,20 +7,20 @@ What to do once, by hand, before the panel can deploy machines:
 3. Give the panel the vCenter details.
 4. Deploy a test machine.
 
-Names below (`ProLabs/Templates`, `tpl-ubuntu-22.04`…) are the defaults the panel expects. If you use
+Names below (`Labs/Templates`, `tpl-ubuntu-22.04`…) are the defaults the panel expects. If you use
 others, change them in `lab-deploy.env` and `backend/templates.yaml` to match.
 
 ## 1. vCenter
 
 ### Folders
 
-In **VMs and Templates**, under your datacenter, create a folder `ProLabs` with two folders inside it:
+In **VMs and Templates**, under your datacenter, create a folder `Labs` with two folders inside it:
 
-- `ProLabs/Templates`: the templates machines are cloned from.
-- `ProLabs/Machines`: where the panel puts machines. Leave other VMs out of it. The panel looks
+- `Labs/Templates`: the templates machines are cloned from.
+- `Labs/Machines`: where the panel puts machines. Leave other VMs out of it. The panel looks
   machines up by name here, and its capacity figures count everything on the cluster.
 
-Optionally, create a resource pool (e.g. `ProLabs`) in the cluster to cap what machines can use, and
+Optionally, create a resource pool (e.g. `Labs`) in the cluster to cap what machines can use, and
 set `VCENTER_RESOURCE_POOL` to its name.
 
 ### Service account
@@ -47,8 +47,8 @@ anyone else uses the panel.
 
 3. **Grant the role.** Give `svc-labdeploy` the `Lab Deploy` role, with **Propagate to children**
    ticked, on each of these:
-   - the `ProLabs` folder;
-   - the cluster (or the `ProLabs` resource pool);
+   - the `Labs` folder;
+   - the cluster (or the `Labs` resource pool);
    - the datastore machines go on;
    - the LAN port group machines join (on a distributed switch, grant it on the port group itself).
 
@@ -67,7 +67,7 @@ The template therefore needs cloud-init and VMware Tools, with all trace of its 
 ### Create the VM
 
 1. **Upload the ISO.** Put `ubuntu-22.04.x-live-server-amd64.iso` on a datastore.
-2. **Create the VM** in `ProLabs/Templates`, named `tpl-ubuntu-22.04`:
+2. **Create the VM** in `Labs/Templates`, named `tpl-ubuntu-22.04`:
    - Guest OS: Linux, Ubuntu Linux (64-bit)
    - 2 vCPU, 2 GB memory, 20 GB disk, **thin provisioned**
    - Network adapter: **VMXNET3**, on the LAN port group
@@ -159,7 +159,7 @@ on the port group; the panel reads them from VMware Tools.
 ## 4. Check it
 
 1. Open the panel, go to **Machines → Ubuntu Server**, and deploy `ubuntu01` for 2 hours.
-2. In vCenter, `ubuntu01-xxxx` appears in `ProLabs/Machines`, as a linked clone, and powers on.
+2. In vCenter, `ubuntu01-xxxx` appears in `Labs/Machines`, as a linked clone, and powers on.
 3. Within a minute or two, the panel shows its address. `ssh ubuntu@<address>` works with the
    password on its page, and `hostname` prints `ubuntu01`.
 4. Try **Stop**, **Start**, **Reboot**, and **Reset to clean**: a file you created is gone, and
