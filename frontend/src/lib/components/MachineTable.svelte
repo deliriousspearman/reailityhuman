@@ -1,9 +1,9 @@
 <script lang="ts">
 	// Single machines in a table: name, what it runs, its address, state and how long it has left.
-	// Used on the Machines page (your own) and the admin page (everyone's, with owners).
+	// Used on the Machines page and the admin page.
 	import { duration, singleMachineStates } from '$lib/format';
-	import { GRACE, store } from '$lib/mock/store.svelte';
-	import { findTemplate } from '$lib/mock/templates';
+	import { store } from '$lib/store.svelte';
+	import { findTemplate } from '$lib/templates';
 	import type { SingleMachine } from '$lib/types';
 	import Icon from './Icon.svelte';
 	import Status from './Status.svelte';
@@ -41,20 +41,21 @@
 						{t?.name} {m.version}
 					</td>
 					{#if owners}<td class="mono">{m.owner}</td>{/if}
-					<td class="mono">{m.ip}</td>
+					<td class="mono">{m.ip || '–'}</td>
 					<td><Status size="sm" {...singleMachineStates[m.state]} /></td>
 					<td class="mono" class:soon={left !== null && left < HOUR}>
 						{#if left === null}
 							kept permanently
 						{:else if m.state === 'expired'}
-							deleted in {duration(m.expiresAt! + GRACE - store.now)}
+							deleted in {duration(m.expiresAt! + store.grace - store.now)}
 						{:else}
 							{duration(left)}
 						{/if}
 					</td>
 					<td class="row-actions">
 						{#if store.canControlMachine(m) && m.expiresAt !== null && m.state !== 'destroying'}
-							<button class="btn btn-sm" type="button" onclick={() => store.extendMachine(m, 2)}>
+							{@const busy = !['running', 'stopped', 'expired', 'error'].includes(m.state)}
+							<button class="btn btn-sm" type="button" disabled={busy} onclick={() => store.extendMachine(m, 2)}>
 								<Icon name="clock" />
 								{m.state === 'expired' ? 'Extend and start' : '+2 h'}
 							</button>

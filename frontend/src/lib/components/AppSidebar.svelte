@@ -1,10 +1,10 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import { duration, instanceStates, singleMachineStates } from '$lib/format';
-	import { labs, store } from '$lib/mock/store.svelte';
-	import { findLab } from '$lib/mock/labs';
-	import { categories } from '$lib/mock/templates';
+	import { duration, singleMachineStates } from '$lib/format';
+	import { labs } from '$lib/labs';
 	import { adminSections, categorySlug, sectionFor, sections } from '$lib/nav';
+	import { store } from '$lib/store.svelte';
+	import { categories } from '$lib/templates';
 	import Icon from './Icon.svelte';
 
 	let { open = false, onnavigate }: { open?: boolean; onnavigate?: () => void } = $props();
@@ -14,21 +14,16 @@
 	// Only the section you're in is listed; the header links to the others.
 	const section = $derived(sectionFor(page.url.pathname));
 	const head = $derived(sections.find((s) => s.id === section)!);
-	const visibleSections = $derived(sections.filter((s) => !s.adminOnly || store.isAdmin));
-
-	// Learners see their own copies first, then the shared labs; admins see everything, as on /instances.
-	const instances = $derived(
-		store.isAdmin ? store.instances : [...store.mine, ...store.instances.filter((i) => i.kind === 'shared')],
-	);
 </script>
 
 <nav id="app-sidebar" class="sidebar" class:open aria-label="{head.label} menu">
 	<!-- On phones the header has no room for the section links, so the drawer carries them. -->
 	<ul class="section-links">
-		{#each visibleSections as s (s.id)}
+		{#each sections as s (s.id)}
 			<li>
-				<a href={s.href} aria-current={s.id === section ? 'true' : undefined} onclick={onnavigate}>
+				<a href={s.href} class:soon={s.soon} aria-current={s.id === section ? 'true' : undefined} onclick={onnavigate}>
 					<Icon name={s.icon} /> {s.label}
+					{#if s.soon}<span class="soon-tag">Soon</span>{/if}
 				</a>
 			</li>
 		{/each}
@@ -40,7 +35,7 @@
 		</a>
 
 		{#if section === 'machines'}
-			<p class="sub">Your machines</p>
+			<p class="sub">Machines</p>
 			<ul>
 				{#each store.myMachines as m (m.id)}
 					{@const state = singleMachineStates[m.state]}
@@ -53,7 +48,7 @@
 						</a>
 					</li>
 				{:else}
-					<li class="none">None yet</li>
+					<li class="none">{store.loaded ? 'None yet' : 'Loading…'}</li>
 				{/each}
 			</ul>
 			<p class="sub">Deploy</p>
@@ -64,28 +59,15 @@
 				{/each}
 			</ul>
 		{:else if section === 'labs'}
+			<p class="sub">Coming soon</p>
 			<ul>
 				{#each labs as lab (lab.slug)}
-					<li><a href="/labs/{lab.slug}" aria-current={current(`/labs/${lab.slug}`)} onclick={onnavigate}>{lab.title}</a></li>
+					<li class="none">{lab.title}</li>
 				{/each}
 			</ul>
 		{:else if section === 'instances'}
-			<ul>
-				{#each instances as inst (inst.id)}
-					{@const state = instanceStates[inst.state]}
-					<li>
-						<a href="/instances/{inst.id}" aria-current={current(`/instances/${inst.id}`)} onclick={onnavigate}>
-							<span class="dot" data-tone={state.tone} title={state.label}></span>
-							<span class="visually-hidden">{state.label}:</span>
-							{findLab(inst.lab)?.title}
-							<span class="kind">{inst.kind === 'shared' ? 'shared' : inst.owner === store.user.username ? 'yours' : inst.owner}</span>
-						</a>
-					</li>
-				{:else}
-					<li class="none">None running</li>
-				{/each}
-			</ul>
-		{:else if section === 'admin' && store.isAdmin}
+			<p class="sub">Coming with Pro Labs</p>
+		{:else if section === 'admin'}
 			<ul>
 				{#each adminSections as a (a.id)}
 					<li><a href="/admin#{a.id}" aria-current={current(`/admin#${a.id}`)} onclick={onnavigate}>{a.label}</a></li>
@@ -173,6 +155,9 @@
 	.section-links a {
 		gap: 0.6rem;
 		font: 700 0.95rem var(--lms-display);
+	}
+	.section-links a.soon {
+		color: var(--lms-gray-4);
 	}
 	.section-links a[aria-current='true'] {
 		color: var(--lms-lime-text);

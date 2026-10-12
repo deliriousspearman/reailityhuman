@@ -1,28 +1,26 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import AccessPanel from '$lib/components/AccessPanel.svelte';
 	import ActivityLog from '$lib/components/ActivityLog.svelte';
 	import ConfirmDialog, { type ConfirmRequest } from '$lib/components/ConfirmDialog.svelte';
 	import Icon from '$lib/components/Icon.svelte';
 	import Status from '$lib/components/Status.svelte';
 	import { clock, duration, singleMachineStates } from '$lib/format';
-	import { GRACE, store } from '$lib/mock/store.svelte';
-	import { findTemplate, flagNotes } from '$lib/mock/templates';
+	import { store } from '$lib/store.svelte';
+	import { findTemplate, flagNotes } from '$lib/templates';
 
 	const HOUR = 3_600_000;
 
 	const m = $derived(store.machine(page.params.id ?? ''));
 	const t = $derived(m && findTemplate(m.template));
 	const canControl = $derived(m ? store.canControlMachine(m) : false);
-	const busy = $derived(m ? !['running', 'stopped', 'expired'].includes(m.state) : true);
+	const busy = $derived(m ? !['running', 'stopped', 'expired', 'error'].includes(m.state) : true);
 	const keepBlocker = $derived(m ? store.keepBlocker(m) : null);
-	/** The SSH user: the template's, or the user in credentials like "admin / pfsense". */
-	const user = $derived(t?.sshUser ?? t?.credentials?.split(' / ')[0].replace(/^.*\\/, '') ?? 'root');
 	const webUrl = $derived(m && t ? (t.webUrl ?? 'https://{ip}/').replace('{ip}', m.ip) : '');
 
 	let request = $state<ConfirmRequest>();
 	let copied = $state('');
+	let showPassword = $state(false);
 
 	async function copy(text: string) {
 		try {
@@ -66,7 +64,9 @@
 
 <svelte:head><title>{m?.name ?? 'Machine'} · Codex Labs</title></svelte:head>
 
-{#if !m || !t}
+{#if !store.loaded}
+	<p class="loading">Loading…</p>
+{:else if !m || !t}
 	<div class="gone">
 		<h1>This machine is gone</h1>
 		<p>It was destroyed, or it expired and wasn't extended in time.</p>
@@ -83,15 +83,15 @@
 			<p class="subtitle">
 				<Status {...singleMachineStates[m.state]} />
 				<span><span class="os" data-os={t.os.toLowerCase()}>{t.os}</span> {t.name} {m.version}</span>
-				{#if m.owner !== store.user.username}<span>Owned by {m.owner}</span>{/if}
 			</p>
 		</div>
 
 		{#if canControl}
 			<div class="actions">
-				{#if m.state === 'stopped'}
+				{#if m.state === 'stopped' || m.state === 'error'}
 					<button class="btn btn-primary" type="button" onclick={() => store.startMachine(m)}><Icon name="play" /> Start</button>
-				{:else if m.state !== 'expired'}
+				{/if}
+				{#if m.state !== 'stopped' && m.state !== 'expired'}
 					<button class="btn" type="button" disabled={busy} onclick={() => store.stopMachine(m)}><Icon name="stop" /> Stop</button>
 				{/if}
 				<button class="btn" type="button" disabled={m.state !== 'running'} onclick={() => store.rebootMachine(m)}>
@@ -100,7 +100,7 @@
 				<details class="more" bind:this={more}>
 					<summary class="btn">More</summary>
 					<div class="more-menu panel">
-						<button type="button" disabled={m.state !== 'running'} onclick={() => fromMenu(reset)}><Icon name="reset" /> Reset to clean</button>
+						<button type="button" disabled={busy || m.state === 'expired'} onclick={() => fromMenu(reset)}><Icon name="reset" /> Reset to clean</button>
 						<button type="button" class="danger" disabled={busy} onclick={() => fromMenu(destroy)}><Icon name="trash" /> Destroy</button>
 					</div>
 				</details>
@@ -124,8 +124,8 @@
 		<div class="banner" class:banner-warn={expired || left < HOUR}>
 			<p>
 				{#if expired}
-					<strong>Expired and powered off.</strong> It's deleted at {clock(m.expiresAt + GRACE, store.now)}, in
-					{duration(m.expiresAt + GRACE - store.now)}, unless you extend it.
+					<strong>Expired and powered off.</strong> It's deleted at {clock(m.expiresAt + store.grace, store.now)}, in
+					{duration(m.expiresAt + store.grace - store.now)}, unless you extend it.
 				{:else}
 					Powered off at <strong>{clock(m.expiresAt, store.now)}</strong>, in {duration(left)}, then deleted a day later.
 				{/if}
@@ -148,7 +148,10 @@
 	<dl class="stats">
 		<div>
 			<dt>Address</dt>
-			<dd><code>{m.ip}</code><span class="stat-note">your network {store.network.cidr}</span></dd>
+			<dd>
+				{#if m.ip}<code>{m.ip}</code>{:else}<span class="waiting">Waiting for one…</span>{/if}
+				<span class="stat-note">on the LAN, from DHCP</span>
+			</dd>
 		</div>
 		<div>
 			<dt>Uses</dt>
@@ -166,24 +169,36 @@
 
 	<div class="section-heading">
 		<h2>Sign in</h2>
-		{#if t.credentials}<p>First sign-in: <code>{t.credentials}</code></p>{/if}
 	</div>
 	<ul class="ways">
-		{#if t.access.includes('web')}
+		<li>
+			<span class="way">Account</span>
+			<span class="cmd">
+				{m.username} /
+				{#if showPassword}{m.password}{:else}<span aria-label="password hidden">••••••••••••</span>{/if}
+			</span>
+			<button class="btn btn-quiet btn-sm" type="button" onclick={() => (showPassword = !showPassword)}>
+				<Icon name="eye" />{showPassword ? 'Hide' : 'Show'}
+			</button>
+			<button class="btn btn-quiet btn-sm" type="button" onclick={() => copy(m.password)}>
+				<Icon name="copy" />{copied === m.password ? 'Copied' : 'Copy password'}
+			</button>
+		</li>
+		{#if t.access.includes('web') && m.ip}
 			<li>
 				<span class="way">Web interface</span>
 				<a class="cmd" href={webUrl} target="_blank" rel="noreferrer">{webUrl}</a>
 			</li>
 		{/if}
-		{#if t.access.includes('ssh')}
-			{@const cmd = `ssh ${user}@${m.ip}`}
+		{#if t.access.includes('ssh') && m.ip}
+			{@const cmd = `ssh ${m.username}@${m.ip}`}
 			<li>
 				<span class="way">SSH</span>
 				<code class="cmd">{cmd}</code>
 				<button class="btn btn-quiet btn-sm" type="button" onclick={() => copy(cmd)}><Icon name="copy" />{copied === cmd ? 'Copied' : 'Copy'}</button>
 			</li>
 		{/if}
-		{#if t.access.includes('rdp')}
+		{#if t.access.includes('rdp') && m.ip}
 			{@const cmd = `mstsc /v:${m.ip}`}
 			<li>
 				<span class="way">Remote Desktop</span>
@@ -195,7 +210,8 @@
 			<li>
 				<span class="way">Console</span>
 				<span class="cmd muted">In the browser, for first-time setup and when the network is down</span>
-				<button class="btn btn-sm" type="button" disabled title="Planned"><Icon name="console" /> Open console</button>
+				<button class="btn btn-sm" type="button" disabled title="Coming soon"><Icon name="console" /> Open console</button>
+				<span class="soon-tag">Soon</span>
 			</li>
 		{/if}
 	</ul>
@@ -208,14 +224,18 @@
 	{/if}
 
 	<div class="lower">
-		<AccessPanel
-			fileName="{store.user.username}-network.conf"
-			label="personal network"
-			endpoint={store.network.endpoint}
-			cidr={store.network.cidr}
-			ready={true}
-			lab={false}
-		/>
+		<section class="vpn" aria-labelledby="vpn-title">
+			<div class="section-heading">
+				<h2 id="vpn-title">Your network <span class="soon-tag">Soon</span></h2>
+			</div>
+			<div class="vpn-panel panel">
+				<p>
+					Later, your machines will share a private network of their own, reached over a VPN. For now they sit on the LAN:
+					connect to the address above directly.
+				</p>
+				<button class="btn btn-sm" type="button" disabled><Icon name="download" /> Download VPN config</button>
+			</div>
+		</section>
 		<section aria-labelledby="activity-title">
 			<div class="section-heading">
 				<h2 id="activity-title">Activity</h2>
@@ -337,9 +357,6 @@
 		margin-top: 1.25rem;
 	}
 
-	.section-heading code {
-		color: var(--lms-lime-text);
-	}
 	.ways {
 		display: grid;
 		margin: 0;
@@ -364,8 +381,9 @@
 		font-weight: 600;
 		color: var(--lms-white);
 	}
+	/* At least 12rem, so on phones it wraps to its own line rather than being squeezed by the buttons. */
 	.cmd {
-		flex: 1;
+		flex: 1 1 12rem;
 		min-width: 0;
 		font: 0.85rem var(--lms-mono);
 		color: var(--lms-lime-text);
@@ -403,6 +421,26 @@
 		.lower {
 			grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
 		}
+	}
+	.loading {
+		padding-block: 3rem;
+		color: var(--lms-gray-3);
+	}
+	.waiting {
+		color: var(--lms-gray-3);
+		font-size: 0.9rem;
+	}
+	.vpn-panel {
+		display: grid;
+		gap: 0.9rem;
+		justify-items: start;
+		padding: 1rem 1.1rem;
+		border-style: dashed;
+		color: var(--lms-gray-3);
+		font-size: 0.9rem;
+	}
+	.vpn h2 .soon-tag {
+		vertical-align: middle;
 	}
 	.gone {
 		display: grid;

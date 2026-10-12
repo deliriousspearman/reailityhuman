@@ -8,6 +8,7 @@
 	import { page } from '$app/state';
 	import AppHeader from '$lib/components/AppHeader.svelte';
 	import AppSidebar from '$lib/components/AppSidebar.svelte';
+	import { store } from '$lib/store.svelte';
 
 	let { children } = $props();
 	let menuOpen = $state(false);
@@ -27,8 +28,21 @@
 				<button class="scrim" type="button" aria-label="Close menu" onclick={() => (menuOpen = false)}></button>
 			{/if}
 			<main>
+				{#if store.offline}
+					<p class="banner banner-warn" role="alert"><span><strong>Not connected.</strong> {store.offline}</span></p>
+				{:else if store.config && !store.config.vcenterConfigured}
+					<p class="banner banner-warn">
+						<span><strong>vCenter isn't set up yet.</strong> Machines can't be deployed until an admin configures it.</span>
+					</p>
+				{/if}
 				{@render children()}
 			</main>
+			{#if store.notice}
+				<p class="notice" data-tone={store.notice.tone} role="status">
+					{store.notice.text}
+					<button class="btn btn-quiet btn-sm" type="button" onclick={() => (store.notice = null)}>Dismiss</button>
+				</p>
+			{/if}
 		</div>
 	</div>
 {/if}
@@ -67,6 +81,30 @@
 			padding-inline: 2.5rem;
 		}
 	}
+	main > .banner {
+		margin-bottom: 1.5rem;
+	}
+	/* The result of the last action, when it failed: bottom right, above everything. */
+	.notice {
+		position: fixed;
+		right: 1rem;
+		bottom: 1rem;
+		z-index: 30;
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+		max-width: min(28rem, calc(100vw - 2rem));
+		padding: 0.75rem 0.75rem 0.75rem 1rem;
+		border: var(--lms-border-width) solid var(--lab-error);
+		border-radius: var(--lms-radius-md);
+		background: var(--lms-panel);
+		box-shadow: 0 1rem 2rem -0.5rem rgb(0 0 0 / 0.45);
+		font-size: 0.9rem;
+		color: var(--lms-white);
+	}
+	.notice[data-tone='ok'] {
+		border-color: var(--lms-lime);
+	}
 	.scrim {
 		position: fixed;
 		inset: var(--lab-header-height) 0 0;
@@ -75,7 +113,31 @@
 		background: rgb(0 0 0 / 0.45);
 	}
 	@media (min-width: 60rem) {
-		.scrim {
+		main > .banner {
+		margin-bottom: 1.5rem;
+	}
+	/* The result of the last action, when it failed: bottom right, above everything. */
+	.notice {
+		position: fixed;
+		right: 1rem;
+		bottom: 1rem;
+		z-index: 30;
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+		max-width: min(28rem, calc(100vw - 2rem));
+		padding: 0.75rem 0.75rem 0.75rem 1rem;
+		border: var(--lms-border-width) solid var(--lab-error);
+		border-radius: var(--lms-radius-md);
+		background: var(--lms-panel);
+		box-shadow: 0 1rem 2rem -0.5rem rgb(0 0 0 / 0.45);
+		font-size: 0.9rem;
+		color: var(--lms-white);
+	}
+	.notice[data-tone='ok'] {
+		border-color: var(--lms-lime);
+	}
+	.scrim {
 			display: none;
 		}
 	}

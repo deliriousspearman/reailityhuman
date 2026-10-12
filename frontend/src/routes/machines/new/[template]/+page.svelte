@@ -4,8 +4,9 @@
 	import { untrack } from 'svelte';
 	import Icon from '$lib/components/Icon.svelte';
 	import { clock, hoursLabel } from '$lib/format';
-	import { store } from '$lib/mock/store.svelte';
-	import { findTemplate, flagNotes } from '$lib/mock/templates';
+	import { ApiError } from '$lib/api';
+	import { store } from '$lib/store.svelte';
+	import { findTemplate, flagNotes } from '$lib/templates';
 	import type { Access } from '$lib/types';
 
 	const template = $derived(findTemplate(page.params.template ?? ''));
@@ -17,16 +18,21 @@
 	let name = $state('');
 	/** Hours to keep it, or 'keep' for permanently. */
 	let keep = $state<number | 'keep'>(4);
+	let sshKey = $state('');
+	let submitting = $state(false);
+	let failure = $state<string | null>(null);
 
-	// Defaults when the template changes: its newest version and a free name like "ubuntu01". Only the
-	// template is tracked, so later changes to your machines don't overwrite what you've typed.
+	// Defaults when the template changes (or the API's list of live versions arrives): its newest
+	// version that can be deployed, and a free name like "ubuntu01". Only those are tracked, so later
+	// changes to the machine list don't overwrite what you've typed.
 	$effect(() => {
 		const t = template;
+		const config = store.config;
 		if (!t) return;
 		untrack(() => {
-			version = t.versions[0].version;
+			version = (config && t.versions.find((v) => store.isLive(t.id, v.version))?.version) ?? t.versions[0].version;
 			const base = t.id.split('-')[0];
-			const taken = new Set(store.myMachines.map((m) => m.name));
+			const taken = new Set(store.machines.map((m) => m.name));
 			let n = 1;
 			while (taken.has(`${base}${String(n).padStart(2, '0')}`)) n++;
 			name = `${base}${String(n).padStart(2, '0')}`;
@@ -39,19 +45,30 @@
 			? 'Give it a name.'
 			: !/^[a-z][a-z0-9-]{0,14}$/.test(name)
 				? 'Use 1 to 15 lowercase letters, digits or hyphens, starting with a letter.'
-				: store.myMachines.some((m) => m.name === name)
-					? `You already have a machine called ${name}.`
+				: store.machines.some((m) => m.name === name)
+					? `There's already a machine called ${name}.`
 					: null,
 	);
 	const canKeep = $derived(store.permanentCount < store.permanentQuota);
-	const blocker = $derived(template ? store.machineBlocker(template) : null);
+	const blocker = $derived(
+		template ? (store.machineBlocker(template) ?? (store.isLive(template.id, version) ? null : `${version} isn't available yet.`)) : null,
+	);
 	const eol = $derived(template?.versions.find((v) => v.version === version)?.eol);
+	const username = $derived(store.config?.templates.find((t) => t.template === template?.id && t.version === version)?.username);
 
-	function deploy(event: SubmitEvent) {
+	async function deploy(event: SubmitEvent) {
 		event.preventDefault();
-		if (!template || nameProblem || blocker) return;
-		const m = store.deployMachine(template, version, name, keep === 'keep' ? null : keep);
-		goto(`/machines/${m.id}`);
+		if (!template || nameProblem || blocker || submitting) return;
+		submitting = true;
+		failure = null;
+		try {
+			const m = await store.deployMachine(template, version, name, keep === 'keep' ? null : keep, sshKey);
+			goto(`/machines/${m.id}`);
+		} catch (e) {
+			failure = e instanceof ApiError ? e.message : String(e);
+		} finally {
+			submitting = false;
+		}
 	}
 </script>
 
@@ -77,10 +94,11 @@
 				<legend>Version</legend>
 				<div class="options">
 					{#each template.versions as v (v.version)}
-						<label class="option">
-							<input type="radio" name="version" value={v.version} bind:group={version} />
+						{@const live = store.isLive(template.id, v.version)}
+						<label class="option" class:disabled={!live}>
+							<input type="radio" name="version" value={v.version} bind:group={version} disabled={!live} />
 							<span>{v.version}</span>
-							{#if v.eol}<span class="eol">End of life</span>{/if}
+							{#if !live}<span class="soon-tag">Soon</span>{:else if v.eol}<span class="eol">End of life</span>{/if}
 						</label>
 					{/each}
 				</div>
@@ -121,13 +139,27 @@
 				</div>
 				<p class="hint">
 					{#if keep === 'keep'}
-						It won't expire. You can keep {store.permanentQuota === 1 ? 'one machine' : `${store.permanentQuota} machines`} permanently.
+						It won't expire. {store.permanentQuota === 1 ? 'One machine' : `${store.permanentQuota} machines`} can be kept permanently.
 					{:else}
 						Powered off at {clock(store.now + keep * 3_600_000, store.now)} and deleted a day later, unless you extend it.
 					{/if}
-					{#if !canKeep}You already keep {store.permanentCount} permanently, the most you can.{/if}
+					{#if !canKeep}{store.permanentCount} are kept permanently already, the most allowed.{/if}
 				</p>
 			</fieldset>
+
+			<div class="field">
+				<label for="ssh-key">SSH public key <span class="optional">optional</span></label>
+				<textarea
+					id="ssh-key"
+					class="input mono-input"
+					rows="3"
+					bind:value={sshKey}
+					spellcheck="false"
+					placeholder="ssh-ed25519 AAAA… you@laptop"
+					aria-describedby="ssh-key-hint"
+				></textarea>
+				<p id="ssh-key-hint" class="hint">Added for {username ?? 'the user'}, so you can sign in without the password.</p>
+			</div>
 		</div>
 
 		<aside class="summary panel">
@@ -135,9 +167,13 @@
 			<dl>
 				<div><dt>Machine</dt><dd>{template.name} {version}</dd></div>
 				<div><dt>Uses</dt><dd>{template.resources.cpu} vCPU, {template.resources.memoryGB} GB memory, {template.resources.diskGB} GB disk</dd></div>
-				<div><dt>Network</dt><dd><code>{store.network.cidr}</code>, with your other machines</dd></div>
+				<div><dt>Network</dt><dd>The LAN, with an address from DHCP</dd></div>
 				<div><dt>Sign in with</dt><dd>{template.access.map((a) => accessNames[a]).join(', ')}</dd></div>
-				{#if template.credentials}<div><dt>First sign-in</dt><dd><code>{template.credentials}</code></dd></div>{/if}
+				{#if username}
+					<div><dt>First sign-in</dt><dd><code>{username}</code>, with a password shown once it's deployed</dd></div>
+				{:else if template.credentials}
+					<div><dt>First sign-in</dt><dd><code>{template.credentials}</code></dd></div>
+				{/if}
 			</dl>
 			{#if template.flags?.length}
 				<ul class="flag-notes">
@@ -146,10 +182,10 @@
 					{/each}
 				</ul>
 			{/if}
-			<button class="btn btn-primary" type="submit" disabled={!!nameProblem || !!blocker}>
-				<Icon name="plus" /> Deploy {name || 'machine'}
+			<button class="btn btn-primary" type="submit" disabled={!!nameProblem || !!blocker || submitting}>
+				<Icon name="plus" /> {submitting ? 'Deploying…' : `Deploy ${name || 'machine'}`}
 			</button>
-			{#if blocker}<p class="blocker" role="status"><Icon name="alert" /> {blocker}</p>{/if}
+			{#if blocker || failure}<p class="blocker" role="status"><Icon name="alert" /> {failure ?? blocker}</p>{/if}
 		</aside>
 	</form>
 {/if}
@@ -272,6 +308,17 @@
 	.option.disabled {
 		opacity: 0.45;
 		cursor: not-allowed;
+	}
+	textarea.mono-input {
+		resize: vertical;
+		min-height: 4.5rem;
+		font-size: 0.8rem;
+	}
+	.optional {
+		margin-inline-start: 0.4rem;
+		font-weight: 400;
+		font-size: 0.8rem;
+		color: var(--lms-gray-3);
 	}
 	.eol {
 		padding: 0 0.35rem;

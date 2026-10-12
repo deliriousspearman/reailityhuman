@@ -1,15 +1,9 @@
 <script lang="ts">
-	// A lab in the catalogue: the LMS lab card, plus a footer with the live state of the shared
-	// instance and of this person's own copy.
-	import { duration, instanceStates } from '$lib/format';
-	import { store } from '$lib/mock/store.svelte';
+	// A planned lab: the LMS lab card, greyed out until Pro Labs can be deployed.
 	import type { Lab } from '$lib/types';
-	import Status from './Status.svelte';
 
 	let { lab }: { lab: Lab } = $props();
 
-	const shared = $derived(store.shared(lab.slug));
-	const own = $derived(store.dedicated(lab.slug));
 	const osCounts = $derived(
 		Object.entries(
 			lab.machines.reduce<Record<string, number>>((acc, m) => ((acc[m.os] = (acc[m.os] ?? 0) + 1), acc), {}),
@@ -17,11 +11,11 @@
 	);
 </script>
 
-<article class="lab-card">
+<article class="lab-card soon">
 	<header>
 		<div class="card-title">
 			<img class="picture" src={lab.image} alt="" width="56" height="56" />
-			<h2><a href="/labs/{lab.slug}">{lab.title}</a></h2>
+			<h2>{lab.title}</h2>
 		</div>
 		<span class="level-chip" data-level={lab.level.toLowerCase()}>{lab.level}</span>
 	</header>
@@ -34,20 +28,7 @@
 		{/each}
 	</ul>
 	<footer>
-		{#if own}
-			<div class="footer-row">
-				<Status size="sm" {...instanceStates[own.state]} />
-				<span>
-					Your copy{#if own.expiresAt}, {duration(own.expiresAt - store.now)} left{/if}
-				</span>
-			</div>
-		{/if}
-		{#if shared}
-			<div class="footer-row">
-				<Status size="sm" {...instanceStates[shared.state]} />
-				<span>Shared, {shared.connected} connected</span>
-			</div>
-		{/if}
+		<div class="footer-row"><span class="soon-tag">Soon</span> <span>Not available to deploy yet</span></div>
 	</footer>
 </article>
 
@@ -62,18 +43,13 @@
 		border-radius: var(--lms-radius-lg);
 		background: var(--lms-panel);
 	}
-	/* Hardline: the card lifts onto a solid lime shadow. */
-	.lab-card:hover {
-		border-color: var(--lms-lime);
-		box-shadow: var(--lms-hover-shadow);
-		translate: -2px -2px;
+	/* Not deployable yet: dimmed, and it doesn't lift on hover the way live cards do. */
+	.lab-card.soon {
+		border-style: dashed;
 	}
-	@media (prefers-reduced-motion: no-preference) {
-		.lab-card {
-			transition:
-				translate 0.12s,
-				box-shadow 0.12s;
-		}
+	.lab-card.soon > :not(footer) {
+		opacity: 0.55;
+		filter: grayscale(0.6);
 	}
 	header {
 		display: flex;
@@ -98,16 +74,6 @@
 	h2 {
 		font-size: 1.3rem;
 	}
-	h2 a {
-		color: var(--lms-white);
-		text-decoration: none;
-	}
-	/* The whole card is clickable through the title link. */
-	h2 a::after {
-		content: '';
-		position: absolute;
-		inset: 0;
-	}
 	.lab-card > p {
 		flex: 1;
 		color: var(--lms-gray-2);
@@ -131,7 +97,6 @@
 	.footer-row {
 		display: flex;
 		align-items: center;
-		justify-content: space-between;
 		gap: 0.75rem;
 	}
 </style>

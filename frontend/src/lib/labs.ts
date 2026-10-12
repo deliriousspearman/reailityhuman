@@ -1,7 +1,7 @@
 // Lab definitions, matching the LMS pages lms/src/content/docs/labs/<slug>.md (same slug, title,
 // description, machines and picture). Network ranges: public-looking addresses use documentation
 // ranges (RFC 5737), internal ones use private ranges, as the LMS conventions require.
-import type { Lab } from '../types';
+import type { Lab } from './types';
 
 export const labs: Lab[] = [
 	{

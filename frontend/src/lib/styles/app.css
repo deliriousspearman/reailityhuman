@@ -412,3 +412,16 @@ samp {
 		transition-duration: 0.01ms !important;
 	}
 }
+
+/* "Soon": marks features that aren't built yet (Pro Labs, templates without a vSphere template). */
+.soon-tag {
+	display: inline-block;
+	padding: 0 0.35rem;
+	border: 1px solid var(--lms-gray-5);
+	border-radius: var(--lms-radius-pill);
+	font: 600 0.65rem/1.1rem var(--lms-mono);
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	color: var(--lms-gray-3);
+	white-space: nowrap;
+}

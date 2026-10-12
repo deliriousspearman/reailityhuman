@@ -1,7 +1,6 @@
 <script lang="ts">
-	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import { store } from '$lib/mock/store.svelte';
+	import { store } from '$lib/store.svelte';
 	import { sectionFor, sections } from '$lib/nav';
 	import { theme, type ThemeChoice } from '$lib/theme.svelte';
 	import Icon from './Icon.svelte';
@@ -13,18 +12,10 @@
 
 	const section = $derived(sectionFor(page.url.pathname));
 
-	// A count of what's running beside Machines and Instances, now the sidebar only lists the current section.
+	// A count of what's running beside Machines, now the sidebar only lists the current section.
 	const running = $derived({
-		machines: store.myMachines.filter((m) => m.state === 'running').length,
-		instances: store.mine.filter((i) => i.state === 'running').length,
+		machines: store.machines.filter((m) => m.state === 'running').length,
 	} as Partial<Record<string, number>>);
-
-	let userMenu: HTMLDetailsElement | undefined = $state();
-
-	function signOut() {
-		userMenu?.removeAttribute('open');
-		goto('/login');
-	}
 </script>
 
 <header class="header">
@@ -38,12 +29,13 @@
 		<Icon name={menuOpen ? 'close' : 'menu'} label={menuOpen ? 'Close menu' : 'Open menu'} />
 	</button>
 
-	<a class="site-title" href="/">Codex Labs</a>
+	<a class="site-title" href="/machines">Codex Labs</a>
 
 	<nav class="sections" aria-label="Sections">
-		{#each sections.filter((s) => !s.adminOnly || store.isAdmin) as s (s.id)}
-			<a class="nav-link" href={s.href} aria-current={s.id === section ? 'true' : undefined}>
+		{#each sections as s (s.id)}
+			<a class="nav-link" class:soon={s.soon} href={s.href} aria-current={s.id === section ? 'true' : undefined}>
 				{s.label}
+				{#if s.soon}<span class="soon-tag">Soon</span>{/if}
 				{#if running[s.id]}<span class="count" title="{running[s.id]} running">{running[s.id]}</span>{/if}
 			</a>
 		{/each}
@@ -62,21 +54,6 @@
 			</select>
 		</label>
 
-		<details class="user-menu" bind:this={userMenu}>
-			<summary>
-				<span class="avatar" aria-hidden="true">{store.user.username.slice(0, 1).toUpperCase()}</span>
-				<span class="user-name">{store.user.username}</span>
-			</summary>
-			<div class="user-panel panel">
-				<p class="user-line"><strong>{store.user.username}</strong> {store.user.role === 'admin' ? 'Admin' : 'Learner'}</p>
-				<fieldset>
-					<legend>Preview as</legend>
-					<label><input type="radio" bind:group={store.user.role} value="admin" /> Admin</label>
-					<label><input type="radio" bind:group={store.user.role} value="learner" /> Learner</label>
-				</fieldset>
-				<button class="btn btn-sm" type="button" onclick={signOut}>Sign out</button>
-			</div>
-		</details>
 	</div>
 </header>
 
@@ -179,8 +156,7 @@
 		color: var(--lms-gray-2);
 	}
 	@media (max-width: 40rem) {
-		.right > .nav-link,
-		.user-name {
+		.right > .nav-link {
 			display: none;
 		}
 	}
@@ -219,85 +195,8 @@
 		}
 	}
 
-	/* A divider before the account menu, as before the course site's last header item. */
-	.user-menu {
-		position: relative;
-		padding-inline-start: 0.75rem;
-		margin-inline-start: 0.25rem;
-		border-inline-start: 1px solid var(--lms-gray-5);
-	}
-	.user-menu summary {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-		padding: 0.25rem 0.5rem 0.25rem 0.25rem;
-		border: 1px solid transparent;
-		border-radius: var(--lms-radius-pill);
-		color: var(--lms-gray-1);
-		font-weight: 600;
-		font-size: 0.9rem;
-		list-style: none;
-		cursor: pointer;
-	}
-	.user-menu summary::-webkit-details-marker {
-		display: none;
-	}
-	.user-menu summary:hover,
-	.user-menu[open] summary {
-		border-color: var(--lms-gray-5);
-	}
-	.avatar {
-		display: grid;
-		place-items: center;
-		width: 1.9rem;
-		height: 1.9rem;
-		border-radius: var(--lms-radius-sm);
-		background: var(--lms-panel-2);
-		border: 1px solid var(--lms-gray-5);
-		font: 700 0.85rem var(--lms-mono);
-		color: var(--lms-lime-text);
-	}
-	.user-panel {
-		position: absolute;
-		right: 0;
-		top: calc(100% + 0.5rem);
-		display: grid;
-		gap: 0.9rem;
-		width: 14rem;
-		padding: 1rem;
-		box-shadow: 0 1rem 2rem -0.5rem rgb(0 0 0 / 0.45);
-	}
-	.user-line {
-		display: flex;
-		justify-content: space-between;
-		font-size: 0.85rem;
-		color: var(--lms-gray-3);
-	}
-	.user-line strong {
-		color: var(--lms-white);
-	}
-	fieldset {
-		display: grid;
-		gap: 0.3rem;
-		margin: 0;
-		padding: 0.6rem 0.75rem 0.7rem;
-		border: 1px dashed var(--lms-gray-5);
-		border-radius: var(--lms-radius-sm);
-		font-size: 0.875rem;
-	}
-	legend {
-		padding-inline: 0.3rem;
-		font-size: 0.75rem;
-		color: var(--lms-gray-3);
-	}
-	fieldset label {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-		color: var(--lms-gray-1);
-		cursor: pointer;
-	}
-	input[type='radio'] {
-		accent-color: var(--lms-lime);
+	/* Sections that aren't built yet: dimmed, with a tag. */
+	.nav-link.soon {
+		color: var(--lms-gray-4);
 	}
 </style>

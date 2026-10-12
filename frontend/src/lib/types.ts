@@ -1,5 +1,5 @@
-// Shapes the panel works with. For now they're filled by src/lib/mock/; later the API returns the
-// same shapes. Lab fields mirror the LMS lab frontmatter (lms/src/content.config.ts), plus what's
+// Shapes the panel works with. Single machines and jobs come from the API (backend/app/api.py) in
+// these shapes; labs and instances are still only designs. Lab fields mirror the LMS lab frontmatter (lms/src/content.config.ts), plus what's
 // needed to deploy: networks, IPs, boot order and resources.
 
 export type OS = 'Windows' | 'Linux' | 'FreeBSD' | 'Other';
@@ -149,7 +149,16 @@ export interface MachineTemplate {
 	flags?: TemplateFlag[];
 }
 
-export type SingleMachineState = 'deploying' | 'running' | 'stopping' | 'stopped' | 'resetting' | 'expired' | 'destroying';
+export type SingleMachineState =
+	| 'deploying'
+	| 'running'
+	| 'stopping'
+	| 'stopped'
+	| 'resetting'
+	| 'expired'
+	| 'destroying'
+	/** The last job failed; the log says why. */
+	| 'error';
 
 export interface SingleMachine {
 	id: string;
@@ -162,9 +171,29 @@ export interface SingleMachine {
 	createdAt: number;
 	/** null: kept permanently. */
 	expiresAt: number | null;
-	/** Address in the owner's personal network. */
+	/** Address on the LAN, from DHCP; empty until VMware Tools reports it. */
 	ip: string;
+	/** The VM's name in vCenter. */
+	vmName: string;
+	/** Account made on first boot, and its generated password. */
+	username: string;
+	password: string;
 	log: LogLine[];
+}
+
+/** What the API can deploy, and its limits (GET /api/config). */
+export interface PanelConfig {
+	templates: { template: string; version: string; resources: { cpu: number; memoryGB: number; diskGB: number }; username: string }[];
+	/** How long an expired machine is kept before it's deleted. */
+	graceMs: number;
+	maxMachines: number;
+	maxPermanent: number;
+	vcenterConfigured: boolean;
+}
+
+export interface Capacity {
+	total: { cpu: number; memoryGB: number; diskGB: number };
+	used: { cpu: number; memoryGB: number; diskGB: number };
 }
 
 /** A person's own network, shared by all their single machines and reached over one WireGuard tunnel. */

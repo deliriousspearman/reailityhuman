@@ -1,10 +1,12 @@
 // Single-machine templates: the operating systems and appliances people can deploy on their own.
+// Only the versions the API lists in /api/config (backend/templates.yaml) can be deployed yet; the
+// rest show as "coming soon".
 // Version numbers are the ones to build first; confirm each against its vendor when the template is
 // made (end-of-life marks as of September 2026).
 // Each version is a vSphere template with a 'clean' snapshot. Resource figures are what one copy
 // reserves. Default credentials are the vendor's or the template builder's, shown so people can
 // sign in the first time.
-import type { MachineTemplate } from '../types';
+import type { MachineTemplate } from './types';
 
 export const templates: MachineTemplate[] = [
 	// Firewalls and routers
@@ -57,9 +59,9 @@ export const templates: MachineTemplate[] = [
 			{ version: '18.04', eol: true },
 			{ version: '16.04', eol: true },
 		],
-		resources: { cpu: 2, memoryGB: 2, diskGB: 25 },
+		resources: { cpu: 2, memoryGB: 2, diskGB: 20 },
 		access: ['ssh', 'console'],
-		credentials: 'labuser / set on first deploy',
+		credentials: 'ubuntu / a password made for each machine',
 	},
 	{
 		id: 'debian',

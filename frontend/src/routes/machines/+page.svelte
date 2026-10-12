@@ -1,7 +1,7 @@
 <script lang="ts">
 	import MachineTable from '$lib/components/MachineTable.svelte';
-	import { store } from '$lib/mock/store.svelte';
-	import { categories, flagNotes, templates } from '$lib/mock/templates';
+	import { store } from '$lib/store.svelte';
+	import { categories, flagNotes, templates } from '$lib/templates';
 	import { categorySlug } from '$lib/nav';
 
 	let query = $state('');
@@ -16,10 +16,20 @@
 		}),
 	);
 
-	// Grouped under category headings, in the catalogue's order; empty groups are left out.
-	const groups = $derived(
-		categories.map((c) => ({ category: c, items: shown.filter((t) => t.category === c) })).filter((g) => g.items.length),
-	);
+	// Grouped under category headings, in the catalogue's order; empty groups are left out. Templates
+	// that can be deployed come first in their group; the rest are greyed out as "soon".
+	// Unfiltered, what can be deployed today is also listed first, so it isn't lost among the "soon" cards.
+	const groups = $derived([
+		...(category === 'All' && !query.trim()
+			? [{ category: 'Available now', items: templates.filter((t) => store.isLive(t.id)) }]
+			: []),
+		...categories.map((c) => ({
+			category: c as string,
+			items: shown
+				.filter((t) => t.category === c)
+				.sort((a, b) => Number(store.isLive(b.id)) - Number(store.isLive(a.id))),
+		})),
+	].filter((g) => g.items.length));
 
 	function versionSummary(versions: { version: string }[]) {
 		const names = versions.map((v) => v.version);
@@ -31,18 +41,20 @@
 
 <h1>Machines</h1>
 <p class="lead">
-	Single machines to build and break things on, in your own network. They're deleted when their time runs out unless
-	you extend them or keep them.
+	Single machines to build and break things on, on the LAN. They're deleted when their time runs out unless you extend
+	them or keep them.
 </p>
 
 <div class="section-heading">
-	<h2>Your machines</h2>
-	<p>
-		{store.myMachines.length} of {store.machineQuota}, {store.permanentCount} of {store.permanentQuota} kept permanently.
-		Network <code>{store.network.cidr}</code>
-	</p>
+	<h2>Machines</h2>
+	{#if store.config}
+		<p>{store.machines.length} of {store.machineQuota}, {store.permanentCount} of {store.permanentQuota} kept permanently</p>
+	{/if}
 </div>
-<MachineTable machines={store.myMachines} empty="No machines yet. Pick one below to deploy it." />
+<MachineTable
+	machines={store.machines}
+	empty={store.loaded ? 'No machines yet. Pick one below to deploy it.' : 'Loading…'}
+/>
 
 <div class="section-heading">
 	<h2>Deploy a machine</h2>
@@ -66,13 +78,16 @@
 		<h3 id={slug}>{group.category} <span>{group.items.length}</span></h3>
 		<div class="templates">
 			{#each group.items as t (t.id)}
-				<article class="template">
+				{@const live = store.isLive(t.id)}
+				<article class="template" class:soon={!live}>
 					<header>
-						<h4><a href="/machines/new/{t.id}">{t.name}</a></h4>
+						<h4>{#if live}<a href="/machines/new/{t.id}">{t.name}</a>{:else}{t.name}{/if}</h4>
 						<span class="os" data-os={t.os.toLowerCase()}>{t.os}</span>
 					</header>
 					<p>{t.description}</p>
-					<p class="versions">{versionSummary(t.versions)}</p>
+					<p class="versions">
+						{live ? versionSummary(t.versions.filter((v) => store.isLive(t.id, v.version))) : versionSummary(t.versions)}
+					</p>
 					{#if t.flags?.length}
 						<ul class="flags">
 							{#each t.flags as f (f)}
@@ -82,7 +97,7 @@
 					{/if}
 					<footer>
 						<span>{t.resources.cpu} vCPU, {t.resources.memoryGB} GB</span>
-						<span class="deploy">Deploy</span>
+						{#if live}<span class="deploy">Deploy</span>{:else}<span class="soon-tag">Soon</span>{/if}
 					</footer>
 				</article>
 			{/each}
@@ -96,9 +111,6 @@
 	.lead {
 		max-width: 44rem;
 		margin: 0.75rem 0 0;
-	}
-	.section-heading code {
-		color: var(--lms-lime-text);
 	}
 
 	.filters {
@@ -152,7 +164,7 @@
 		background: var(--lms-panel);
 	}
 	/* Hardline: the card lifts onto a solid lime shadow. */
-	.template:hover {
+	.template:not(.soon):hover {
 		border-color: var(--lms-lime);
 		box-shadow: var(--lms-hover-shadow);
 		translate: -2px -2px;
@@ -163,6 +175,14 @@
 				translate 0.12s,
 				box-shadow 0.12s;
 		}
+	}
+	/* Not deployable yet: dimmed, dashed, and it doesn't lift. */
+	.template.soon {
+		border-style: dashed;
+	}
+	.template.soon > :not(footer) {
+		opacity: 0.5;
+		filter: grayscale(0.6);
 	}
 	.template header {
 		display: flex;

@@ -61,6 +61,7 @@ export const singleMachineStates: Record<SingleMachineState, { label: string; to
 	resetting: { label: 'Resetting', tone: 'busy' },
 	expired: { label: 'Expired', tone: 'warn' },
 	destroying: { label: 'Destroying', tone: 'busy' },
+	error: { label: 'Error', tone: 'error' },
 };
 
 /** "2 h", "1 d", "3 d" for the duration choices. */
