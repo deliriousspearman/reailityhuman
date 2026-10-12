@@ -31,7 +31,7 @@ from app import jobs  # noqa: E402
 from app.db import engine  # noqa: E402
 from app.vsphere import connect, wait  # noqa: E402
 
-TEMPLATE = "Labs/Templates/tpl-ubuntu-22.04"
+TEMPLATE = "Labs/Templates/tpl-ubuntu-26.04"
 
 
 def _wait_for_vcsim(timeout: float = 30) -> None:
@@ -48,7 +48,7 @@ def _wait_for_vcsim(timeout: float = 30) -> None:
 
 @pytest.fixture(scope="session", autouse=True)
 def inventory():
-    """Labs/Templates/tpl-ubuntu-22.04 (one of vcsim's VMs, with a "clean" snapshot) and
+    """Labs/Templates/tpl-ubuntu-26.04 (one of vcsim's VMs, with a "clean" snapshot) and
     Labs/Machines, as docs/setup-vsphere.md has people set up."""
     _wait_for_vcsim()
     with connect() as vc:
@@ -60,7 +60,7 @@ def inventory():
         labs.CreateFolder("Machines")
         vm = vc._path("DC0/vm/DC0_C0_RP0_VM0")
         vc.power_off(vm)
-        wait(vm.Rename_Task("tpl-ubuntu-22.04"), "Rename")
+        wait(vm.Rename_Task("tpl-ubuntu-26.04"), "Rename")
         wait(vm.CreateSnapshot_Task(name="clean", description="", memory=False, quiesce=False), "Snapshot")
         wait(templates.MoveIntoFolder_Task([vm]), "Move")
         vm.MarkAsTemplate()

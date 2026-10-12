@@ -17,7 +17,7 @@ client = TestClient(app)
 
 
 def deploy(queued, name="ubuntu01", hours=4):
-    r = client.post("/api/machines", json={"template": "ubuntu", "version": "22.04", "name": name, "hours": hours})
+    r = client.post("/api/machines", json={"template": "ubuntu", "version": "26.04", "name": name, "hours": hours})
     assert r.status_code == 201, r.text
     run_queued(queued)
     return client.get(f"/api/machines/{r.json()['id']}").json()
@@ -25,7 +25,7 @@ def deploy(queued, name="ubuntu01", hours=4):
 
 def test_config_lists_live_templates():
     r = client.get("/api/config").json()
-    assert {"template": "ubuntu", "version": "22.04"}.items() <= r["templates"][0].items()
+    assert {"template": "ubuntu", "version": "26.04"}.items() <= r["templates"][0].items()
     assert r["vcenterConfigured"] is True
 
 
@@ -38,7 +38,7 @@ def test_deploy_then_lifecycle(queued):
     assert m["state"] == "running"
     assert m["username"] == "ubuntu" and len(m["password"]) == 16
     texts = [line["text"] for line in m["log"]]
-    assert "Cloned from ubuntu/22.04" in texts
+    assert "Cloned from ubuntu/26.04" in texts
     assert texts[-1] == "Ready. Sign in as ubuntu."
     with connect() as vc:
         assert vc.powered_on(vc.require_vm(m["vmName"]))
@@ -61,7 +61,7 @@ def test_deploy_then_lifecycle(queued):
 
 
 def test_busy_machine_rejects_actions(queued):
-    r = client.post("/api/machines", json={"template": "ubuntu", "version": "22.04", "name": "busy01", "hours": 2})
+    r = client.post("/api/machines", json={"template": "ubuntu", "version": "26.04", "name": "busy01", "hours": 2})
     assert client.post(f"/api/machines/{r.json()['id']}/stop").status_code == 409
     run_queued(queued)
 
@@ -70,8 +70,8 @@ def test_busy_machine_rejects_actions(queued):
     "body, status",
     [
         ({"template": "pfsense", "version": "2.8.0", "name": "fw01", "hours": 2}, 422),
-        ({"template": "ubuntu", "version": "22.04", "name": "Bad_Name", "hours": 2}, 422),
-        ({"template": "ubuntu", "version": "22.04", "name": "ok01", "hours": 0}, 422),
+        ({"template": "ubuntu", "version": "26.04", "name": "Bad_Name", "hours": 2}, 422),
+        ({"template": "ubuntu", "version": "26.04", "name": "ok01", "hours": 0}, 422),
     ],
 )
 def test_deploy_validation(body, status):
@@ -80,11 +80,11 @@ def test_deploy_validation(body, status):
 
 def test_duplicate_name_and_limits(queued, monkeypatch):
     deploy(queued, "dup01")
-    assert client.post("/api/machines", json={"template": "ubuntu", "version": "22.04", "name": "dup01", "hours": 2}).status_code == 409
+    assert client.post("/api/machines", json={"template": "ubuntu", "version": "26.04", "name": "dup01", "hours": 2}).status_code == 409
     from app.config import settings
 
     monkeypatch.setattr(settings(), "max_permanent", 0)
-    r = client.post("/api/machines", json={"template": "ubuntu", "version": "22.04", "name": "perm01", "hours": None})
+    r = client.post("/api/machines", json={"template": "ubuntu", "version": "26.04", "name": "perm01", "hours": None})
     assert r.status_code == 409 and "permanently" in r.json()["detail"]
 
 

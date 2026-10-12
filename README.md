@@ -4,7 +4,7 @@ A web panel that deploys, resets and tears down Pro Labs (HackTheBox-style netwo
 machines) on VMware vSphere, for a LAN without internet access. The labs are advertised on the LMS;
 lab slugs match its `labs/<slug>.md` pages.
 
-What works so far is **single machines**: deploy one VM from a template (Ubuntu 22.04 for now) onto
+What works so far is **single machines**: deploy one VM from a template (Ubuntu 26.04 for now) onto
 the LAN, then start, stop, reboot, reset, extend and destroy it. Pro Labs, the VPN and sign-in come
 later; the panel shows them greyed out.
 

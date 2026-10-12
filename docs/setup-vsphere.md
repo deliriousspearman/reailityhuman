@@ -3,11 +3,11 @@
 What to do once, by hand, before the panel can deploy machines:
 
 1. Prepare vCenter: an account, folders and permissions (mostly scripted).
-2. Build the Ubuntu 22.04 template.
+2. Build the Ubuntu 26.04 template.
 3. Give the panel the vCenter details.
 4. Deploy a test machine.
 
-Names below (`Labs/Templates`, `tpl-ubuntu-22.04`…) are the defaults the panel expects. If you use
+Names below (`Labs/Templates`, `tpl-ubuntu-26.04`…) are the defaults the panel expects. If you use
 others, change them in `lab-deploy.env` and `backend/templates.yaml` to match.
 
 ## 1. vCenter
@@ -91,7 +91,7 @@ It's safe to re-run, e.g. after a new version of the panel needs another privile
 
 </details>
 
-## 2. The Ubuntu 22.04 template
+## 2. The Ubuntu 26.04 template
 
 Machines are **linked clones** of the template's snapshot named `clean`:
 - each deploy takes seconds, and only the changes use disk space;
@@ -102,17 +102,20 @@ The template therefore needs cloud-init and VMware Tools, with all trace of its 
 
 ### Create the VM
 
-1. **Upload the ISO.** Put `ubuntu-22.04.x-live-server-amd64.iso` on a datastore.
-2. **Create the VM** in `Labs/Templates`, named `tpl-ubuntu-22.04`:
+1. **Upload the ISO.** In **Storage → *datastore* → Files**, create a folder `ISO` and upload
+   `ubuntu-26.04.x-live-server-amd64.iso` into it.
+2. **Create the VM** in `Labs/Templates`, named `tpl-ubuntu-26.04`:
    - Guest OS: Linux, Ubuntu Linux (64-bit)
-   - 2 vCPU, 2 GB memory, 20 GB disk, **thin provisioned**
+   - 2 vCPU, 2 GB memory, 25 GB disk, **thin provisioned**
    - Network adapter: **VMXNET3**, on the LAN port group
-   - CD/DVD: the ISO, **Connect at power on**
+   - CD/DVD: **Datastore ISO File**, the ISO, **Connect at power on**
 3. **Install Ubuntu Server**:
    - accept the defaults;
    - tick **Install OpenSSH server**;
    - create any user, e.g. `builder`. It's deleted at the end.
-4. **Reboot**, disconnect the CD/DVD, and SSH in as `builder` (the console shows its address).
+4. **Reboot**, then in **Edit Settings** set the CD/DVD to **Client Device**. Just disconnecting it
+   would leave every clone pointing at the ISO.
+5. SSH in as `builder` (the console shows its address).
 
 ### Prepare it
 
@@ -123,11 +126,19 @@ sudo apt update && sudo apt full-upgrade -y
 sudo apt install -y open-vm-tools cloud-init
 ```
 
-Let cloud-init configure the network and read its data from vCenter. The installer turned both off.
+The installer only gives the root volume half the disk. Give it the rest:
 
 ```sh
-sudo rm -f /etc/cloud/cloud.cfg.d/99-installer.cfg \
-           /etc/cloud/cloud.cfg.d/subiquity-disable-cloudinit-networking.cfg \
+sudo lvextend -r -l +100%FREE /dev/ubuntu-vg/ubuntu-lv
+```
+
+Let cloud-init run on clones, configure the network and read its data from vCenter. The installer
+turned all three off. While `cloud-init.disabled` exists, clones get no hostname, user or password.
+
+```sh
+sudo rm -f /etc/cloud/cloud-init.disabled \
+           /etc/cloud/cloud.cfg.d/99-installer.cfg \
+           /etc/cloud/cloud.cfg.d/00-subiquity-disable-cloudinit-networking.cfg \
            /etc/cloud/cloud.cfg.d/90-installer-network.cfg
 echo 'datasource_list: [VMware, NoCloud, None]' | sudo tee /etc/cloud/cloud.cfg.d/99-vmware.cfg
 sudo rm -f /etc/netplan/00-installer-config.yaml /etc/netplan/50-cloud-init.yaml
@@ -161,7 +172,7 @@ With the VM powered off:
 Don't delete the template, or its `clean` snapshot, while any machine exists: every machine's disk is
 built on top of that snapshot.
 
-To update it later, build a new template (e.g. `tpl-ubuntu-22.04-v2`) and point `vsphere:` in
+To update it later, build a new template (e.g. `tpl-ubuntu-26.04-v2`) and point `vsphere:` in
 `backend/templates.yaml` at it. Machines that already exist keep using the old one; delete the old
 template once they're all gone.
 
