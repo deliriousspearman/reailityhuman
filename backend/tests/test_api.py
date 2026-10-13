@@ -209,7 +209,7 @@ def test_jobs_the_worker_lost_are_failed(queued):
     queued.clear()  # the worker took it, then died
     with session() as s:
         job = s.query(Job).one()
-        job.state, job.started_at = "running", utcnow() - timedelta(minutes=5)
+        job.state, job.queued_at = "running", utcnow() - timedelta(minutes=5)
         s.execute(
             text(
                 "INSERT INTO procrastinate_jobs (queue_name, task_name, lock, args, status) "
@@ -331,3 +331,15 @@ def test_leftover_vms_can_be_listed_and_deleted(queued):
     assert client.get("/api/leftovers").json() == []
     with connect() as vc:
         assert vc.vm("jo-half01-dead") is None and vc.vm(m["vmName"]) is not None
+
+
+def test_jobs_keep_queue_time_and_filter_by_machine(queued):
+    a = deploy(queued, "jobs01")
+    deploy(queued, "jobs02")
+    client.post(f"/api/machines/{a['id']}/stop")
+    waiting = client.get("/api/jobs").json()[0]
+    assert waiting["state"] == "queued" and waiting["queuedAt"] and waiting["startedAt"] is None
+    run_queued(queued)
+    mine = client.get(f"/api/jobs?machine={a['id']}").json()
+    assert [j["action"] for j in mine] == ["Stop jobs01", "Deploy jobs01"]
+    assert all(j["startedAt"] >= j["queuedAt"] for j in mine)

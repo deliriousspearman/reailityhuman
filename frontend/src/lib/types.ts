@@ -82,7 +82,9 @@ export interface Job {
 	action: string;
 	by: string;
 	state: JobState;
-	startedAt: number;
+	queuedAt: number;
+	/** Null while it waits in the queue. */
+	startedAt: number | null;
 	finishedAt?: number;
 	detail?: string;
 	/** The job that retried this one. */

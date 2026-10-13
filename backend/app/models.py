@@ -74,6 +74,8 @@ class Job(Base):
     by: Mapped[str] = mapped_column(String(64))
     # queued | running | done | failed
     state: Mapped[str] = mapped_column(String(8), default="queued")
-    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    queued_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    # None while it waits in the queue.
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     detail: Mapped[str | None] = mapped_column(Text)

@@ -1,4 +1,4 @@
-import type { InstanceState, MachineState, SingleMachineState } from './types';
+import type { InstanceState, Job, JobState, MachineState, SingleMachineState } from './types';
 
 /**
  * "45 s", "12 min", "2 h 40 min", "3 d 4 h": the same style as LMS lesson lengths ("1 h 5 min").
@@ -63,6 +63,19 @@ export const singleMachineStates: Record<SingleMachineState, { label: string; to
 	destroying: { label: 'Destroying', tone: 'busy' },
 	error: { label: 'Error', tone: 'error' },
 };
+
+export const jobStates: Record<JobState, { label: string; tone: Tone }> = {
+	queued: { label: 'Queued', tone: 'down' },
+	running: { label: 'Running', tone: 'busy' },
+	done: { label: 'Done', tone: 'up' },
+	failed: { label: 'Failed', tone: 'error' },
+};
+
+/** How long a job took, "…" while it runs, or how long it has been waiting in the queue. */
+export function tookLabel(job: Job, now: number): string {
+	if (job.startedAt === null) return `waiting ${duration(now - job.queuedAt)}`;
+	return job.finishedAt ? duration(job.finishedAt - job.startedAt) : '…';
+}
 
 /** "a day", "3 days", "12 hours", "90 min": a period in a sentence, e.g. the grace period. */
 export function inWords(ms: number): string {

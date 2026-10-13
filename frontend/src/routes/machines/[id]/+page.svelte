@@ -5,7 +5,9 @@
 	import ConfirmDialog, { type ConfirmRequest } from '$lib/components/ConfirmDialog.svelte';
 	import Icon from '$lib/components/Icon.svelte';
 	import Status from '$lib/components/Status.svelte';
-	import { clock, duration, inWords, singleMachineStates } from '$lib/format';
+	import { ago, clock, duration, inWords, jobStates, singleMachineStates, tookLabel } from '$lib/format';
+	import { api } from '$lib/api';
+	import type { Job } from '$lib/types';
 	import { store } from '$lib/store.svelte';
 	import { findTemplate, flagNotes } from '$lib/templates';
 
@@ -18,6 +20,18 @@
 	const uses = $derived(m && t ? store.resourcesFor(t, m.version) : { cpu: 0, memoryGB: 0, diskGB: 0 });
 	const keepBlocker = $derived(m ? store.keepBlocker(m) : null);
 	const webUrl = $derived(m && t ? (t.webUrl ?? 'https://{ip}/').replace('{ip}', m.ip) : '');
+
+	// This machine's jobs, with any errors in full. Fetched again whenever its state or log changes.
+	let jobs = $state<Job[]>([]);
+	$effect(() => {
+		const id = m?.id;
+		void m?.state;
+		void m?.log.length;
+		if (!id) return;
+		api<Job[]>(`/jobs?machine=${encodeURIComponent(id)}&limit=20`)
+			.then((j) => (jobs = j))
+			.catch(() => {}); // the layout reports the API being unreachable
+	});
 
 	let request = $state<ConfirmRequest>();
 	let copied = $state('');
@@ -282,6 +296,21 @@
 				<h2 id="activity-title">Activity</h2>
 			</div>
 			<ActivityLog lines={m.log} title="machines/{m.name}" />
+			{#if jobs.length}
+				<div class="section-heading">
+					<h2>Jobs</h2>
+				</div>
+				<ul class="jobs">
+					{#each jobs as job (job.id)}
+						<li>
+							<Status size="sm" {...jobStates[job.state]} />
+							<span class="job-action">{job.action}</span>
+							<span class="job-meta">by {job.by}, {ago(job.queuedAt, store.now)}, {tookLabel(job, store.now)}</span>
+							{#if job.detail}<pre class="job-error">{job.detail}</pre>{/if}
+						</li>
+					{/each}
+				</ul>
+			{/if}
 		</section>
 	</div>
 {/if}
@@ -485,6 +514,44 @@
 	}
 	.vpn h2 .soon-tag {
 		vertical-align: middle;
+	}
+	.jobs {
+		display: grid;
+		margin: 0;
+		padding: 0;
+		list-style: none;
+		border: var(--lms-border-width) solid var(--lms-gray-5);
+		border-radius: var(--lms-radius-md);
+	}
+	.jobs li {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.25rem 0.75rem;
+		padding: 0.5rem 0.85rem;
+		border-bottom: 1px solid var(--lms-gray-5);
+		font-size: 0.875rem;
+	}
+	.jobs li:last-child {
+		border-bottom: none;
+	}
+	.job-action {
+		font-weight: 600;
+		color: var(--lms-white);
+	}
+	.job-meta {
+		font: 0.8rem var(--lms-mono);
+		color: var(--lms-gray-3);
+	}
+	.job-error {
+		flex-basis: 100%;
+		max-height: 10rem;
+		margin: 0.25rem 0 0;
+		overflow: auto;
+		font: 0.8rem/1.6 var(--lms-mono);
+		color: var(--lab-error);
+		white-space: pre-wrap;
+		overflow-wrap: anywhere;
 	}
 	.gone {
 		display: grid;

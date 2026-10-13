@@ -80,6 +80,7 @@ def job_out(j: Job) -> dict:
         "action": j.action,
         "by": j.by,
         "state": j.state,
+        "queuedAt": ms(j.queued_at),
         "startedAt": ms(j.started_at),
     }
     if j.finished_at:
@@ -482,9 +483,12 @@ def delete_leftover(name: str, db: Db, who: Actor) -> dict:
 
 
 @router.get("/jobs")
-def list_jobs(db: Db, limit: int = 50) -> list[dict]:
-    rows = db.scalars(select(Job).order_by(Job.id.desc()).limit(min(max(limit, 1), 500)))
-    return [job_out(j) for j in rows]
+def list_jobs(db: Db, limit: int = 50, machine: str | None = None) -> list[dict]:
+    """Newest first; `machine`: only that machine's."""
+    query = select(Job).order_by(Job.id.desc()).limit(min(max(limit, 1), 500))
+    if machine:
+        query = query.where(Job.machine_id == machine)
+    return [job_out(j) for j in db.scalars(query)]
 
 
 @asynccontextmanager

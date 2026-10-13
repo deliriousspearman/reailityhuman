@@ -5,17 +5,9 @@
 	import ConfirmDialog, { type ConfirmRequest } from '$lib/components/ConfirmDialog.svelte';
 	import Icon from '$lib/components/Icon.svelte';
 	import Status from '$lib/components/Status.svelte';
-	import { ago, duration, type Tone } from '$lib/format';
+	import { ago, jobStates, tookLabel } from '$lib/format';
 	import { api, ApiError } from '$lib/api';
 	import { store } from '$lib/store.svelte';
-	import type { JobState } from '$lib/types';
-
-	const jobStates: Record<JobState, { label: string; tone: Tone }> = {
-		queued: { label: 'Queued', tone: 'down' },
-		running: { label: 'Running', tone: 'busy' },
-		done: { label: 'Done', tone: 'up' },
-		failed: { label: 'Failed', tone: 'error' },
-	};
 
 	// Capacity comes from vCenter, which is slower to ask than the database: on load, then every 30 s.
 	onMount(() => {
@@ -183,8 +175,8 @@
 					</td>
 					<td class="mono">{job.by}</td>
 					<td><Status size="sm" {...jobStates[job.state]} /></td>
-					<td class="mono">{ago(job.startedAt, store.now)}</td>
-					<td class="mono">{job.finishedAt ? duration(job.finishedAt - job.startedAt) : '…'}</td>
+					<td class="mono">{ago(job.queuedAt, store.now)}</td>
+					<td class="mono">{tookLabel(job, store.now)}</td>
 					<td class="toggle-cell">
 						{#if job.detail}
 							<button

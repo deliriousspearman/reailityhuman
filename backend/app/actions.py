@@ -272,7 +272,7 @@ def recover_lost_jobs(now: datetime | None = None) -> None:
         pending = set(s.scalars(_PENDING))
         # A minute's leeway: the API records a job just before it queues it.
         unfinished = s.scalars(
-            select(Job).where(Job.state.in_(("queued", "running")), Job.started_at < now - timedelta(minutes=1))
+            select(Job).where(Job.state.in_(("queued", "running")), Job.queued_at < now - timedelta(minutes=1))
         ).all()
         for job in unfinished:
             if job.id in pending:
