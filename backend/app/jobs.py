@@ -28,6 +28,8 @@ def sweep(timestamp: int) -> None:
     actions.recover_lost_jobs()
     actions.expiry_sweep(enqueue)
     actions.reconcile()
+    if timestamp % 3600 < 60:  # once an hour is plenty
+        actions.prune_history()
 
 
 VERBS = {

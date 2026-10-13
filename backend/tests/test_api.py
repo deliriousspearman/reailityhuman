@@ -375,3 +375,13 @@ def test_config_sends_the_deploy_rules():
     assert re.match(rules["owner"]["pattern"], "jo") and rules["owner"]["problem"]
     assert rules["passwordMin"] == 8
     assert re.match(rules["hostname"], "intranet.lab.example")
+
+
+def test_old_finished_jobs_are_pruned(queued):
+    deploy(queued, "old01")
+    deploy(queued, "new01")
+    with session() as s:
+        old = s.query(Job).filter(Job.action == "Deploy old01").one()
+        old.finished_at = utcnow() - timedelta(days=91)
+    actions.prune_history()
+    assert [j["action"] for j in client.get("/api/jobs").json()] == ["Deploy new01"]

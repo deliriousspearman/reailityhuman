@@ -289,6 +289,31 @@ def recover_lost_jobs(now: datetime | None = None) -> None:
                 s.add(LogLine(machine_id=m.id, text=f"{job.action} was cut off: the job worker stopped. Try again, or destroy it.", tone="error"))
 
 
+# How long finished jobs are kept: the panel's (the Jobs lists), and the queue's own records (one a
+# minute from the sweep alone).
+KEEP_JOBS = timedelta(days=90)
+KEEP_QUEUE_HOURS = 7 * 24
+
+_PRUNE_QUEUE = text(
+    """
+    DELETE FROM procrastinate_jobs WHERE id IN (
+        SELECT job.id FROM procrastinate_jobs job JOIN procrastinate_events event ON event.job_id = job.id
+         WHERE job.status IN ('succeeded', 'failed', 'cancelled', 'aborted')
+         GROUP BY job.id HAVING max(event.at) < now() - make_interval(hours => :hours))
+    """
+)
+
+
+def prune_history(now: datetime | None = None) -> None:
+    """Deletes finished jobs past their keeping time."""
+    now = now or utcnow()
+    with session() as s:
+        s.execute(
+            Job.__table__.delete().where(Job.state.in_(("done", "failed")), Job.finished_at < now - KEEP_JOBS)
+        )
+        s.execute(_PRUNE_QUEUE, {"hours": KEEP_QUEUE_HOURS})
+
+
 def _failed_setting_up(s, machine_id: str) -> bool:
     """Whether the machine's last job was a deploy, redeploy or reset that failed (e.g. an extra didn't
     install). Its VM can be powered on and fine as far as vCenter knows, but it isn't."""
