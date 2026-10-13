@@ -50,8 +50,8 @@
 			label: 'Destroy',
 			danger: true,
 			run: async () => {
-				await store.destroyMachine(m);
-				goto('/machines');
+				// Stay here if it was refused, so the reason shows next to the machine.
+				if (await store.destroyMachine(m)) goto('/machines');
 			},
 		};
 	}

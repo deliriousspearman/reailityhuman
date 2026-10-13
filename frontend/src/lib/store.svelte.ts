@@ -191,14 +191,18 @@ class PanelStore {
 		else this.machines[i] = m;
 	}
 
-	/** Runs an action on a machine; failures are shown as a notice rather than thrown. */
-	async #act(m: SingleMachine, path: string, init: { method?: string; body?: unknown } = { method: 'POST' }) {
+	/** Runs an action on a machine; failures are shown as a notice rather than thrown. True if the
+	 * API accepted it. */
+	async #act(m: SingleMachine, path: string, init: { method?: string; body?: unknown } = { method: 'POST' }): Promise<boolean> {
+		let ok = true;
 		try {
 			this.#put(await api<SingleMachine>(`/machines/${m.id}${path}`, init));
 		} catch (e) {
 			this.say(e instanceof ApiError ? e.message : String(e));
+			ok = false;
 		}
 		void this.refresh();
+		return ok;
 	}
 
 	/** Deploys a machine. Throws ApiError with a message to show if the API refuses. */
