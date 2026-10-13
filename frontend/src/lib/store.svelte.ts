@@ -12,8 +12,6 @@ const POLL = 3 * SEC;
 const POLL_HIDDEN = 15 * SEC;
 /** Where the browser remembers who you are (no sign-in yet). */
 const USER_KEY = 'lab-deploy:user';
-/** The API's rule for owner names (backend/app/api.py). */
-export const OWNER_RULE = /^[a-z][a-z0-9-]{0,19}$/;
 
 export interface Notice {
 	text: string;
@@ -92,7 +90,7 @@ class PanelStore {
 	/** Remembers who you are in this browser. */
 	setUser(name: string, remember = true) {
 		const clean = name.trim().toLowerCase();
-		if (clean && !OWNER_RULE.test(clean)) return;
+		if (clean && this.ownerProblem(clean)) return;
 		this.user = clean;
 		setActor(clean);
 		if (!remember) return;
@@ -169,6 +167,24 @@ class PanelStore {
 	optionDefault(def: string, name: string): string {
 		const domain = this.config?.machineDomain;
 		return def.replace('{fqdn}', domain ? `${name}.${domain}` : name).replace('{hostname}', name);
+	}
+
+	/** Whether `value` matches one of the API's patterns. True until the config has loaded (the API
+	 * checks again anyway). */
+	matches(pattern: string | undefined, value: string): boolean {
+		return pattern === undefined || new RegExp(pattern).test(value);
+	}
+
+	/** What's wrong with a machine name, by the API's rule, or null. */
+	nameProblem(name: string): string | null {
+		const rule = this.config?.rules.name;
+		return rule && !this.matches(rule.pattern, name) ? rule.problem : null;
+	}
+
+	/** What's wrong with an owner name, by the API's rule, or null. */
+	ownerProblem(owner: string): string | null {
+		const rule = this.config?.rules.owner;
+		return rule && !this.matches(rule.pattern, owner) ? rule.problem : null;
 	}
 
 	/** Why this template can't be deployed right now, or null if it can. */

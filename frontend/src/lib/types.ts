@@ -198,6 +198,8 @@ export interface ExtraOption {
 	required: boolean;
 	/** Used when left blank. {hostname} is the machine's name; {fqdn} adds PanelConfig.machineDomain. */
 	default: string;
+	/** For `text`: what the whole value must match. */
+	pattern?: string;
 }
 
 /** An optional service set up on a machine's first boot (backend/extras.yaml). */
@@ -236,6 +238,14 @@ export interface PanelConfig {
 	maxMachines: number;
 	maxPermanent: number;
 	vcenterConfigured: boolean;
+	/** The API's checks on deploys (backend/app/api.py), so the form can show problems while typing. */
+	rules: {
+		name: { pattern: string; problem: string };
+		owner: { pattern: string; problem: string };
+		passwordMin: number;
+		/** A DNS name, for `hostname` extra options. */
+		hostname: string;
+	};
 }
 
 export interface Capacity {

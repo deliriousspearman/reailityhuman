@@ -27,6 +27,7 @@ ANYONE = "anyone"
 NAME_RULE = re.compile(r"^[a-z][a-z0-9-]{0,14}$")
 OWNER_RULE = re.compile(r"^[a-z][a-z0-9-]{0,19}$")
 PASSWORD_MIN = 8
+NAME_PROBLEM = "Use 1 to 15 lowercase letters, digits or hyphens, starting with a letter."
 OWNER_PROBLEM = "Use 1 to 20 lowercase letters, digits or hyphens for your name, starting with a letter."
 MAX_HOURS = 24 * 30
 
@@ -129,7 +130,15 @@ def extra_out(x: extras.Extra) -> dict:
         "description": x.description,
         "conflicts": list(x.conflicts),
         "options": [
-            {"id": o.id, "label": o.label, "help": o.help, "type": o.type, "required": o.required, "default": o.default}
+            {
+                "id": o.id,
+                "label": o.label,
+                "help": o.help,
+                "type": o.type,
+                "required": o.required,
+                "default": o.default,
+                **({"pattern": o.pattern} if o.pattern else {}),
+            }
             for o in x.options
         ],
     }
@@ -157,6 +166,14 @@ def config() -> dict:
         "maxMachines": cfg.max_machines,
         "maxPermanent": cfg.max_permanent,
         "vcenterConfigured": cfg.vcenter_configured,
+        # The checks deploys must pass, so the form can show problems while typing. The patterns
+        # are written to mean the same in Python and JavaScript.
+        "rules": {
+            "name": {"pattern": NAME_RULE.pattern, "problem": NAME_PROBLEM},
+            "owner": {"pattern": OWNER_RULE.pattern, "problem": OWNER_PROBLEM},
+            "passwordMin": PASSWORD_MIN,
+            "hostname": extras.HOSTNAME_RULE.pattern,
+        },
     }
 
 
@@ -251,7 +268,7 @@ def deploy_machine(req: DeployRequest, db: Db) -> dict:
     if tpl is None:
         raise HTTPException(422, f"{req.template} {req.version} can't be deployed yet.")
     if not NAME_RULE.match(req.name):
-        raise HTTPException(422, "Use 1 to 15 lowercase letters, digits or hyphens, starting with a letter.")
+        raise HTTPException(422, NAME_PROBLEM)
     owner = req.owner.strip().lower()
     if not OWNER_RULE.match(owner):
         raise HTTPException(422, OWNER_PROBLEM)

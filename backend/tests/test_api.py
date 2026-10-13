@@ -365,3 +365,13 @@ def test_set_expiry_on_busy_or_expired_machines(queued):
     m = client.get(f"/api/machines/{m['id']}").json()
     assert m["state"] == "running"
     assert "Expiry set: powered off in 4 h unless extended, asked by sam" in [line["text"] for line in m["log"]]
+
+
+def test_config_sends_the_deploy_rules():
+    rules = client.get("/api/config").json()["rules"]
+    import re
+
+    assert re.match(rules["name"]["pattern"], "ubuntu01") and not re.match(rules["name"]["pattern"], "Bad_Name")
+    assert re.match(rules["owner"]["pattern"], "jo") and rules["owner"]["problem"]
+    assert rules["passwordMin"] == 8
+    assert re.match(rules["hostname"], "intranet.lab.example")

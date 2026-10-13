@@ -5,7 +5,7 @@
 	import Icon from '$lib/components/Icon.svelte';
 	import { clock, hoursLabel, inWords } from '$lib/format';
 	import { ApiError } from '$lib/api';
-	import { OWNER_RULE, store } from '$lib/store.svelte';
+	import { store } from '$lib/store.svelte';
 	import { findTemplate, flagNotes } from '$lib/templates';
 	import type { Access, Extra, ExtraChoice, ExtraOption } from '$lib/types';
 
@@ -68,26 +68,24 @@
 		});
 	});
 
-	// Hostname rules: what vSphere guest customisation and most OSes accept.
+	// The API's rules (from /api/config), so mistakes show while typing.
 	const nameProblem = $derived(
 		!name
 			? 'Give it a name.'
-			: !/^[a-z][a-z0-9-]{0,14}$/.test(name)
-				? 'Use 1 to 15 lowercase letters, digits or hyphens, starting with a letter.'
-				: store.machines.some((m) => m.name === name)
-					? `There's already a machine called ${name}.`
-					: null,
+			: (store.nameProblem(name) ?? (store.machines.some((m) => m.name === name) ? `There's already a machine called ${name}.` : null)),
 	);
 	const ownerProblem = $derived(
-		!owner.trim()
-			? 'Add your name, so people can tell whose machine it is.'
-			: !OWNER_RULE.test(owner.trim().toLowerCase())
-				? 'Use 1 to 20 lowercase letters, digits or hyphens, starting with a letter.'
-				: null,
+		!owner.trim() ? 'Add your name, so people can tell whose machine it is.' : store.ownerProblem(owner.trim().toLowerCase()),
 	);
-	// The API's rule (backend/app/api.py): at least 8 characters, no line breaks or tabs.
+	const passwordMin = $derived(store.config?.rules.passwordMin ?? 8);
 	const passwordProblem = $derived(
-		!password ? null : password.length < 8 ? 'At least 8 characters.' : /[\t\n\r]/.test(password) ? 'No line breaks or tabs.' : null,
+		!password
+			? null
+			: password.length < passwordMin
+				? `At least ${passwordMin} characters.`
+				: /[\t\n\r]/.test(password)
+					? 'No line breaks or tabs.'
+					: null,
 	);
 	const vmName = $derived(`${owner.trim().toLowerCase() || 'you'}-${name || 'name'}-…`);
 	const canKeep = $derived(store.permanentCount < store.permanentQuota);
@@ -119,13 +117,14 @@
 		return chosen.find((y) => y.id !== x.id && (x.conflicts.includes(y.id) || y.conflicts.includes(x.id)));
 	}
 
-	// The API's rules (backend/app/extras.py), so mistakes show while typing.
-	const HOSTNAME = /^(\*\.)?[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$/;
 	function optionProblem(o: ExtraOption, value: string): string | null {
 		const v = value.trim().toLowerCase().replace(/\.$/, '');
 		if (!v) return o.required ? `Fill in ${o.label.toLowerCase()}.` : null;
-		if (o.type === 'hostname' && (v.length > 253 || !HOSTNAME.test(v))) {
+		if (o.type === 'hostname' && (v.length > 253 || !store.matches(store.config?.rules.hostname, v))) {
 			return 'Use letters, digits, hyphens and dots, e.g. intranet.lab.example.';
+		}
+		if (o.type === 'text' && (value.trim().length > 200 || !store.matches(o.pattern && `^(?:${o.pattern})$`, value.trim()))) {
+			return `That isn't a valid ${o.label.toLowerCase()}.`;
 		}
 		return null;
 	}
