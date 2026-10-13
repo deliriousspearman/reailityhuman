@@ -5,7 +5,6 @@
 	import '@fontsource-variable/jetbrains-mono';
 	import '$lib/styles/app.css';
 
-	import { page } from '$app/state';
 	import AppHeader from '$lib/components/AppHeader.svelte';
 	import AppSidebar from '$lib/components/AppSidebar.svelte';
 	import ExpiryWarning from '$lib/components/ExpiryWarning.svelte';
@@ -13,41 +12,34 @@
 
 	let { children } = $props();
 	let menuOpen = $state(false);
-
-	// The sign-in page has no header or sidebar.
-	const bare = $derived(page.url.pathname === '/login');
 </script>
 
-{#if bare}
-	{@render children()}
-{:else}
-	<div class="shell">
-		<AppHeader bind:menuOpen />
-		<div class="body">
-			<AppSidebar open={menuOpen} onnavigate={() => (menuOpen = false)} />
-			{#if menuOpen}
-				<button class="scrim" type="button" aria-label="Close menu" onclick={() => (menuOpen = false)}></button>
-			{/if}
-			<main>
-				{#if store.offline}
-					<p class="banner banner-warn" role="alert"><span><strong>Not connected.</strong> {store.offline}</span></p>
-				{:else if store.config && !store.config.vcenterConfigured}
-					<p class="banner banner-warn">
-						<span><strong>vCenter isn't set up yet.</strong> Machines can't be deployed until an admin configures it.</span>
-					</p>
-				{/if}
-				<ExpiryWarning />
-				{@render children()}
-			</main>
-			{#if store.notice}
-				<p class="notice" data-tone={store.notice.tone} role="status">
-					{store.notice.text}
-					<button class="btn btn-quiet btn-sm" type="button" onclick={() => (store.notice = null)}>Dismiss</button>
+<div class="shell">
+	<AppHeader bind:menuOpen />
+	<div class="body">
+		<AppSidebar open={menuOpen} onnavigate={() => (menuOpen = false)} />
+		{#if menuOpen}
+			<button class="scrim" type="button" aria-label="Close menu" onclick={() => (menuOpen = false)}></button>
+		{/if}
+		<main>
+			{#if store.offline}
+				<p class="banner banner-warn" role="alert"><span><strong>Not connected.</strong> {store.offline}</span></p>
+			{:else if store.config && !store.config.vcenterConfigured}
+				<p class="banner banner-warn">
+					<span><strong>vCenter isn't set up yet.</strong> Machines can't be deployed until an admin configures it.</span>
 				</p>
 			{/if}
-		</div>
+			<ExpiryWarning />
+			{@render children()}
+		</main>
+		{#if store.notice}
+			<p class="notice" data-tone={store.notice.tone} role="status">
+				{store.notice.text}
+				<button class="btn btn-quiet btn-sm" type="button" onclick={() => (store.notice = null)}>Dismiss</button>
+			</p>
+		{/if}
 	</div>
-{/if}
+</div>
 
 <style>
 	.body {
