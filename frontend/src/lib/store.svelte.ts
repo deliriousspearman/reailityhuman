@@ -102,10 +102,11 @@ class PanelStore {
 		} catch {}
 	}
 
+	/** Shows a notice. Errors stay until dismissed, so they can't be missed; others go after 8 s. */
 	say(text: string, tone: Notice['tone'] = 'error') {
 		this.notice = { text, tone };
 		clearTimeout(this.#noticeTimer);
-		this.#noticeTimer = setTimeout(() => (this.notice = null), 8 * SEC);
+		if (tone !== 'error') this.#noticeTimer = setTimeout(() => (this.notice = null), 8 * SEC);
 	}
 
 	// Reading -----------------------------------------------------------------------------------------
