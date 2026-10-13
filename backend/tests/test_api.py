@@ -278,3 +278,19 @@ def test_machines_on_their_way_up_count_against_memory(queued, monkeypatch):
     )
     r = client.post(f"/api/machines/{stopped_id}/start")
     assert r.status_code == 409 and "Not enough memory" in r.json()["detail"]
+
+
+def test_reconcile_leaves_a_failed_deploy_flagged(queued):
+    """A deploy that failed after powering on (e.g. an extra didn't install) stays "error", though
+    vCenter says the VM runs; other failures are cleared once the VM looks fine."""
+    m = deploy(queued, "half01")
+    with session() as s:
+        s.get(Machine, m["id"]).state = "error"
+        s.query(Job).one().state = "failed"
+    actions.reconcile()
+    assert client.get(f"/api/machines/{m['id']}").json()["state"] == "error"
+
+    with session() as s:
+        s.query(Job).one().kind = "stop"
+    actions.reconcile()
+    assert client.get(f"/api/machines/{m['id']}").json()["state"] == "running"

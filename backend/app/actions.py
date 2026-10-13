@@ -275,6 +275,13 @@ def recover_lost_jobs(now: datetime | None = None) -> None:
                 s.add(LogLine(machine_id=m.id, text=f"{job.action} was cut off: the job worker stopped. Try again, or destroy it.", tone="error"))
 
 
+def _failed_setting_up(s, machine_id: str) -> bool:
+    """Whether the machine's last job was a deploy or reset that failed (e.g. an extra didn't
+    install). Its VM can be powered on and fine as far as vCenter knows, but it isn't."""
+    last = s.scalars(select(Job).where(Job.machine_id == machine_id).order_by(Job.id.desc()).limit(1)).first()
+    return last is not None and last.state == "failed" and last.kind in ("deploy", "reset")
+
+
 def reconcile() -> None:
     """Brings power state and IP addresses in line with vCenter, for changes made there by hand."""
     if not settings().vcenter_configured:
@@ -291,6 +298,8 @@ def reconcile() -> None:
                     row = s.get(Machine, m.id)
                     if row is None or row.state != m.state:
                         continue  # a job changed it meanwhile
+                    if row.state == "error" and _failed_setting_up(s, m.id):
+                        continue  # the VM may run, but it isn't what was asked for: leave it flagged
                     if vm is None:
                         if row.state != "error":
                             row.state = "error"

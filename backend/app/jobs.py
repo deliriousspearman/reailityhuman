@@ -45,7 +45,7 @@ def enqueue(machine_id: str, action: str, by: str) -> int:
     """Records a job and queues it. One job runs per machine at a time (the lock); others wait."""
     with session() as s:
         m = s.get(Machine, machine_id)
-        job = Job(machine_id=machine_id, action=f"{VERBS[action]} {m.name if m else machine_id}", by=by)
+        job = Job(machine_id=machine_id, action=f"{VERBS[action]} {m.name if m else machine_id}", kind=action, by=by)
         s.add(job)
         s.flush()
         job_id = job.id

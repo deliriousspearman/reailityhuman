@@ -69,6 +69,8 @@ class Job(Base):
     machine_id: Mapped[str | None] = mapped_column(String(16), index=True)
     # e.g. "Deploy ubuntu01"
     action: Mapped[str] = mapped_column(String(128))
+    # deploy | start | stop | reboot | reset | expire | destroy (actions.ACTIONS)
+    kind: Mapped[str] = mapped_column(String(16), default="")
     by: Mapped[str] = mapped_column(String(64))
     # queued | running | done | failed
     state: Mapped[str] = mapped_column(String(8), default="queued")
