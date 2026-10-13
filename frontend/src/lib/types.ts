@@ -153,6 +153,7 @@ export interface MachineTemplate {
 
 export type SingleMachineState =
 	| 'deploying'
+	| 'rebooting'
 	| 'running'
 	| 'stopping'
 	| 'stopped'

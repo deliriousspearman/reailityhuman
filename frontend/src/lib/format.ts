@@ -55,6 +55,7 @@ export const instanceStates: Record<InstanceState, { label: string; tone: Tone }
 
 export const singleMachineStates: Record<SingleMachineState, { label: string; tone: Tone }> = {
 	deploying: { label: 'Starting', tone: 'busy' },
+	rebooting: { label: 'Rebooting', tone: 'busy' },
 	running: { label: 'Running', tone: 'up' },
 	stopping: { label: 'Stopping', tone: 'busy' },
 	stopped: { label: 'Stopped', tone: 'down' },

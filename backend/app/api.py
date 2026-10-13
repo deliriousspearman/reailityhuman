@@ -370,7 +370,7 @@ def stop_machine(machine_id: str, db: Db, who: Actor) -> dict:
 
 @router.post("/machines/{machine_id}/reboot")
 def reboot_machine(machine_id: str, db: Db, who: Actor) -> dict:
-    return _action(machine_id, db, who, "reboot", "deploying", "Rebooting")
+    return _action(machine_id, db, who, "reboot", "rebooting", "Rebooting")
 
 
 @router.post("/machines/{machine_id}/reset")

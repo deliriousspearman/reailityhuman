@@ -343,3 +343,10 @@ def test_jobs_keep_queue_time_and_filter_by_machine(queued):
     mine = client.get(f"/api/jobs?machine={a['id']}").json()
     assert [j["action"] for j in mine] == ["Stop jobs01", "Deploy jobs01"]
     assert all(j["startedAt"] >= j["queuedAt"] for j in mine)
+
+
+def test_reboot_says_rebooting(queued):
+    m = deploy(queued, "boot01")
+    assert client.post(f"/api/machines/{m['id']}/reboot").json()["state"] == "rebooting"
+    run_queued(queued)
+    assert client.get(f"/api/machines/{m['id']}").json()["state"] == "running"
