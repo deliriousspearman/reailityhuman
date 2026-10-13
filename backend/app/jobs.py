@@ -25,6 +25,7 @@ def machine_action(job_id: int, machine_id: str, action: str) -> None:
 @app.periodic(cron="* * * * *")
 @app.task(name="sweep", queueing_lock="sweep")
 def sweep(timestamp: int) -> None:
+    actions.recover_lost_jobs()
     actions.expiry_sweep(enqueue)
     actions.reconcile()
 

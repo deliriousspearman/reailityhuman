@@ -60,6 +60,9 @@ services:
     command: ['procrastinate', '--app=app.jobs.app', 'worker', '--concurrency=4']
     # Same image as the API, built locally by it; there's nothing to pull.
     pull_policy: never
+    # On a redeploy, let running jobs (a deploy takes minutes) finish rather than killing them
+    # after Docker's default 10 s. Jobs cut off anyway are failed by the sweep.
+    stop_grace_period: 15m
     depends_on:
       api:
         condition: service_healthy

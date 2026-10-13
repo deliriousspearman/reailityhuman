@@ -9,12 +9,12 @@ import time
 from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 from . import catalogue, cloudinit, extras
 from .config import settings
 from .db import session
-from .models import Job, LogLine, Machine, utcnow
+from .models import STABLE_STATES, Job, LogLine, Machine, utcnow
 from pyVmomi import vmodl
 
 from .vsphere import VCenter, VSphereError, connect, describe
@@ -221,6 +221,48 @@ def expiry_sweep(enqueue: Callable[[str, str, str], None], now: datetime | None 
         enqueue(machine_id, "expire", SYSTEM)
     for machine_id in to_destroy:
         enqueue(machine_id, "destroy", SYSTEM)
+
+
+# A worker that hasn't sent a heartbeat for this long (it sends one every 10 s) has stopped, e.g. it
+# was killed during a redeploy.
+HEARTBEAT_TIMEOUT = 60
+
+# Procrastinate's own table, as its schema at the pinned version has it (migration 0001). Fails the
+# machine jobs of workers that stopped, which also frees their machine's lock for the next job.
+_FAIL_STALLED = text(
+    """
+    UPDATE procrastinate_jobs SET status = 'failed', attempts = attempts + 1
+     WHERE status = 'doing' AND task_name = 'machine_action'
+       AND (worker_id IS NULL OR worker_id IN (
+            SELECT id FROM procrastinate_workers WHERE last_heartbeat < now() - make_interval(secs => :secs)))
+    """
+)
+# Our job ids that the queue still has waiting or running.
+_PENDING = text(
+    "SELECT (args->>'job_id')::int FROM procrastinate_jobs WHERE task_name = 'machine_action' AND status IN ('todo', 'doing')"
+)
+
+
+def recover_lost_jobs(now: datetime | None = None) -> None:
+    """Fails jobs the worker lost (it stopped partway through), so their machines don't stay busy,
+    and so can't be destroyed, for ever."""
+    now = now or utcnow()
+    with session() as s:
+        s.execute(_FAIL_STALLED, {"secs": HEARTBEAT_TIMEOUT})
+        pending = set(s.scalars(_PENDING))
+        # A minute's leeway: the API records a job just before it queues it.
+        unfinished = s.scalars(
+            select(Job).where(Job.state.in_(("queued", "running")), Job.started_at < now - timedelta(minutes=1))
+        ).all()
+        for job in unfinished:
+            if job.id in pending:
+                continue
+            job.state, job.finished_at = "failed", now
+            job.detail = "The job worker stopped before this finished (it was probably restarted). Try again."
+            m = s.get(Machine, job.machine_id) if job.machine_id else None
+            if m and m.state not in STABLE_STATES:
+                m.state = "error"
+                s.add(LogLine(machine_id=m.id, text=f"{job.action} was cut off: the job worker stopped. Try again, or destroy it.", tone="error"))
 
 
 def reconcile() -> None:

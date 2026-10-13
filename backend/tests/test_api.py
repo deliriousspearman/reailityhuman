@@ -2,8 +2,11 @@
 
 from datetime import timedelta
 
+import json
+
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import text
 
 from app import actions, jobs
 from app.api import app
@@ -197,3 +200,38 @@ def test_chosen_password_or_a_generated_one(queued):
     assert r.status_code == 201 and len(r.json()["password"]) == 16  # generated
     assert make("pw03", password="short").status_code == 422
     assert make("pw04", password="has\nnewline").status_code == 422
+
+
+def test_jobs_the_worker_lost_are_failed(queued):
+    """A job cut off by the worker stopping (e.g. killed in a redeploy) fails, freeing its machine."""
+    r = client.post("/api/machines", json={"template": "ubuntu", "version": "26.04", "owner": "jo", "name": "lost01", "hours": 2})
+    m = r.json()
+    queued.clear()  # the worker took it, then died
+    with session() as s:
+        job = s.query(Job).one()
+        job.state, job.started_at = "running", utcnow() - timedelta(minutes=5)
+        s.execute(
+            text(
+                "INSERT INTO procrastinate_jobs (queue_name, task_name, lock, args, status) "
+                "VALUES ('default', 'machine_action', :lock, CAST(:args AS jsonb), 'doing')"
+            ),
+            {"lock": m["id"], "args": json.dumps({"job_id": job.id, "machine_id": m["id"], "action": "deploy"})},
+        )
+    try:
+        actions.recover_lost_jobs()
+        m = client.get(f"/api/machines/{m['id']}").json()
+        assert m["state"] == "error"
+        assert "the job worker stopped" in m["log"][-1]["text"]
+        assert client.get("/api/jobs").json()[0]["state"] == "failed"
+        with session() as s:
+            assert s.scalar(text("SELECT status FROM procrastinate_jobs WHERE lock = :lock"), {"lock": m["id"]}) == "failed"
+
+        # It can be destroyed now, and a job that's only just been queued is left alone.
+        assert client.delete(f"/api/machines/{m['id']}").status_code == 200
+        actions.recover_lost_jobs()
+        assert client.get("/api/jobs").json()[0]["state"] == "queued"
+        run_queued(queued)
+        assert client.get(f"/api/machines/{m['id']}").status_code == 404
+    finally:
+        with session() as s:
+            s.execute(text("DELETE FROM procrastinate_jobs"))
