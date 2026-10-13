@@ -64,6 +64,14 @@ export const singleMachineStates: Record<SingleMachineState, { label: string; to
 	error: { label: 'Error', tone: 'error' },
 };
 
+/** "a day", "3 days", "12 hours", "90 min": a period in a sentence, e.g. the grace period. */
+export function inWords(ms: number): string {
+	const min = Math.round(ms / 60_000);
+	if (min % 1440 === 0) return min === 1440 ? 'a day' : `${min / 1440} days`;
+	if (min % 60 === 0) return min === 60 ? 'an hour' : `${min / 60} hours`;
+	return duration(ms);
+}
+
 /** "2 h", "1 d", "3 d" for the duration choices. */
 export function hoursLabel(hours: number): string {
 	return hours < 24 ? `${hours} h` : `${hours / 24} d`;

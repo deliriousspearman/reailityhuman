@@ -3,7 +3,7 @@
 	import { page } from '$app/state';
 	import { untrack } from 'svelte';
 	import Icon from '$lib/components/Icon.svelte';
-	import { clock, hoursLabel } from '$lib/format';
+	import { clock, hoursLabel, inWords } from '$lib/format';
 	import { ApiError } from '$lib/api';
 	import { OWNER_RULE, store } from '$lib/store.svelte';
 	import { findTemplate, flagNotes } from '$lib/templates';
@@ -259,7 +259,7 @@
 					{#if keep === 'keep'}
 						It won't expire. {store.permanentQuota === 1 ? 'One machine' : `${store.permanentQuota} machines`} can be kept permanently.
 					{:else}
-						Powered off at {clock(store.now + keep * 3_600_000, store.now)} and deleted a day later, unless you extend it.
+						Powered off at {clock(store.now + keep * 3_600_000, store.now)} and deleted {inWords(store.grace)} later, unless you extend it.
 					{/if}
 					{#if !canKeep}{store.permanentCount} are kept permanently already, the most allowed.{/if}
 				</p>

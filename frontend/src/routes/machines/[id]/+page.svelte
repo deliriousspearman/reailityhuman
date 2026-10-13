@@ -5,7 +5,7 @@
 	import ConfirmDialog, { type ConfirmRequest } from '$lib/components/ConfirmDialog.svelte';
 	import Icon from '$lib/components/Icon.svelte';
 	import Status from '$lib/components/Status.svelte';
-	import { clock, duration, singleMachineStates } from '$lib/format';
+	import { clock, duration, inWords, singleMachineStates } from '$lib/format';
 	import { store } from '$lib/store.svelte';
 	import { findTemplate, flagNotes } from '$lib/templates';
 
@@ -127,7 +127,7 @@
 					<strong>Expired and powered off.</strong> It's deleted at {clock(m.expiresAt + store.grace, store.now)}, in
 					{duration(m.expiresAt + store.grace - store.now)}, unless you extend it.
 				{:else}
-					Powered off at <strong>{clock(m.expiresAt, store.now)}</strong>, in {duration(left)}, then deleted a day later.
+					Powered off at <strong>{clock(m.expiresAt, store.now)}</strong>, in {duration(left)}, then deleted {inWords(store.grace)} later.
 				{/if}
 			</p>
 			{#if canControl}

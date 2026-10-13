@@ -193,6 +193,16 @@ def run(job_id: int, machine_id: str, action: str) -> None:
         job.state, job.finished_at = "done", utcnow()
 
 
+def in_words(period: timedelta) -> str:
+    """"a day", "3 days", "12 hours", "90 minutes"."""
+    minutes = int(period.total_seconds() // 60)
+    if minutes % 1440 == 0:
+        return "a day" if minutes == 1440 else f"{minutes // 1440} days"
+    if minutes % 60 == 0:
+        return "an hour" if minutes == 60 else f"{minutes // 60} hours"
+    return f"{minutes} minutes"
+
+
 # Sweeps (run every minute by the worker) --------------------------------------------------------------
 
 
@@ -211,7 +221,7 @@ def expiry_sweep(enqueue: Callable[[str, str, str], None], now: datetime | None 
         for m in due:
             if m.state in ("running", "stopped", "error"):
                 m.state = "expired"
-                s.add(LogLine(machine_id=m.id, text="Time ran out: powered off. Extend it within a day to keep it.", tone="warn"))
+                s.add(LogLine(machine_id=m.id, text=f"Time ran out: powered off. Extend it within {in_words(grace)} to keep it.", tone="warn"))
                 to_expire.append(m.id)
             elif m.state == "expired" and m.expires_at + grace <= now:
                 m.state = "destroying"
