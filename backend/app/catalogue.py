@@ -22,6 +22,8 @@ class LiveTemplate:
     memory_gb: int
     disk_gb: int
     username: str
+    # The group that gives the user sudo: "sudo" on Debian and Ubuntu, "wheel" on the RHEL family.
+    admin_group: str = "sudo"
 
 
 @lru_cache
@@ -37,6 +39,7 @@ def catalogue() -> dict[tuple[str, str], LiveTemplate]:
             memory_gb=int(e["memoryGB"]),
             disk_gb=int(e["diskGB"]),
             username=e["username"],
+            admin_group=e.get("adminGroup", "sudo"),
         )
         for e in entries
     }

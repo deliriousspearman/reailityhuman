@@ -48,10 +48,10 @@ def metadata(instance_id: str, hostname: str) -> str:
     )
 
 
-def userdata(hostname: str, username: str, password: str, ssh_key: str | None) -> str:
+def userdata(hostname: str, username: str, password: str, ssh_key: str | None, admin_group: str = "sudo") -> str:
     user: dict = {
         "name": username,
-        "groups": ["sudo"],
+        "groups": [admin_group],
         "shell": "/bin/bash",
         "lock_passwd": False,
         "passwd": hash_password(password),
@@ -67,7 +67,9 @@ def userdata(hostname: str, username: str, password: str, ssh_key: str | None) -
     return "#cloud-config\n" + yaml.safe_dump(config, sort_keys=False)
 
 
-def guestinfo(instance_id: str, hostname: str, username: str, password: str, ssh_key: str | None) -> dict[str, str]:
+def guestinfo(
+    instance_id: str, hostname: str, username: str, password: str, ssh_key: str | None, admin_group: str = "sudo"
+) -> dict[str, str]:
     """extraConfig keys for the VM."""
 
     def b64(text: str) -> str:
@@ -76,6 +78,6 @@ def guestinfo(instance_id: str, hostname: str, username: str, password: str, ssh
     return {
         "guestinfo.metadata": b64(metadata(instance_id, hostname)),
         "guestinfo.metadata.encoding": "base64",
-        "guestinfo.userdata": b64(userdata(hostname, username, password, ssh_key)),
+        "guestinfo.userdata": b64(userdata(hostname, username, password, ssh_key, admin_group)),
         "guestinfo.userdata.encoding": "base64",
     }

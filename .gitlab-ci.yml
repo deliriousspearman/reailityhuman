@@ -27,6 +27,13 @@ build:
     paths: [frontend/build/]
     expire_in: 1 week
 
+# Static checks of the template scripts (they run on VMs, so CI only lints them).
+scripts-check:
+  stage: build
+  image: koalaman/shellcheck-alpine:v0.10.0
+  script:
+    - shellcheck scripts/template/*.sh
+
 # The backend's tests, against PostgreSQL and vcsim (VMware's vCenter simulator), as
 # backend/compose.test.yaml runs them locally.
 backend-test:
@@ -58,7 +65,7 @@ backend-test:
 deploy:
   stage: deploy
   image: alpine:3
-  needs: [build, backend-test]
+  needs: [build, backend-test, scripts-check]
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
   resource_group: production

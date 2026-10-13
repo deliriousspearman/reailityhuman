@@ -55,6 +55,8 @@ def test_cloudinit_userdata():
     assert "pw" not in data.replace("passwd", "").replace("ssh_pwauth", "")  # only the hash
     assert cloudinit.hash_password("pw").startswith("$6$")
     assert len(cloudinit.generate_password(16)) == 16
+    assert "- sudo" in data
+    assert "- wheel" in cloudinit.userdata("rocky01", "labuser", "pw", None, admin_group="wheel")
 
 
 def test_clone_onto_distributed_port_group(monkeypatch):

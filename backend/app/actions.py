@@ -49,7 +49,7 @@ def deploy(vc: VCenter, m: Machine) -> None:
     tpl = catalogue.find(m.template, m.version)
     if tpl is None:
         raise VSphereError(f"{m.template} {m.version} can't be deployed (not in templates.yaml)")
-    extra = cloudinit.guestinfo(m.id, m.name, m.username, m.password, m.ssh_key)
+    extra = cloudinit.guestinfo(m.id, m.name, m.username, m.password, m.ssh_key, tpl.admin_group)
     vm = vc.clone(tpl.vsphere, m.vm_name, tpl.cpu, tpl.memory_gb, extra)
     add_log(m.id, f"Cloned from {m.template}/{m.version}")
     vc.power_on(vm)

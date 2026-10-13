@@ -100,6 +100,10 @@ Machines are **linked clones** of the template's snapshot named `clean`:
 
 The template therefore needs cloud-init and VMware Tools, with all trace of its own first boot removed.
 
+This part builds the Ubuntu 26.04 template. The scripts also handle Debian, CentOS Stream, Rocky and
+Alma: [scripts/template/README.md](../scripts/template/README.md) lists which versions work and what
+to pick in each installer.
+
 ### Create the VM
 
 1. **Upload the ISO.** In **Storage → *datastore* → Files**, create a folder `ISO` and upload
@@ -119,7 +123,7 @@ The template therefore needs cloud-init and VMware Tools, with all trace of its 
 
 ### Prepare it
 
-[`scripts/template-prepare.sh`](../scripts/template-prepare.sh) does this part. Piped over SSH,
+[`scripts/template/prepare.sh`](../scripts/template/prepare.sh) does this part. Piped over SSH,
 `sudo` can't ask for a password, so first let `builder` use it without one (on the VM; the clean-up
 step removes it):
 
@@ -130,7 +134,8 @@ echo 'builder ALL=(ALL) NOPASSWD:ALL' | sudo tee /etc/sudoers.d/builder
 Then, from a machine with this repo:
 
 ```sh
-ssh builder@<vm address> 'sudo bash -s' < scripts/template-prepare.sh
+ssh builder@<vm address> 'sudo bash -s -- --dry-run' < scripts/template/prepare.sh   # the OS it found, and its plan
+ssh builder@<vm address> 'sudo bash -s' < scripts/template/prepare.sh
 ```
 
 It updates every package, installs VMware Tools (`open-vm-tools`) and cloud-init, grows the root
@@ -143,14 +148,14 @@ Optionally, install anything every machine should have, now.
 
 ### Clean it, and shut it down
 
-[`scripts/template-clean.sh`](../scripts/template-clean.sh) forgets the template's own identity so
+[`scripts/template/clean.sh`](../scripts/template/clean.sh) forgets the template's own identity so
 each clone gets its own: it resets cloud-init, empties the machine-id, and deletes the SSH host keys
 and the installer's network config. It then deletes `builder` (with its sudoers file) and powers
 off, so your SSH session ends and there's no way back in. Without `--yes` it only says what it would
 do.
 
 ```sh
-ssh builder@<vm address> 'sudo bash -s -- --yes' < scripts/template-clean.sh
+ssh builder@<vm address> 'sudo bash -s -- --yes' < scripts/template/clean.sh
 ```
 
 The machine-id reset matters: without it, clones can end up sharing one DHCP lease. (The panel also asks
