@@ -276,6 +276,17 @@ class VCenter:
         except (vim.fault.ToolsUnavailable, vim.fault.InvalidState):
             wait(vm.ResetVM_Task(), "Reset")
 
+    def wait_for_guest_down(self, vm: vim.VirtualMachine, timeout: float) -> bool:
+        """Waits for VMware Tools to stop reporting the guest as running, as it does while a reboot
+        goes through. True if it did within `timeout`."""
+        deadline = time.monotonic() + timeout
+        while True:
+            if self.props(vm, "guest.guestState").get("guest.guestState") != "running":
+                return True
+            if time.monotonic() >= deadline:
+                return False
+            time.sleep(2)
+
     def revert_to_clean(self, vm: vim.VirtualMachine) -> None:
         snap = self._snapshot(vm, CLEAN)
         if snap is None:

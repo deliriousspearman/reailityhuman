@@ -92,7 +92,11 @@ def stop(vc: VCenter, m: Machine) -> None:
 def reboot(vc: VCenter, m: Machine) -> None:
     vm = vc.require_vm(m.vm_name)
     vc.reboot(vm)
-    _record_ip(vc, vm, m.id, min(120, settings().ip_timeout_seconds))
+    # The guest restarts in its own time: wait for it to go down, so the address and "Running"
+    # below come from after the reboot rather than before it.
+    timeout = min(120, settings().ip_timeout_seconds)
+    vc.wait_for_guest_down(vm, min(60, timeout))
+    _record_ip(vc, vm, m.id, timeout)
     set_machine(m.id, state="running")
     add_log(m.id, "Running", "ok")
 
