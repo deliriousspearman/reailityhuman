@@ -46,8 +46,19 @@ def describe(fault: vmodl.MethodFault) -> str:
     return fault.msg or type(fault).__name__
 
 
-def wait(task: vim.Task, what: str) -> object:
+# Longest a vCenter task may take before the job gives up on it (and asks vCenter to cancel it).
+TASK_TIMEOUT = 30 * 60
+
+
+def wait(task: vim.Task, what: str, timeout: float = TASK_TIMEOUT) -> object:
+    deadline = time.monotonic() + timeout
     while task.info.state in (vim.TaskInfo.State.queued, vim.TaskInfo.State.running):
+        if time.monotonic() >= deadline:
+            try:
+                task.CancelTask()
+            except vmodl.MethodFault:
+                pass  # not cancellable, or already finished
+            raise VSphereError(f"{what} didn't finish within {timeout // 60:.0f} minutes; vCenter may be overloaded or stuck")
         time.sleep(0.5)
     if task.info.state != vim.TaskInfo.State.success:
         err = task.info.error

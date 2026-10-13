@@ -95,3 +95,17 @@ def test_nic_left_alone_when_already_on_the_port_group():
         for change in changes:
             assert change.device.connectable.startConnected is True
             assert not change.device.connectable.connected
+
+
+def test_a_task_that_never_finishes_times_out():
+    from types import SimpleNamespace
+
+    from pyVmomi import vim
+
+    from app.vsphere import wait
+
+    cancelled = []
+    task = SimpleNamespace(info=SimpleNamespace(state=vim.TaskInfo.State.running), CancelTask=lambda: cancelled.append(True))
+    with pytest.raises(VSphereError, match="Clone didn't finish"):
+        wait(task, "Clone", timeout=0)
+    assert cancelled
