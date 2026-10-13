@@ -48,11 +48,12 @@ def test_capacity():
 
 
 def test_cloudinit_userdata():
-    data = cloudinit.userdata("ubuntu01", "ubuntu", "pw", "ssh-ed25519 AAAA test")
+    # A password that can't turn up by chance in the random salt and hash.
+    data = cloudinit.userdata("ubuntu01", "ubuntu", "Secret-Word_42!", "ssh-ed25519 AAAA test")
     assert data.startswith("#cloud-config\n")
     assert "hostname: ubuntu01" in data
     assert "ssh-ed25519 AAAA test" in data
-    assert "pw" not in data.replace("passwd", "").replace("ssh_pwauth", "")  # only the hash
+    assert "Secret-Word_42!" not in data and "passwd: $6$" in data  # only the hash
     assert cloudinit.hash_password("pw").startswith("$6$")
     assert len(cloudinit.generate_password(16)) == 16
     assert "- sudo" in data
