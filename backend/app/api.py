@@ -375,6 +375,18 @@ def reset_machine(machine_id: str, db: Db, who: Actor) -> dict:
     return _action(machine_id, db, who, "reset", "resetting", "Reset requested")
 
 
+@router.post("/machines/{machine_id}/redeploy")
+def redeploy_machine(machine_id: str, db: Db, who: Actor) -> dict:
+    """Deletes the machine's VM and deploys it again with the same settings: the way out of a failed
+    deploy, or a VM that's beyond saving."""
+    m = get_machine(db, machine_id)
+    if catalogue.find(m.template, m.version) is None:
+        raise HTTPException(409, f"{m.template} {m.version} can't be deployed any more, so {m.name} can't be redeployed.")
+    if m.state in STABLE_STATES and m.state != "expired":
+        require_room(db, m)
+    return _action(machine_id, db, who, "redeploy", "deploying", "Redeploy requested")
+
+
 @router.delete("/machines/{machine_id}")
 def destroy_machine(machine_id: str, db: Db, who: Actor) -> dict:
     return _action(machine_id, db, who, "destroy", "destroying", "Destroy requested")

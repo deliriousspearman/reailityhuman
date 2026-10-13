@@ -255,6 +255,11 @@ class PanelStore {
 		return this.#act(m, '/reset');
 	}
 
+	/** Deletes its VM and deploys it again with the same settings. */
+	redeployMachine(m: SingleMachine) {
+		return this.#act(m, '/redeploy');
+	}
+
 	destroyMachine(m: SingleMachine) {
 		return this.#act(m, '', { method: 'DELETE' });
 	}

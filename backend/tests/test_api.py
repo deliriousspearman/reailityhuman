@@ -294,3 +294,25 @@ def test_reconcile_leaves_a_failed_deploy_flagged(queued):
         s.query(Job).one().kind = "stop"
     actions.reconcile()
     assert client.get(f"/api/machines/{m['id']}").json()["state"] == "running"
+
+
+def test_redeploy_starts_over_with_the_same_settings(queued):
+    m = deploy(queued, "again01")
+    r = client.post(f"/api/machines/{m['id']}/redeploy")
+    assert r.status_code == 200 and r.json()["state"] == "deploying"
+    run_queued(queued)
+    m2 = client.get(f"/api/machines/{m['id']}").json()
+    assert m2["state"] == "running" and m2["password"] == m["password"]
+    assert "Deleted the old VM" in [line["text"] for line in m2["log"]]
+
+    # Also when the VM is gone altogether.
+    with connect() as vc:
+        vc.destroy(vc.require_vm(m["vmName"]))
+    with session() as s:
+        s.get(Machine, m["id"]).state = "error"
+    assert client.post(f"/api/machines/{m['id']}/redeploy").status_code == 200
+    run_queued(queued)
+    assert client.get(f"/api/machines/{m['id']}").json()["state"] == "running"
+    with connect() as vc:
+        assert vc.vm(m["vmName"]) is not None
+    assert client.get("/api/jobs").json()[0]["action"] == "Redeploy again01"

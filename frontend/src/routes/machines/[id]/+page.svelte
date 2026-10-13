@@ -42,6 +42,17 @@
 		};
 	}
 
+	function redeploy() {
+		if (!m) return;
+		request = {
+			title: `Redeploy ${m.name}?`,
+			body: `${m.name}'s VM is deleted and made again from ${m.template} ${m.version}, with the same name, password and extras. Everything on it is lost.`,
+			label: 'Redeploy',
+			danger: true,
+			run: () => store.redeployMachine(m),
+		};
+	}
+
 	function destroy() {
 		if (!m) return;
 		request = {
@@ -92,6 +103,9 @@
 				{#if m.state === 'stopped' || m.state === 'error'}
 					<button class="btn btn-primary" type="button" onclick={() => store.startMachine(m)}><Icon name="play" /> Start</button>
 				{/if}
+				{#if m.state === 'error'}
+					<button class="btn" type="button" onclick={redeploy}><Icon name="rebuild" /> Redeploy</button>
+				{/if}
 				{#if m.state !== 'stopped' && m.state !== 'expired'}
 					<button class="btn" type="button" disabled={busy} onclick={() => store.stopMachine(m)}><Icon name="stop" /> Stop</button>
 				{/if}
@@ -102,6 +116,8 @@
 					<summary class="btn">More</summary>
 					<div class="more-menu panel">
 						<button type="button" disabled={busy || m.state === 'expired'} onclick={() => fromMenu(reset)}><Icon name="reset" /> Reset to clean</button>
+						<button type="button" disabled={busy || m.state === 'expired'} onclick={() => fromMenu(redeploy)}><Icon name="rebuild" /> Redeploy</button>
+						<a href="/machines/new/{m.template}?from={m.id}"><Icon name="plus" /> Deploy another like this</a>
 						<button type="button" class="danger" disabled={busy} onclick={() => fromMenu(destroy)}><Icon name="trash" /> Destroy</button>
 					</div>
 				</details>
@@ -341,7 +357,8 @@
 		padding: 0.35rem;
 		box-shadow: 0 1rem 2rem -0.5rem rgb(0 0 0 / 0.45);
 	}
-	.more-menu button {
+	.more-menu button,
+	.more-menu a {
 		display: flex;
 		align-items: center;
 		gap: 0.6rem;
@@ -352,8 +369,10 @@
 		color: var(--lms-gray-1);
 		font: 600 0.9rem var(--lms-font);
 		text-align: start;
+		text-decoration: none;
 		cursor: pointer;
 	}
+	.more-menu a:hover,
 	.more-menu button:hover:not(:disabled) {
 		background: var(--lms-panel-2);
 	}

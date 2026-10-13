@@ -66,6 +66,15 @@ def deploy(vc: VCenter, m: Machine) -> None:
     add_log(m.id, f"Ready. Sign in as {m.username}.", "ok")
 
 
+def redeploy(vc: VCenter, m: Machine) -> None:
+    """Deletes the VM (if any is left) and deploys it again from scratch, with the same settings."""
+    if vm := vc.vm(m.vm_name):
+        vc.destroy(vm)
+        add_log(m.id, "Deleted the old VM")
+    set_machine(m.id, ip=None)
+    deploy(vc, m)
+
+
 def start(vc: VCenter, m: Machine) -> None:
     vm = vc.require_vm(m.vm_name)
     vc.power_on(vm)
@@ -153,6 +162,7 @@ def _await_extras(vc: VCenter, vm, m: Machine) -> None:
 
 ACTIONS: dict[str, Callable[[VCenter, Machine], None]] = {
     "deploy": deploy,
+    "redeploy": redeploy,
     "start": start,
     "stop": stop,
     "reboot": reboot,
@@ -276,10 +286,10 @@ def recover_lost_jobs(now: datetime | None = None) -> None:
 
 
 def _failed_setting_up(s, machine_id: str) -> bool:
-    """Whether the machine's last job was a deploy or reset that failed (e.g. an extra didn't
+    """Whether the machine's last job was a deploy, redeploy or reset that failed (e.g. an extra didn't
     install). Its VM can be powered on and fine as far as vCenter knows, but it isn't."""
     last = s.scalars(select(Job).where(Job.machine_id == machine_id).order_by(Job.id.desc()).limit(1)).first()
-    return last is not None and last.state == "failed" and last.kind in ("deploy", "reset")
+    return last is not None and last.state == "failed" and last.kind in ("deploy", "redeploy", "reset")
 
 
 def reconcile() -> None:

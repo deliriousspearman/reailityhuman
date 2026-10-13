@@ -32,12 +32,34 @@
 	// Defaults when the template changes (or the API's list of live versions arrives): its newest
 	// version that can be deployed, and a free name like "ubuntu01". Only those are tracked, so later
 	// changes to the machine list don't overwrite what you've typed.
+	// "Deploy another like this" (?from=<machine id>) starts from that machine's version and extras.
 	$effect(() => {
 		const t = template;
 		const config = store.config;
+		const loaded = store.loaded;
 		if (!t) return;
 		untrack(() => {
 			version = (config && t.versions.find((v) => store.isLive(t.id, v.version))?.version) ?? t.versions[0].version;
+			const from = loaded ? store.machine(page.url.searchParams.get('from') ?? '') : undefined;
+			if (from && from.template === t.id && store.isLive(t.id, from.version)) {
+				version = from.version;
+				// Options that were left to their default (which names the old machine) stay blank.
+				const offeredNow = store.extrasFor(t.id, from.version);
+				picked = Object.fromEntries(
+					from.extras
+						.filter((x) => offeredNow.some((o) => o.id === x.id))
+						.map((x) => {
+							const extra = offeredNow.find((o) => o.id === x.id)!;
+							const options = Object.fromEntries(
+								extra.options.map((o) => {
+									const v = x.options[o.id] ?? '';
+									return [o.id, v === store.optionDefault(o.default, from.name) ? '' : v];
+								}),
+							);
+							return [x.id, options];
+						}),
+				);
+			}
 			const base = t.id.split('-')[0];
 			const taken = new Set(store.machines.map((m) => m.name));
 			let n = 1;

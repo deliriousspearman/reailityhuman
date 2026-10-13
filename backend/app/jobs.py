@@ -32,6 +32,7 @@ def sweep(timestamp: int) -> None:
 
 VERBS = {
     "deploy": "Deploy",
+    "redeploy": "Redeploy",
     "start": "Start",
     "stop": "Stop",
     "reboot": "Reboot",
