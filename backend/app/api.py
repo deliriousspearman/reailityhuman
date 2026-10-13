@@ -18,7 +18,7 @@ from . import catalogue, cloudinit, extras, jobs
 from .config import settings
 from .db import get_session
 from .models import STABLE_STATES, Job, LogLine, Machine, utcnow
-from .vsphere import VSphereError, connect
+from .vsphere import Capacity, VSphereError, connect
 
 # No sign-in yet: people type their name when they deploy, and the panel sends it with every
 # request (X-Lab-User) so jobs record who did what. Without one, it's "anyone".
@@ -169,26 +169,37 @@ def health(db: Db) -> dict:
     return {"database": "ok", "vcenter": vcenter}
 
 
-_capacity_cache: tuple[float, dict] | None = None
+_capacity_cache: tuple[float, Capacity] | None = None
 
 
-@router.get("/capacity")
-def capacity() -> dict:
-    """The cluster's capacity and use, cached for 30 s. Memory includes MEMORY_OVERCOMMIT."""
+def vcenter_capacity(fresh: bool = False) -> Capacity:
+    """What vCenter says the cluster has and uses, cached for 30 s unless `fresh`."""
     global _capacity_cache
-    if _capacity_cache and time.monotonic() - _capacity_cache[0] < 30:
+    if not fresh and _capacity_cache and time.monotonic() - _capacity_cache[0] < 30:
         return _capacity_cache[1]
     try:
         with connect() as vc:
             c = vc.capacity()
     except VSphereError as e:
         raise HTTPException(503, str(e)) from e
-    out = {
+    _capacity_cache = (time.monotonic(), c)
+    return c
+
+
+def forget_capacity() -> None:
+    """Re-read capacity next time: a machine was just deployed or started."""
+    global _capacity_cache
+    _capacity_cache = None
+
+
+@router.get("/capacity")
+def capacity() -> dict:
+    """The cluster's capacity and use, cached for 30 s. Memory includes MEMORY_OVERCOMMIT."""
+    c = vcenter_capacity()
+    return {
         "total": {"cpu": c.cpu, "memoryGB": int(c.memory_gb * settings().memory_overcommit), "diskGB": c.disk_gb},
         "used": {"cpu": c.used_cpu, "memoryGB": c.used_memory_gb, "diskGB": c.used_disk_gb},
     }
-    _capacity_cache = (time.monotonic(), out)
-    return out
 
 
 # Machines -------------------------------------------------------------------------------------------
@@ -257,9 +268,10 @@ def deploy_machine(req: DeployRequest, db: Db) -> dict:
             raise HTTPException(409, f"{cfg.max_permanent} machines can be kept permanently. Set an expiry on another one first.")
     if not cfg.vcenter_configured:
         raise HTTPException(503, "vCenter isn't configured yet, so nothing can be deployed.")
-    blocker = capacity_blocker(tpl)
+    blocker = capacity_blocker(db, tpl.memory_gb, tpl.disk_gb)
     if blocker:
         raise HTTPException(409, blocker)
+    forget_capacity()
 
     machine_id = new_id(db)
     m = Machine(
@@ -300,19 +312,32 @@ def new_id(db: Session) -> str:
             return machine_id
 
 
-def capacity_blocker(tpl: catalogue.LiveTemplate) -> str | None:
-    """Why this template won't fit right now, or None. CPU can be overcommitted; memory and disk can't."""
-    try:
-        c = capacity()
-    except HTTPException as e:
-        raise HTTPException(503, e.detail) from e
-    free_mem = c["total"]["memoryGB"] - c["used"]["memoryGB"]
-    free_disk = c["total"]["diskGB"] - c["used"]["diskGB"]
-    if tpl.memory_gb > free_mem:
-        return f"Not enough memory free right now: it needs {tpl.memory_gb} GB and {free_mem} GB is free. Try again later."
-    if tpl.disk_gb > free_disk:
-        return f"Not enough disk free right now: it needs up to {tpl.disk_gb} GB and {free_disk} GB is free."
+def capacity_blocker(db: Session, memory_gb: int, disk_gb: int) -> str | None:
+    """Why a machine this size won't fit right now, or None. CPU can be overcommitted; memory and
+    disk can't. Machines already on their way up (cloning, or starting) count as using memory too,
+    so deploys close together can't all squeeze into the same free memory."""
+    c = vcenter_capacity()
+    starting = db.scalars(select(Machine).where(Machine.state == "deploying")).all()
+    pending = sum(
+        tpl.memory_gb for m in starting if m.vm_name not in c.powered_on and (tpl := catalogue.find(m.template, m.version))
+    )
+    free_mem = int(c.memory_gb * settings().memory_overcommit) - c.used_memory_gb - pending
+    free_disk = c.disk_gb - c.used_disk_gb
+    if memory_gb > free_mem:
+        return f"Not enough memory free right now: it needs {memory_gb} GB and {max(free_mem, 0)} GB is free. Try again later."
+    if disk_gb > free_disk:
+        return f"Not enough disk free right now: it needs up to {disk_gb} GB and {free_disk} GB is free."
     return None
+
+
+def require_room(db: Session, m: Machine) -> None:
+    """Refuses to start a powered-off machine that won't fit in the memory free."""
+    tpl = catalogue.find(m.template, m.version)
+    if tpl is None or m.vm_name in vcenter_capacity(fresh=True).powered_on:
+        return
+    if blocker := capacity_blocker(db, tpl.memory_gb, 0):
+        raise HTTPException(409, blocker)
+    forget_capacity()
 
 
 def _action(machine_id: str, db: Session, who: str, action: str, state: str, message: str) -> dict:
@@ -329,6 +354,9 @@ def _action(machine_id: str, db: Session, who: str, action: str, state: str, mes
 
 @router.post("/machines/{machine_id}/start")
 def start_machine(machine_id: str, db: Db, who: Actor) -> dict:
+    m = get_machine(db, machine_id)
+    if m.state in STABLE_STATES and m.state != "expired":
+        require_room(db, m)
     return _action(machine_id, db, who, "start", "deploying", "Starting")
 
 
@@ -390,6 +418,7 @@ def set_expiry(machine_id: str, req: Hours, db: Db) -> dict:
 def _revive_or_save(db: Session, m: Machine, who: str) -> dict:
     """An expired machine that gets more time is started again."""
     if m.state == "expired":
+        require_room(db, m)
         m.state = "deploying"
         add_log(db, m, "Starting", "muted")
         queue(db, m, "start", who)

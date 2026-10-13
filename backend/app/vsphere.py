@@ -33,6 +33,8 @@ class Capacity:
     used_cpu: int
     used_memory_gb: int
     used_disk_gb: int
+    # Names of the VMs counted as using memory and CPU (the powered-on ones).
+    powered_on: frozenset[str] = frozenset()
 
 
 def describe(fault: vmodl.MethodFault) -> str:
@@ -344,13 +346,15 @@ class VCenter:
     def capacity(self) -> Capacity:
         """What the cluster has, and what powered-on VMs on it are configured to use."""
         cpu = memory = used_cpu = used_memory = 0
+        powered_on = set()
         for host in self.cluster.host:
             hw = self.props(host, "hardware.cpuInfo.numCpuThreads", "hardware.memorySize")
             cpu += hw.get("hardware.cpuInfo.numCpuThreads", 0)
             memory += hw.get("hardware.memorySize", 0) // 2**30
             for vm in host.vm:
-                v = self.props(vm, "runtime.powerState", "config.hardware.numCPU", "config.hardware.memoryMB")
+                v = self.props(vm, "name", "runtime.powerState", "config.hardware.numCPU", "config.hardware.memoryMB")
                 if v.get("runtime.powerState") == "poweredOn":
+                    powered_on.add(v.get("name"))
                     used_cpu += v.get("config.hardware.numCPU", 0)
                     used_memory += v.get("config.hardware.memoryMB", 0) // 1024
         ds = self.props(self.datastore, "summary.capacity", "summary.freeSpace")
@@ -362,6 +366,7 @@ class VCenter:
             used_cpu=used_cpu,
             used_memory_gb=used_memory,
             used_disk_gb=(total - free) // 2**30,
+            powered_on=frozenset(powered_on),
         )
 
 

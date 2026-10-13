@@ -246,3 +246,35 @@ def test_names_are_unique_in_the_database(queued):
         with session() as s:
             s.add(Machine(id="m-dupe", name="same01", template="ubuntu", version="26.04", owner="jo", state="running",
                           vm_name="x", username="ubuntu", password="x"))
+
+
+def test_machines_on_their_way_up_count_against_memory(queued, monkeypatch):
+    """Deploys close together can't all fit into the same free memory, and starting a stopped
+    machine checks there's room."""
+    from app import api
+    from app.vsphere import Capacity
+
+    # 5 GB free; Ubuntu machines take 2 GB each.
+    small = Capacity(cpu=8, memory_gb=5, disk_gb=500, used_cpu=0, used_memory_gb=0, used_disk_gb=0)
+    monkeypatch.setattr(api, "vcenter_capacity", lambda fresh=False: small)
+
+    def ask(name):
+        return client.post("/api/machines", json={"template": "ubuntu", "version": "26.04", "owner": "jo", "name": name, "hours": 2})
+
+    assert ask("cap01").status_code == 201
+    assert ask("cap02").status_code == 201
+    r = ask("cap03")  # the first two haven't powered on yet, but they will
+    assert r.status_code == 409 and "Not enough memory" in r.json()["detail"]
+    run_queued(queued)
+
+    # Both running now (powered on, so in vCenter's own figure); one is stopped.
+    with session() as s:
+        names = {m.name: m.vm_name for m in s.query(Machine)}
+        stopped = s.query(Machine).filter(Machine.name == "cap02").one()
+        stopped.state = "stopped"
+        stopped_id = stopped.id
+    monkeypatch.setattr(
+        api, "vcenter_capacity", lambda fresh=False: Capacity(8, 5, 500, 4, 4, 0, powered_on=frozenset([names["cap01"]]))
+    )
+    r = client.post(f"/api/machines/{stopped_id}/start")
+    assert r.status_code == 409 and "Not enough memory" in r.json()["detail"]
