@@ -117,3 +117,29 @@ def test_faults_without_a_message_are_named():
     from app.vsphere import describe
 
     assert describe(vim.fault.InvalidState()) == "InvalidState"
+
+
+def test_bulk_reads_match_reading_each_object():
+    """capacity() and the folder lookups read many objects in one call; they must agree with
+    asking each object in turn."""
+    extra = cloudinit.guestinfo("m-bulk", "bulk01", "ubuntu", "secret", None)
+    with connect() as vc:
+        vm = vc.clone(TEMPLATE, "bulk01-test", 1, 1, extra)
+        vc.power_on(vm)
+        cpu = memory = used_cpu = used_memory = 0
+        for host in vc.cluster.host:
+            hw = vc.props(host, "hardware.cpuInfo.numCpuThreads", "hardware.memorySize")
+            cpu += hw["hardware.cpuInfo.numCpuThreads"]
+            memory += hw["hardware.memorySize"] // 2**30
+            for v in host.vm:
+                p = vc.props(v, "runtime.powerState", "config.hardware.numCPU", "config.hardware.memoryMB")
+                if p.get("runtime.powerState") == "poweredOn":
+                    used_cpu += p["config.hardware.numCPU"]
+                    used_memory += p["config.hardware.memoryMB"] // 1024
+        c = vc.capacity()
+        assert (c.cpu, c.memory_gb, c.used_cpu, c.used_memory_gb) == (cpu, memory, used_cpu, used_memory)
+        assert "bulk01-test" in c.powered_on
+
+        assert vc.vm("bulk01-test") == vm and vc.vm("nothing-here") is None
+        assert vc.machine_states()["bulk01-test"] == (True, vc.ipv4(vm))
+        assert vc.machine_vms() == {"bulk01-test": True}

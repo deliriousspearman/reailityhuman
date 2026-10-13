@@ -331,21 +331,23 @@ def reconcile() -> None:
         return
     try:
         with connect() as vc:
-            for m in machines:
-                vm = vc.vm(m.vm_name)
-                with session() as s:
-                    row = s.get(Machine, m.id)
-                    if row is None or row.state != m.state:
-                        continue  # a job changed it meanwhile
-                    if row.state == "error" and _failed_setting_up(s, m.id):
-                        continue  # the VM may run, but it isn't what was asked for: leave it flagged
-                    if vm is None:
-                        if row.state != "error":
-                            row.state = "error"
-                            s.add(LogLine(machine_id=m.id, text="Its VM no longer exists in vCenter. Destroy it to clean up.", tone="error"))
-                        continue
-                    row.state = "running" if vc.powered_on(vm) else "stopped"
-                    if ip := vc.ipv4(vm):
-                        row.ip = ip
+            vms = vc.machine_states()  # one call for all of them
     except VSphereError as e:
         log.warning("Reconcile skipped: %s", e)
+        return
+    for m in machines:
+        with session() as s:
+            row = s.get(Machine, m.id)
+            if row is None or row.state != m.state:
+                continue  # a job changed it meanwhile
+            if row.state == "error" and _failed_setting_up(s, m.id):
+                continue  # the VM may run, but it isn't what was asked for: leave it flagged
+            if m.vm_name not in vms:
+                if row.state != "error":
+                    row.state = "error"
+                    s.add(LogLine(machine_id=m.id, text="Its VM no longer exists in vCenter. Destroy it to clean up.", tone="error"))
+                continue
+            on, ip = vms[m.vm_name]
+            row.state = "running" if on else "stopped"
+            if ip:
+                row.ip = ip

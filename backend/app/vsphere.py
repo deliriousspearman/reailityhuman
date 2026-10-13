@@ -68,6 +68,21 @@ def wait(task: vim.Task, what: str, timeout: float = TASK_TIMEOUT) -> object:
     return task.info.result
 
 
+def first_ipv4(ip_address: str | None, nets) -> str | None:
+    """The first usable IPv4 address among what VMware Tools reports (guest.ipAddress, guest.net)."""
+    candidates = [ip_address] if ip_address else []
+    for nic in nets or []:
+        candidates += list(nic.ipAddress or [])
+    for text in candidates:
+        try:
+            ip = ipaddress.ip_address(text)
+        except ValueError:
+            continue
+        if ip.version == 4 and not ip.is_link_local and not ip.is_loopback:
+            return text
+    return None
+
+
 class VCenter:
     def __init__(self, si: vim.ServiceInstance, cfg: Settings):
         self.si = si
@@ -84,6 +99,25 @@ class VCenter:
         )
         result = self.content.propertyCollector.RetrieveContents([spec])
         return {p.name: p.val for p in result[0].propSet} if result else {}
+
+    def collect(self, container: vim.ManagedEntity, kind: type, paths: tuple[str, ...], recursive: bool = True) -> list[tuple[object, dict]]:
+        """These property paths of every `kind` object under `container`, in one call: (object,
+        {path: value}). Paths a server leaves unset are missing from the dict."""
+        view = self.content.viewManager.CreateContainerView(container, [kind], recursive)
+        try:
+            pc = vmodl.query.PropertyCollector
+            spec = pc.FilterSpec(
+                objectSet=[
+                    pc.ObjectSpec(
+                        obj=view, skip=True, selectSet=[pc.TraversalSpec(name="view", path="view", skip=False, type=vim.view.ContainerView)]
+                    )
+                ],
+                propSet=[pc.PropertySpec(type=kind, pathSet=list(paths))],
+            )
+            result = self.content.propertyCollector.RetrieveContents([spec]) or []
+            return [(o.obj, {p.name: p.val for p in o.propSet or []}) for o in result]
+        finally:
+            view.Destroy()
 
     def power_state(self, vm: vim.VirtualMachine) -> str:
         return self.props(vm, "runtime.powerState").get("runtime.powerState")
@@ -147,21 +181,27 @@ class VCenter:
             raise VSphereError(f"Template '{path}' not found")
         return vm
 
+    def _folder_vms(self, *paths: str) -> dict[str, tuple[vim.VirtualMachine, dict]]:
+        """The VMs in the machines folder by name, with these properties, in one call."""
+        found = self.collect(self.folder, vim.VirtualMachine, ("name", *paths), recursive=False)
+        return {p["name"]: (vm, p) for vm, p in found if "name" in p}
+
     def vm(self, name: str) -> vim.VirtualMachine | None:
         """A machine's VM by its name in the machines folder, or None if it's gone."""
-        for child in self.folder.childEntity:
-            if isinstance(child, vim.VirtualMachine) and child.name == name:
-                return child
-        return None
+        hit = self._folder_vms().get(name)
+        return hit[0] if hit else None
 
     def machine_vms(self) -> dict[str, bool]:
         """Every VM in the machines folder: name -> powered on."""
-        out = {}
-        for child in self.folder.childEntity:
-            if isinstance(child, vim.VirtualMachine):
-                p = self.props(child, "name", "runtime.powerState")
-                out[p["name"]] = p.get("runtime.powerState") == "poweredOn"
-        return out
+        return {name: p.get("runtime.powerState") == "poweredOn" for name, (_, p) in self._folder_vms("runtime.powerState").items()}
+
+    def machine_states(self) -> dict[str, tuple[bool, str | None]]:
+        """Every VM in the machines folder: name -> (powered on, IPv4 address), in one call."""
+        found = self._folder_vms("runtime.powerState", "guest.ipAddress", "guest.net")
+        return {
+            name: (p.get("runtime.powerState") == "poweredOn", first_ipv4(p.get("guest.ipAddress"), p.get("guest.net")))
+            for name, (_, p) in found.items()
+        }
 
     def require_vm(self, name: str) -> vim.VirtualMachine:
         vm = self.vm(name)
@@ -303,17 +343,7 @@ class VCenter:
     def ipv4(self, vm: vim.VirtualMachine) -> str | None:
         """The guest's first usable IPv4 address, as reported by VMware Tools."""
         guest = self.props(vm, "guest.ipAddress", "guest.net")
-        candidates = [guest["guest.ipAddress"]] if guest.get("guest.ipAddress") else []
-        for nic in guest.get("guest.net") or []:
-            candidates += list(nic.ipAddress or [])
-        for text in candidates:
-            try:
-                ip = ipaddress.ip_address(text)
-            except ValueError:
-                continue
-            if ip.version == 4 and not ip.is_link_local and not ip.is_loopback:
-                return text
-        return None
+        return first_ipv4(guest.get("guest.ipAddress"), guest.get("guest.net"))
 
     def wait_for_ip(self, vm: vim.VirtualMachine, timeout: float) -> str | None:
         deadline = time.monotonic() + timeout
@@ -365,18 +395,18 @@ class VCenter:
 
     def capacity(self) -> Capacity:
         """What the cluster has, and what powered-on VMs on it are configured to use."""
-        cpu = memory = used_cpu = used_memory = 0
+        cluster = self.cluster
+        hosts = self.collect(cluster, vim.HostSystem, ("hardware.cpuInfo.numCpuThreads", "hardware.memorySize"))
+        cpu = sum(p.get("hardware.cpuInfo.numCpuThreads", 0) for _, p in hosts)
+        memory = sum(p.get("hardware.memorySize", 0) // 2**30 for _, p in hosts)
+        used_cpu = used_memory = 0
         powered_on = set()
-        for host in self.cluster.host:
-            hw = self.props(host, "hardware.cpuInfo.numCpuThreads", "hardware.memorySize")
-            cpu += hw.get("hardware.cpuInfo.numCpuThreads", 0)
-            memory += hw.get("hardware.memorySize", 0) // 2**30
-            for vm in host.vm:
-                v = self.props(vm, "name", "runtime.powerState", "config.hardware.numCPU", "config.hardware.memoryMB")
-                if v.get("runtime.powerState") == "poweredOn":
-                    powered_on.add(v.get("name"))
-                    used_cpu += v.get("config.hardware.numCPU", 0)
-                    used_memory += v.get("config.hardware.memoryMB", 0) // 1024
+        vms = self.collect(cluster, vim.VirtualMachine, ("name", "runtime.powerState", "config.hardware.numCPU", "config.hardware.memoryMB"))
+        for _, v in vms:
+            if v.get("runtime.powerState") == "poweredOn":
+                powered_on.add(v.get("name"))
+                used_cpu += v.get("config.hardware.numCPU", 0)
+                used_memory += v.get("config.hardware.memoryMB", 0) // 1024
         ds = self.props(self.datastore, "summary.capacity", "summary.freeSpace")
         total, free = ds.get("summary.capacity", 0), ds.get("summary.freeSpace", 0)
         return Capacity(
