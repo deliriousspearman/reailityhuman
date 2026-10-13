@@ -67,6 +67,42 @@ services:
       api:
         condition: service_healthy
 
+  # A dump of the database on start and then daily, in /srv/lab-deploy/backups, kept for 14 days. It
+  # holds every machine's password and settings: without it, a lost database leaves VMs in vCenter
+  # that the panel knows nothing about. Restoring: README.md, "Backups".
+  backup:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    env_file: lab-deploy.env
+    environment:
+      PGHOST: postgres
+      PGUSER: labdeploy
+      PGDATABASE: labdeploy
+      KEEP_DAYS: 14
+    volumes:
+      - ./backups:/backups
+    depends_on:
+      postgres:
+        condition: service_healthy
+    entrypoint:
+      - sh
+      - -c
+      - |
+        set -o pipefail
+        export PGPASSWORD="$$POSTGRES_PASSWORD"
+        while true; do
+          file=/backups/labdeploy-$$(date +%Y%m%d-%H%M).sql.gz
+          if pg_dump --clean --if-exists | gzip >"$$file.part"; then
+            mv "$$file.part" "$$file"
+            echo "Backed up to $$file"
+          else
+            rm -f "$$file.part"
+            echo "Backup failed" >&2
+          fi
+          find /backups -name 'labdeploy-*.sql.gz' -mtime +"$$KEEP_DAYS" -delete
+          sleep 86400
+        done
+
 volumes:
   caddy_data:
   caddy_config:

@@ -61,6 +61,22 @@ until they trust its root certificate, which you can export with:
 docker compose -f /srv/lab-deploy/compose.yaml exec caddy cat /data/caddy/pki/authorities/local/root.crt
 ```
 
+### Backups
+
+The `backup` service dumps the database when it starts and then once a day, to
+`/srv/lab-deploy/backups/labdeploy-<date>-<time>.sql.gz`, and deletes dumps older than 14 days. The
+database holds every machine's password and settings; without it, the panel no longer knows the VMs
+in vCenter. Copy the folder somewhere else as well, if you can.
+
+To restore one (it replaces what's in the database), with the worker stopped so no job runs:
+
+```sh
+cd /srv/lab-deploy
+docker compose stop worker
+gunzip -c backups/labdeploy-<date>-<time>.sql.gz | docker compose exec -T postgres psql -q -U labdeploy labdeploy
+docker compose start worker
+```
+
 ## Conventions
 
 - Example addresses use documentation ranges (192.0.2.0/24, 198.51.100.0/24, 203.0.113.0/24) and
