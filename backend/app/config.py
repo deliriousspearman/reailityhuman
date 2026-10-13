@@ -40,6 +40,11 @@ class Settings(BaseSettings):
     grace_minutes: int = 24 * 60
     # How long a deploy waits for the machine to report an IP address.
     ip_timeout_seconds: int = 300
+    # How long a deploy or reset waits for the chosen extras to finish installing.
+    extras_timeout_seconds: int = 600
+    # Domain for default names, e.g. a certificate's: "lab.example" makes it "ubuntu01.lab.example".
+    # Empty: just the machine's name.
+    machine_domain: str = ""
     password_length: int = 16
 
     catalogue_path: Path = Path(__file__).resolve().parent.parent / "templates.yaml"

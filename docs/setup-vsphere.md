@@ -69,6 +69,7 @@ It's safe to re-run, e.g. after a new version of the panel needs another privile
    | Network | Assign network |
    | Resource | Assign virtual machine to resource pool |
    | Virtual machine → Change Configuration | Advanced configuration; Change CPU count; Change Memory; Change Settings; Modify device settings |
+   | Virtual machine → Guest operations | Guest operation queries |
    | Virtual machine → Edit Inventory | Create from existing; Remove |
    | Virtual machine → Interaction | Power off; Power on; Reset |
    | Virtual machine → Provisioning | Clone template; Clone virtual machine; Deploy template |
@@ -144,6 +145,10 @@ read its data from vCenter. The installer turned cloud-init off: while
 `/etc/cloud/cloud-init.disabled` exists, clones get no hostname, user or password. It's safe to
 re-run.
 
+It also installs the packages for the panel's extras (nginx, Apache…), switched off: a machine
+deployed with one has it set up on first boot, without needing the internet. List them under the
+template's `extras:` in `backend/templates.yaml`. Pass `--no-extras` for a template without them.
+
 Optionally, install anything every machine should have, now.
 
 ### Clean it, and shut it down
@@ -189,6 +194,16 @@ database password already filled in. Set the `VCENTER_*` lines:
 | `VCENTER_CLUSTER` | Cluster name; or, for a host not in a cluster, the host's name as vCenter shows it | — |
 | `VCENTER_DATASTORE` | Datastore name | — |
 | `VCENTER_NETWORK` | The LAN port group | e.g. `VM Network` |
+
+`MACHINE_DOMAIN` (optional, e.g. `lab.example`) is the domain for default names: a machine deployed
+with HTTPS and no domain name of its own gets a certificate for `<name>.lab.example`, or just
+`<name>` when it's empty.
+
+**Extras** (nginx, Apache, Apache with HTTPS…, picked when deploying) are installed in the template
+and switched on at first boot. The panel then reads, through VMware Tools, whether they worked. For
+that it needs the **Guest operation queries** privilege (`setup_vcenter.py` adds it: re-run it after
+upgrading), and the panel's server must reach the **ESXi hosts** on port 443, not just vCenter.
+Which extras a template offers is set by `extras:` in `backend/templates.yaml`.
 
 On a small host where vCenter itself holds most of the memory (vCenter 8 "Tiny" takes 14 GB), the
 panel would see almost no memory free. `MEMORY_OVERCOMMIT=1.5` lets machines be given 1.5× the

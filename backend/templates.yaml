@@ -5,8 +5,12 @@
 #               "clean" (machines are linked clones of it), cloud-init and open-vm-tools. How to
 #               build one: docs/setup-vsphere.md and scripts/template/.
 #   username    the account cloud-init creates; its password is generated for each machine.
-#   adminGroup  optional: the group that gives that account sudo. "sudo" (the default) on Debian
-#               and Ubuntu; "wheel" on CentOS Stream, Rocky and Alma.
+#   family      debian (Debian, Ubuntu; the default) or rhel (CentOS Stream, Rocky, Alma).
+#   adminGroup  optional: the group that gives that account sudo. Default: "sudo" for the debian
+#               family, "wheel" for rhel.
+#   extras      optional: extras (extras.yaml) people can tick at deploy. Only list those whose
+#               packages are in the template, i.e. it was built with scripts/template/prepare.sh
+#               from after extras existed; older templates list none.
 
 - template: ubuntu
   version: "26.04"
@@ -15,3 +19,5 @@
   memoryGB: 2
   diskGB: 25
   username: ubuntu
+  family: debian
+  # Built before extras existed. Once rebuilt with today's prepare.sh: extras: [nginx, apache, apache-https]

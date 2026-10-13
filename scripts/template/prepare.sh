@@ -4,7 +4,7 @@
 # scripts/template/README.md). Run it on the VM, as the user you created during install, either
 # copied over:
 #
-#   sudo bash prepare.sh [--dry-run]
+#   sudo bash prepare.sh [--dry-run] [--no-extras]
 #
 # or straight from this repo:
 #
@@ -18,9 +18,13 @@
 #   3. Grows the root filesystem into the rest of the disk (Ubuntu's installer only uses half).
 #   4. Lets cloud-init run on clones and read its data from vCenter. Ubuntu's installer turns it
 #      off (/etc/cloud/cloud-init.disabled) and limits it to its own seed.
-#   5. Labels the template in /etc/lab-template (OS, version, date).
+#   5. Installs the packages for the panel's extras (backend/extras.yaml: nginx, Apache, …), switched
+#      off. A machine deployed with an extra has it set up and started on its first boot, without
+#      downloading anything. --no-extras leaves them out; then list no extras for this template in
+#      backend/templates.yaml.
+#   6. Labels the template in /etc/lab-template (OS, version, date, extras).
 #
-# The VM keeps its network and your user, so you can still install extras afterwards. When you're
+# The VM keeps its network and your user, so you can still install more afterwards. When you're
 # done, run clean.sh. --dry-run only shows the OS it found and what it would do.
 set -euo pipefail
 
@@ -29,15 +33,25 @@ set -euo pipefail
 declare -A MIN_VERSION=([ubuntu]=22.04 [debian]=12 [centos]=9 [rocky]=9 [almalinux]=9)
 MIN_CLOUD_INIT=21.3
 
+# Packages for the panel's extras, per family, and their services (left disabled). Keep these in
+# step with backend/extras.yaml: a backend test fails if an extra's packages are missing here.
+EXTRA_PACKAGES_DEBIAN=(nginx apache2 openssl)
+EXTRA_PACKAGES_RHEL=(nginx httpd mod_ssl openssl)
+EXTRA_SERVICES_DEBIAN=(nginx apache2)
+EXTRA_SERVICES_RHEL=(nginx httpd)
+
 DRY_RUN=0
-case ${1:-} in
---dry-run) DRY_RUN=1 ;;
-"") ;;
-*)
-	echo "Usage: sudo bash prepare.sh [--dry-run]" >&2
-	exit 1
-	;;
-esac
+EXTRAS=1
+for arg in "$@"; do
+	case $arg in
+	--dry-run) DRY_RUN=1 ;;
+	--no-extras) EXTRAS=0 ;;
+	*)
+		echo "Usage: sudo bash prepare.sh [--dry-run] [--no-extras]" >&2
+		exit 1
+		;;
+	esac
+done
 
 if [[ $EUID -ne 0 ]]; then
 	echo "Run this with sudo: sudo bash prepare.sh" >&2
@@ -68,6 +82,11 @@ echo "==> $PRETTY_NAME ($FAMILY family)"
 if ((DRY_RUN)); then
 	echo "Would: update all packages; install open-vm-tools and cloud-init; check cloud-init is $MIN_CLOUD_INIT+;"
 	echo "grow the root filesystem; turn cloud-init on with the VMware datasource; write /etc/lab-template."
+	if ((EXTRAS)); then
+		if [[ $FAMILY == debian ]]; then echo "Extras' packages, switched off: ${EXTRA_PACKAGES_DEBIAN[*]}"; else echo "Extras' packages, switched off: ${EXTRA_PACKAGES_RHEL[*]}"; fi
+	else
+		echo "No extras (--no-extras)."
+	fi
 	exit 0
 fi
 
@@ -143,7 +162,36 @@ for unit in open-vm-tools vmtoolsd; do
 	fi
 done
 
-# --- 5. Label --------------------------------------------------------------------------------------
+# --- 5. Extras' packages ---------------------------------------------------------------------------
+
+INSTALLED_EXTRAS=none
+if ((EXTRAS)); then
+	echo "==> Extras' packages (switched off until a machine is deployed with them)"
+	case $FAMILY in
+	debian)
+		packages=("${EXTRA_PACKAGES_DEBIAN[@]}")
+		services=("${EXTRA_SERVICES_DEBIAN[@]}")
+		# Don't let the packages start their services: nginx and Apache both want port 80.
+		printf '#!/bin/sh\nexit 101\n' >/usr/sbin/policy-rc.d
+		chmod 755 /usr/sbin/policy-rc.d
+		trap 'rm -f /usr/sbin/policy-rc.d' EXIT
+		apt-get install -yq "${packages[@]}"
+		rm -f /usr/sbin/policy-rc.d
+		;;
+	rhel)
+		packages=("${EXTRA_PACKAGES_RHEL[@]}")
+		services=("${EXTRA_SERVICES_RHEL[@]}")
+		dnf -y -q install "${packages[@]}"
+		;;
+	esac
+	for unit in "${services[@]}"; do
+		systemctl disable --now "$unit" >/dev/null 2>&1 || true
+		echo "  $unit: $(systemctl is-enabled "$unit" 2>/dev/null || true), $(systemctl is-active "$unit" 2>/dev/null || true)"
+	done
+	INSTALLED_EXTRAS="${packages[*]}"
+fi
+
+# --- 6. Label --------------------------------------------------------------------------------------
 
 cat >/etc/lab-template <<EOF
 # Panel template, built with scripts/template/prepare.sh and clean.sh.
@@ -151,6 +199,7 @@ os=$ID
 version=${VERSION_ID:-}
 name=$PRETTY_NAME
 cloud_init=$CI_VERSION
+extras_packages=$INSTALLED_EXTRAS
 prepared=$(date -u +%Y-%m-%dT%H:%MZ)
 EOF
 echo "==> Labelled in /etc/lab-template"

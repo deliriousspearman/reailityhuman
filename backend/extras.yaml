@@ -1,0 +1,93 @@
+# Optional services people can tick when they deploy a machine. A template offers the ones listed
+# under its `extras` in templates.yaml; their packages are already in the template (installed,
+# switched off, by scripts/template/prepare.sh), so nothing is downloaded at deploy and it works
+# without internet. On the machine's first boot, cloud-init runs each chosen extra's `script` for
+# the template's family.
+#
+#   conflicts  extras that can't be chosen with this one (e.g. both want port 80)
+#   links      shown on the machine's page; {ip} is its address
+#   options    fields shown when the extra is ticked. Each value reaches the script as a shell
+#              variable of the same name, already validated and quoted; scripts never get raw input.
+#                type      hostname: a DNS name, optionally "*."-prefixed; text: matched by `pattern`
+#                default   used when it's left blank. {hostname} is the machine's name, {fqdn} the
+#                          name plus MACHINE_DOMAIN (just the name when that's empty)
+#   <family>   debian or rhel: `packages` (must be in prepare.sh's EXTRA_PACKAGES_<FAMILY>, which a
+#              test checks) and `script`, run with bash -e as root. $hostname is always set.
+
+- id: nginx
+  name: nginx
+  description: Web server on port 80, with a page showing the machine's name.
+  conflicts: [apache, apache-https]
+  links: ["http://{ip}/"]
+  debian:
+    packages: [nginx]
+    script: |
+      echo "<h1>$hostname</h1><p>nginx, deployed by the lab panel.</p>" >/var/www/html/index.html
+      systemctl enable --now nginx
+  rhel:
+    packages: [nginx]
+    script: |
+      echo "<h1>$hostname</h1><p>nginx, deployed by the lab panel.</p>" >/usr/share/nginx/html/index.html
+      systemctl enable --now nginx
+      if systemctl is-active -q firewalld; then firewall-cmd -q --permanent --add-service=http && firewall-cmd -q --reload; fi
+
+- id: apache
+  name: Apache
+  description: Apache web server on port 80, with a page showing the machine's name.
+  conflicts: [nginx, apache-https]
+  links: ["http://{ip}/"]
+  debian:
+    packages: [apache2]
+    script: |
+      echo "<h1>$hostname</h1><p>Apache, deployed by the lab panel.</p>" >/var/www/html/index.html
+      systemctl enable --now apache2
+  rhel:
+    packages: [httpd]
+    script: |
+      echo "<h1>$hostname</h1><p>Apache, deployed by the lab panel.</p>" >/var/www/html/index.html
+      systemctl enable --now httpd
+      if systemctl is-active -q firewalld; then firewall-cmd -q --permanent --add-service=http && firewall-cmd -q --reload; fi
+
+- id: apache-https
+  name: Apache + HTTPS
+  description: Apache on ports 80 and 443, with a self-signed certificate made for this machine.
+  conflicts: [nginx, apache]
+  links: ["http://{ip}/", "https://{ip}/"]
+  options:
+    - id: domain
+      label: Domain name
+      help: The name the certificate is for, e.g. intranet.lab.example. The machine's name and address are always on it too.
+      type: hostname
+      default: "{fqdn}"
+  debian:
+    packages: [apache2, openssl]
+    script: |
+      ip=$(hostname -I | awk '{print $1}')
+      san="DNS:$domain"
+      [ "$domain" = "$hostname" ] || san="$san,DNS:$hostname"
+      [ -z "$ip" ] || san="$san,IP:$ip"
+      openssl req -x509 -newkey rsa:2048 -nodes -days 825 -subj "/CN=$domain" -addext "subjectAltName=$san" \
+        -keyout /etc/ssl/private/lab-deploy.key -out /etc/ssl/certs/lab-deploy.crt 2>/dev/null
+      chmod 600 /etc/ssl/private/lab-deploy.key
+      sed -i -e 's#^\(\s*SSLCertificateFile\s\).*#\1/etc/ssl/certs/lab-deploy.crt#' \
+             -e 's#^\(\s*SSLCertificateKeyFile\s\).*#\1/etc/ssl/private/lab-deploy.key#' \
+        /etc/apache2/sites-available/default-ssl.conf
+      echo "<h1>$domain</h1><p>Apache over HTTPS, deployed by the lab panel.</p>" >/var/www/html/index.html
+      a2enmod -q ssl
+      a2ensite -q default-ssl
+      systemctl enable apache2
+      systemctl restart apache2
+  rhel:
+    packages: [httpd, mod_ssl, openssl]
+    script: |
+      ip=$(hostname -I | awk '{print $1}')
+      san="DNS:$domain"
+      [ "$domain" = "$hostname" ] || san="$san,DNS:$hostname"
+      [ -z "$ip" ] || san="$san,IP:$ip"
+      openssl req -x509 -newkey rsa:2048 -nodes -days 825 -subj "/CN=$domain" -addext "subjectAltName=$san" \
+        -keyout /etc/pki/tls/private/localhost.key -out /etc/pki/tls/certs/localhost.crt 2>/dev/null
+      chmod 600 /etc/pki/tls/private/localhost.key
+      echo "<h1>$domain</h1><p>Apache over HTTPS, deployed by the lab panel.</p>" >/var/www/html/index.html
+      systemctl enable httpd
+      systemctl restart httpd
+      if systemctl is-active -q firewalld; then firewall-cmd -q --permanent --add-service=http --add-service=https && firewall-cmd -q --reload; fi

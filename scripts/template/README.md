@@ -6,7 +6,7 @@ whole process, including the vCenter steps before and after, is in
 
 | Script | What it does | Can be undone? |
 |---|---|---|
-| [`prepare.sh`](prepare.sh) | Updates the VM, installs VMware Tools and cloud-init, grows the root filesystem, and points cloud-init at vCenter. | Yes. It's safe to re-run, and you can install extras afterwards. |
+| [`prepare.sh`](prepare.sh) | Updates the VM, installs VMware Tools and cloud-init, grows the root filesystem, points cloud-init at vCenter, and installs the panel's extras' packages (switched off). | Yes. It's safe to re-run, and you can install more afterwards. |
 | [`clean.sh`](clean.sh) | Removes the VM's identity (cloud-init, machine-id, SSH host keys, network config) and deletes the build user, then powers off. | No: you lose your way in. |
 
 Both scripts work out which OS they're running on, so there's one pair of scripts for every OS, not
@@ -31,14 +31,29 @@ file. Or copy the scripts to the VM and run `sudo bash prepare.sh` yourself.
 Name the build user anything except an account the panel creates on clones (`ubuntu`, `labuser`…).
 `clean.sh` refuses those names.
 
+## Extras
+
+The panel's extras (nginx, Apache, Apache + HTTPS; defined in
+[backend/extras.yaml](../../backend/extras.yaml)) are installed by `prepare.sh` but left switched
+off. When someone ticks one while deploying, cloud-init sets it up and starts it on the machine's
+first boot, so nothing is downloaded and it works without internet. Each one's log is on the machine
+in `/var/log/lab-deploy/<extra>.log`.
+
+- After building a template with them, list them under its `extras:` in
+  `backend/templates.yaml`. Until then the panel doesn't offer them for it.
+- To add an extra: add it to `extras.yaml`, and add its packages to `EXTRA_PACKAGES_<FAMILY>` (and
+  its service to `EXTRA_SERVICES_<FAMILY>`) in `prepare.sh`. Then rebuild the templates. A backend
+  test fails if `prepare.sh` is missing an extra's packages.
+- `--no-extras` builds a template without them.
+
 ## Supported OSes
 
 | OS | Versions | `templates.yaml` | Status |
 |---|---|---|---|
-| Ubuntu Server | 22.04+ | `adminGroup: sudo` (default) | 26.04 built and deployed |
-| Debian | 12+ | `adminGroup: sudo` (default) | Written, not tested yet |
-| CentOS Stream | 9+ | `adminGroup: wheel` | Written, not tested yet |
-| Rocky Linux, AlmaLinux | 9+ | `adminGroup: wheel` | Written, not tested yet |
+| Ubuntu Server | 22.04+ | `family: debian` | 26.04 built (before extras) |
+| Debian | 12+ | `family: debian` | Written, not tested yet |
+| CentOS Stream | 9+ | `family: rhel` | Written, not tested yet |
+| Rocky Linux, AlmaLinux | 9+ | `family: rhel` | Written, not tested yet |
 
 The real limit is **cloud-init 21.3**, the first version with the VMware datasource the panel uses to
 give each clone its hostname, user and password. Older releases don't ship it: Ubuntu 16.04 and
@@ -70,4 +85,4 @@ Every OS:
 - Pick **Minimal Install**.
 - Create `builder` with **Make this user administrator** ticked, which puts it in `wheel`.
 - Enable the network on the installer's network screen.
-- In `templates.yaml`, set `adminGroup: wheel` so the panel's user gets sudo.
+- In `templates.yaml`, set `family: rhel`. The panel's user then goes in `wheel`, which gives it sudo.

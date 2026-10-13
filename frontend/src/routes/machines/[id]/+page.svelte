@@ -165,6 +165,19 @@
 			<dt>Template</dt>
 			<dd><code>{t.id}/{m.version}</code></dd>
 		</div>
+		{#if m.extras.length}
+			<div>
+				<dt>Extras</dt>
+				<dd>
+					{m.extras.map((x) => x.name).join(', ')}
+					{#each m.extras as x (x.id)}
+						{#each Object.entries(x.options).filter(([, v]) => v) as [k, v] (k)}
+							<span class="stat-note">{k === 'domain' ? 'for' : `${k}:`} <code>{v}</code></span>
+						{/each}
+					{/each}
+				</dd>
+			</div>
+		{/if}
 	</dl>
 
 	<div class="section-heading">
@@ -190,6 +203,13 @@
 				<a class="cmd" href={webUrl} target="_blank" rel="noreferrer">{webUrl}</a>
 			</li>
 		{/if}
+		{#each m.links as url (url)}
+			<li>
+				<span class="way">{url.startsWith('https') ? 'HTTPS' : 'Web'}</span>
+				<a class="cmd" href={url} target="_blank" rel="noreferrer">{url}</a>
+				{#if url.startsWith('https')}<span class="cmd muted">Self-signed: your browser will warn first</span>{/if}
+			</li>
+		{/each}
 		{#if t.access.includes('ssh') && m.ip}
 			{@const cmd = `ssh ${m.username}@${m.ip}`}
 			<li>

@@ -5,12 +5,13 @@ transaction, so the panel shows progress while a job runs.
 """
 
 import logging
+import time
 from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select
 
-from . import catalogue, cloudinit
+from . import catalogue, cloudinit, extras
 from .config import settings
 from .db import session
 from .models import Job, LogLine, Machine, utcnow
@@ -49,12 +50,16 @@ def deploy(vc: VCenter, m: Machine) -> None:
     tpl = catalogue.find(m.template, m.version)
     if tpl is None:
         raise VSphereError(f"{m.template} {m.version} can't be deployed (not in templates.yaml)")
-    extra = cloudinit.guestinfo(m.id, m.name, m.username, m.password, m.ssh_key, tpl.admin_group)
+    chosen = m.extras or []
+    extra = cloudinit.guestinfo(
+        m.id, m.name, m.username, m.password, m.ssh_key, tpl.admin_group, extras.cloud_config(chosen, tpl.family, m.name)
+    )
     vm = vc.clone(tpl.vsphere, m.vm_name, tpl.cpu, tpl.memory_gb, extra)
     add_log(m.id, f"Cloned from {m.template}/{m.version}")
     vc.power_on(vm)
     add_log(m.id, "Powered on. Waiting for it to get an address…", "muted")
     _record_ip(vc, vm, m.id, settings().ip_timeout_seconds)
+    _await_extras(vc, vm, m)
     set_machine(m.id, state="running")
     add_log(m.id, f"Ready. Sign in as {m.username}.", "ok")
 
@@ -88,6 +93,7 @@ def reset(vc: VCenter, m: Machine) -> None:
     add_log(m.id, "Reverted to snapshot 'clean'")
     vc.power_on(vm)
     _record_ip(vc, vm, m.id, settings().ip_timeout_seconds)
+    _await_extras(vc, vm, m)
     set_machine(m.id, state="running")
     add_log(m.id, "Running", "ok")
 
@@ -112,6 +118,35 @@ def _record_ip(vc: VCenter, vm, machine_id: str, timeout: float) -> None:
         add_log(machine_id, f"Address on the LAN: {ip}")
     else:
         add_log(machine_id, "No address yet. VMware Tools hasn't reported one; check the DHCP server.", "warn")
+
+
+def _await_extras(vc: VCenter, vm, m: Machine) -> None:
+    """Waits for the machine's extras to finish installing on first boot, and fails the job if any
+    didn't. Each one's own log is on the machine, in /var/log/lab-deploy/<extra>.log."""
+    chosen = m.extras or []
+    if not chosen:
+        return
+    names = ", ".join(x.name if (x := extras.find(c["id"])) else c["id"] for c in chosen)
+    add_log(m.id, f"Installing extras: {names}…", "muted")
+    timeout = settings().extras_timeout_seconds
+    deadline = time.monotonic() + timeout
+    while (text := vc.read_guest_file(vm, m.username, m.password, extras.STATUS_FILE)) is None:
+        if time.monotonic() >= deadline:
+            raise VSphereError(
+                f"The extras didn't finish within {timeout // 60} minutes. "
+                "On the machine, /var/log/cloud-init-output.log shows how far they got."
+            )
+        time.sleep(5)
+    results = extras.parse_status(text)
+    failed = [(i, detail) for i, ok, detail in results if not ok]
+    for extra_id, ok, _ in results:
+        if ok:
+            x = extras.find(extra_id)
+            add_log(m.id, f"{x.name if x else extra_id} is ready")
+    if failed:
+        raise VSphereError(
+            "; ".join(f"{i} didn't install: {detail or 'no output'} (log: /var/log/lab-deploy/{i}.log)" for i, detail in failed)
+        )
 
 
 ACTIONS: dict[str, Callable[[VCenter, Machine], None]] = {

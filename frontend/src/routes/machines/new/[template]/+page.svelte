@@ -7,7 +7,7 @@
 	import { ApiError } from '$lib/api';
 	import { store } from '$lib/store.svelte';
 	import { findTemplate, flagNotes } from '$lib/templates';
-	import type { Access } from '$lib/types';
+	import type { Access, Extra, ExtraChoice, ExtraOption } from '$lib/types';
 
 	const template = $derived(findTemplate(page.params.template ?? ''));
 
@@ -19,6 +19,8 @@
 	/** Hours to keep it, or 'keep' for permanently. */
 	let keep = $state<number | 'keep'>(4);
 	let sshKey = $state('');
+	/** Ticked extras, and what's typed in their options, by extra id. */
+	let picked = $state<Record<string, Record<string, string>>>({});
 	let submitting = $state(false);
 	let failure = $state<string | null>(null);
 
@@ -56,13 +58,49 @@
 	const eol = $derived(template?.versions.find((v) => v.version === version)?.eol);
 	const username = $derived(store.config?.templates.find((t) => t.template === template?.id && t.version === version)?.username);
 
+	// Extras --------------------------------------------------------------------------------------------
+	const offered = $derived(template ? store.extrasFor(template.id, version) : []);
+	// Another version may offer different extras: drop what it doesn't.
+	$effect(() => {
+		const ids = new Set(offered.map((x) => x.id));
+		untrack(() => {
+			for (const id of Object.keys(picked)) if (!ids.has(id)) delete picked[id];
+		});
+	});
+	const chosen = $derived(offered.filter((x) => x.id in picked));
+
+	function toggle(x: Extra, on: boolean) {
+		if (on) picked[x.id] = Object.fromEntries(x.options.map((o) => [o.id, '']));
+		else delete picked[x.id];
+	}
+
+	/** A ticked extra this one can't be combined with. */
+	function clashWith(x: Extra): Extra | undefined {
+		return chosen.find((y) => y.id !== x.id && (x.conflicts.includes(y.id) || y.conflicts.includes(x.id)));
+	}
+
+	// The API's rules (backend/app/extras.py), so mistakes show while typing.
+	const HOSTNAME = /^(\*\.)?[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$/;
+	function optionProblem(o: ExtraOption, value: string): string | null {
+		const v = value.trim().toLowerCase().replace(/\.$/, '');
+		if (!v) return o.required ? `Fill in ${o.label.toLowerCase()}.` : null;
+		if (o.type === 'hostname' && (v.length > 253 || !HOSTNAME.test(v))) {
+			return 'Use letters, digits, hyphens and dots, e.g. intranet.lab.example.';
+		}
+		return null;
+	}
+	const extrasProblem = $derived(
+		chosen.some((x) => x.options.some((o) => optionProblem(o, picked[x.id]?.[o.id] ?? ''))) ? "Fix the extras' settings first." : null,
+	);
+
 	async function deploy(event: SubmitEvent) {
 		event.preventDefault();
-		if (!template || nameProblem || blocker || submitting) return;
+		if (!template || nameProblem || blocker || extrasProblem || submitting) return;
 		submitting = true;
 		failure = null;
+		const extras: ExtraChoice[] = chosen.map((x) => ({ id: x.id, options: { ...picked[x.id] } }));
 		try {
-			const m = await store.deployMachine(template, version, name, keep === 'keep' ? null : keep, sshKey);
+			const m = await store.deployMachine(template, version, name, keep === 'keep' ? null : keep, sshKey, extras);
 			goto(`/machines/${m.id}`);
 		} catch (e) {
 			failure = e instanceof ApiError ? e.message : String(e);
@@ -106,6 +144,52 @@
 					<p class="hint">No more updates from the vendor. Good for practising on old systems; don't use it for anything else.</p>
 				{/if}
 			</fieldset>
+
+			{#if offered.length}
+				<fieldset>
+					<legend>Extras <span class="optional">optional</span></legend>
+					<ul class="extras">
+						{#each offered as x (x.id)}
+							{@const clash = clashWith(x)}
+							{@const on = x.id in picked}
+							<li class="extra" class:on class:disabled={!!clash && !on}>
+								<label class="extra-head">
+									<input type="checkbox" checked={on} disabled={!!clash && !on} onchange={(e) => toggle(x, e.currentTarget.checked)} />
+									<span class="extra-name">{x.name}</span>
+								</label>
+								<p class="extra-desc">
+									{clash && !on ? `Can't be combined with ${clash.name}: they use the same port.` : x.description}
+								</p>
+								{#if on}
+									{#each x.options as o (o.id)}
+										{@const problem = optionProblem(o, picked[x.id][o.id] ?? '')}
+										{@const fallback = store.optionDefault(o.default, name || 'name')}
+										<div class="field extra-option">
+											<label for="opt-{x.id}-{o.id}">
+												{o.label}{#if !o.required}<span class="optional">optional</span>{/if}
+											</label>
+											<input
+												id="opt-{x.id}-{o.id}"
+												class="input mono-input"
+												bind:value={picked[x.id][o.id]}
+												placeholder={fallback}
+												autocomplete="off"
+												spellcheck="false"
+												aria-invalid={!!problem}
+												aria-describedby="opt-{x.id}-{o.id}-hint"
+											/>
+											<p id="opt-{x.id}-{o.id}-hint" class="hint" class:problem>
+												{#if problem}{problem}{:else}{o.help}{#if fallback} Left blank: <code>{fallback}</code>.{/if}{/if}
+											</p>
+										</div>
+									{/each}
+								{/if}
+							</li>
+						{/each}
+					</ul>
+					<p class="hint">Set up and started on its first boot, without downloading anything. Deploying takes a little longer.</p>
+				</fieldset>
+			{/if}
 
 			<div class="field">
 				<label for="name">Name</label>
@@ -169,6 +253,9 @@
 				<div><dt>Uses</dt><dd>{template.resources.cpu} vCPU, {template.resources.memoryGB} GB memory, {template.resources.diskGB} GB disk</dd></div>
 				<div><dt>Network</dt><dd>The LAN, with an address from DHCP</dd></div>
 				<div><dt>Sign in with</dt><dd>{template.access.map((a) => accessNames[a]).join(', ')}</dd></div>
+				{#if chosen.length}
+					<div><dt>Extras</dt><dd>{chosen.map((x) => x.name).join(', ')}</dd></div>
+				{/if}
 				{#if username}
 					<div><dt>First sign-in</dt><dd><code>{username}</code>, with a password shown once it's deployed</dd></div>
 				{:else if template.credentials}
@@ -182,10 +269,10 @@
 					{/each}
 				</ul>
 			{/if}
-			<button class="btn btn-primary" type="submit" disabled={!!nameProblem || !!blocker || submitting}>
+			<button class="btn btn-primary" type="submit" disabled={!!nameProblem || !!blocker || !!extrasProblem || submitting}>
 				<Icon name="plus" /> {submitting ? 'Deploying…' : `Deploy ${name || 'machine'}`}
 			</button>
-			{#if blocker || failure}<p class="blocker" role="status"><Icon name="alert" /> {failure ?? blocker}</p>{/if}
+			{#if blocker || failure || extrasProblem}<p class="blocker" role="status"><Icon name="alert" /> {failure ?? blocker ?? extrasProblem}</p>{/if}
 		</aside>
 	</form>
 {/if}
@@ -313,6 +400,62 @@
 		resize: vertical;
 		min-height: 4.5rem;
 		font-size: 0.8rem;
+	}
+	/* Extras: a tile each, with a real checkbox; the ticked ones get the lime rail. */
+	.extras {
+		display: grid;
+		gap: 0.5rem;
+		max-width: 40rem;
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+	.extra {
+		padding: 0.65rem 0.85rem;
+		border: var(--lms-border-width) solid var(--lms-gray-5);
+		border-radius: var(--lms-radius-sm);
+		background: var(--lms-panel);
+	}
+	.extra.on {
+		border-color: var(--lms-lime);
+		box-shadow: inset 3px 0 0 var(--lms-lime);
+	}
+	.extra.disabled {
+		opacity: 0.55;
+	}
+	.extra-head {
+		display: flex;
+		align-items: center;
+		gap: 0.6rem;
+		cursor: pointer;
+	}
+	.extra.disabled .extra-head {
+		cursor: not-allowed;
+	}
+	.extra-head input {
+		width: 1rem;
+		height: 1rem;
+		accent-color: var(--lms-lime);
+	}
+	.extra-name {
+		font: 600 0.95rem var(--lms-mono);
+		color: var(--lms-white);
+	}
+	.extra-desc {
+		margin: 0.25rem 0 0 1.6rem;
+		font-size: 0.85rem;
+		color: var(--lms-gray-2);
+	}
+	.extra-option {
+		margin: 0.75rem 0 0.15rem 1.6rem;
+	}
+	.extra-option label {
+		display: block;
+		margin-bottom: 0.35rem;
+		font: 600 0.9rem var(--lms-display);
+	}
+	.hint code {
+		color: var(--lms-lime-text);
 	}
 	.optional {
 		margin-inline-start: 0.4rem;

@@ -3,7 +3,7 @@
 // worker's progress (log lines, state changes) arrives with the polls.
 // There's no sign-in yet, so every machine is everyone's.
 import { api, ApiError } from './api';
-import type { Capacity, Job, MachineTemplate, PanelConfig, SingleMachine } from './types';
+import type { Capacity, ExtraChoice, Job, MachineTemplate, PanelConfig, SingleMachine } from './types';
 
 const SEC = 1000;
 const HOUR = 3600 * SEC;
@@ -123,6 +123,17 @@ class PanelStore {
 		return !!this.config?.templates.some((t) => t.template === templateId && (version === undefined || t.version === version));
 	}
 
+	/** Extras this version of a template offers. */
+	extrasFor(templateId: string, version: string) {
+		return this.config?.templates.find((t) => t.template === templateId && t.version === version)?.extras ?? [];
+	}
+
+	/** An option's default for a machine of this name, as the API will fill it in. */
+	optionDefault(def: string, name: string): string {
+		const domain = this.config?.machineDomain;
+		return def.replace('{fqdn}', domain ? `${name}.${domain}` : name).replace('{hostname}', name);
+	}
+
 	/** Why this template can't be deployed right now, or null if it can. */
 	machineBlocker(template: MachineTemplate): string | null {
 		if (!this.config) return 'Loading…';
@@ -162,10 +173,17 @@ class PanelStore {
 	}
 
 	/** Deploys a machine. Throws ApiError with a message to show if the API refuses. */
-	async deployMachine(template: MachineTemplate, version: string, name: string, hours: number | null, sshKey?: string): Promise<SingleMachine> {
+	async deployMachine(
+		template: MachineTemplate,
+		version: string,
+		name: string,
+		hours: number | null,
+		sshKey?: string,
+		extras: ExtraChoice[] = [],
+	): Promise<SingleMachine> {
 		const m = await api<SingleMachine>('/machines', {
 			method: 'POST',
-			body: { template: template.id, version, name, hours, sshKey: sshKey?.trim() || null },
+			body: { template: template.id, version, name, hours, sshKey: sshKey?.trim() || null, extras },
 		});
 		this.#put(m);
 		void this.refresh();

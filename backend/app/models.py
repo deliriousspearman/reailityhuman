@@ -2,7 +2,7 @@
 
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -40,6 +40,8 @@ class Machine(Base):
     # can reach it can read these.
     password: Mapped[str] = mapped_column(String(128))
     ssh_key: Mapped[str | None] = mapped_column(Text)
+    # Extras chosen at deploy, with every option filled in: [{"id": "apache-https", "options": {...}}].
+    extras: Mapped[list] = mapped_column(JSON, default=list)
 
     log: Mapped[list["LogLine"]] = relationship(
         back_populates="machine", cascade="all, delete-orphan", order_by="LogLine.id"

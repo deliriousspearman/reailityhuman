@@ -5,7 +5,9 @@ only affects the job that was running.
 """
 
 import ipaddress
+import ssl
 import time
+import urllib.request
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -266,6 +268,45 @@ class VCenter:
             if time.monotonic() >= deadline:
                 return None
             time.sleep(3)
+
+    def read_guest_file(self, vm: vim.VirtualMachine, username: str, password: str, path: str) -> str | None:
+        """A text file inside the guest, read through VMware Tools signed in as `username`, or None
+        if it can't be read yet: no such file, the account doesn't exist yet (cloud-init creates it
+        during first boot), or Tools isn't running. Other problems raise VSphereError.
+
+        The file comes from the ESXi host running the VM (a URL vCenter hands out), so the panel's
+        server needs to reach that host on port 443."""
+        gom = self.content.guestOperationsManager
+        auth = vim.vm.guest.NamePasswordAuthentication(username=username, password=password)
+        try:
+            info = gom.fileManager.InitiateFileTransferFromGuest(vm=vm, auth=auth, guestFilePath=path)
+        except (
+            vim.fault.FileNotFound,
+            vim.fault.InvalidGuestLogin,
+            vim.fault.GuestOperationsUnavailable,
+            vim.fault.GuestAuthenticationChallenge,
+            vim.fault.ToolsUnavailable,
+            vim.fault.InvalidState,
+        ):
+            return None
+        except vim.fault.NoPermission as e:
+            raise VSphereError(
+                "The panel's vCenter account can't read files in machines (it needs Virtual machine → "
+                "Guest operations → Query; re-run scripts/setup_vcenter.py)"
+            ) from e
+        except vmodl.MethodFault as e:
+            raise VSphereError(f"Couldn't read {path} in the machine: {e.msg}") from e
+        # The URL names the host as "*" when vCenter can't tell which address the caller can reach.
+        url = info.url
+        if "://*" in url:
+            host = self.props(vm, "runtime.host").get("runtime.host")
+            url = url.replace("://*", f"://{self.props(host, 'name').get('name')}", 1)
+        context = ssl._create_unverified_context() if self.cfg.vcenter_insecure else ssl.create_default_context()
+        try:
+            with urllib.request.urlopen(url, context=context, timeout=30) as res:
+                return res.read().decode(errors="replace")
+        except OSError as e:
+            raise VSphereError(f"Couldn't fetch {path} from the ESXi host running the machine: {e}") from e
 
     def capacity(self) -> Capacity:
         """What the cluster has, and what powered-on VMs on it are configured to use."""

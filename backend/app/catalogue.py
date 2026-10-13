@@ -9,6 +9,7 @@ from functools import lru_cache
 
 import yaml
 
+from . import extras
 from .config import settings
 
 
@@ -22,16 +23,24 @@ class LiveTemplate:
     memory_gb: int
     disk_gb: int
     username: str
-    # The group that gives the user sudo: "sudo" on Debian and Ubuntu, "wheel" on the RHEL family.
+    # OS family: "debian" (Debian, Ubuntu) or "rhel" (CentOS Stream, Rocky, Alma).
+    family: str = "debian"
+    # The group that gives the user sudo. Default: "sudo" for the debian family, "wheel" for rhel.
     admin_group: str = "sudo"
+    # Extras (extras.yaml) whose packages are in this template, so they can be chosen at deploy.
+    extras: tuple[str, ...] = ()
 
 
 @lru_cache
 def catalogue() -> dict[tuple[str, str], LiveTemplate]:
     with open(settings().catalogue_path) as f:
         entries = yaml.safe_load(f) or []
-    return {
-        (e["template"], str(e["version"])): LiveTemplate(
+    out = {}
+    for e in entries:
+        family = e.get("family", "debian")
+        if family not in extras.FAMILIES:
+            raise ValueError(f"templates.yaml: {e['template']} {e['version']}: unknown family '{family}'")
+        t = LiveTemplate(
             template=e["template"],
             version=str(e["version"]),
             vsphere=e["vsphere"],
@@ -39,10 +48,16 @@ def catalogue() -> dict[tuple[str, str], LiveTemplate]:
             memory_gb=int(e["memoryGB"]),
             disk_gb=int(e["diskGB"]),
             username=e["username"],
-            admin_group=e.get("adminGroup", "sudo"),
+            family=family,
+            admin_group=e.get("adminGroup", "wheel" if family == "rhel" else "sudo"),
+            extras=tuple(e.get("extras", [])),
         )
-        for e in entries
-    }
+        for extra_id in t.extras:
+            x = extras.find(extra_id)
+            if x is None or family not in x.families:
+                raise ValueError(f"templates.yaml: {t.template} {t.version} lists extra '{extra_id}', which extras.yaml has no {family} steps for")
+        out[(t.template, t.version)] = t
+    return out
 
 
 def find(template: str, version: str) -> LiveTemplate | None:

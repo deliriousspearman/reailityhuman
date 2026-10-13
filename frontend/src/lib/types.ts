@@ -178,12 +178,53 @@ export interface SingleMachine {
 	/** Account made on first boot, and its generated password. */
 	username: string;
 	password: string;
+	/** Extras chosen at deploy, with every option as applied (defaults filled in). */
+	extras: { id: string; name: string; options: Record<string, string> }[];
+	/** Addresses the extras serve, e.g. http://<ip>/; empty until the machine has an address. */
+	links: string[];
 	log: LogLine[];
+}
+
+/** A setting on an extra, e.g. the domain name a certificate is for. */
+export interface ExtraOption {
+	id: string;
+	label: string;
+	help: string;
+	/** `hostname`: a DNS name, optionally "*."-prefixed. `text`: checked by the API. */
+	type: 'hostname' | 'text';
+	required: boolean;
+	/** Used when left blank. {hostname} is the machine's name; {fqdn} adds PanelConfig.machineDomain. */
+	default: string;
+}
+
+/** An optional service set up on a machine's first boot (backend/extras.yaml). */
+export interface Extra {
+	id: string;
+	name: string;
+	description: string;
+	/** Extras that can't be chosen with this one (they use the same port). */
+	conflicts: string[];
+	options: ExtraOption[];
+}
+
+/** An extra chosen in a deploy request; blank options get their defaults. */
+export interface ExtraChoice {
+	id: string;
+	options: Record<string, string>;
 }
 
 /** What the API can deploy, and its limits (GET /api/config). */
 export interface PanelConfig {
-	templates: { template: string; version: string; resources: { cpu: number; memoryGB: number; diskGB: number }; username: string }[];
+	templates: {
+		template: string;
+		version: string;
+		resources: { cpu: number; memoryGB: number; diskGB: number };
+		username: string;
+		/** Extras this version's template offers. */
+		extras: Extra[];
+	}[];
+	/** Domain for default names ({fqdn} in option defaults); empty: just the machine's name. */
+	machineDomain: string;
 	/** How long an expired machine is kept before it's deleted. */
 	graceMs: number;
 	maxMachines: number;

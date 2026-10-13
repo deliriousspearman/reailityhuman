@@ -12,9 +12,9 @@
 # What it does:
 #   1. Resets cloud-init (logs, seed, instance data), so it runs again on each clone's first boot.
 #   2. Empties the machine-id. Without this, clones can end up sharing one DHCP lease.
-#   3. Deletes the SSH host keys (each clone makes its own) and the installer's network config, so
-#      cloud-init writes a fresh one: netplan on Ubuntu, /etc/network/interfaces on Debian,
-#      NetworkManager connections on the RHEL family.
+#   3. Deletes the SSH host keys and any TLS certificates (each clone makes its own), and the
+#      installer's network config, so cloud-init writes a fresh one: netplan on Ubuntu,
+#      /etc/network/interfaces on Debian, NetworkManager connections on the RHEL family.
 #   4. Clears the package cache, logs and shell histories.
 #   5. Deletes the build user, its home and its sudoers file.
 #   6. Powers off. Your SSH session ends, and there's no way back in: snapshot and convert it next.
@@ -73,8 +73,12 @@ echo "==> machine-id"
 truncate -s 0 /etc/machine-id
 rm -f /var/lib/dbus/machine-id
 
-echo "==> SSH host keys"
+echo "==> SSH host keys, and certificates the extras' packages made"
 rm -f /etc/ssh/ssh_host_*
+# Made while building (ssl-cert's snakeoil; mod_ssl's localhost). A machine deployed with HTTPS
+# makes its own, so no two machines share a key.
+rm -f /etc/ssl/certs/ssl-cert-snakeoil.pem /etc/ssl/private/ssl-cert-snakeoil.key \
+	/etc/pki/tls/certs/localhost.crt /etc/pki/tls/private/localhost.key
 
 echo "==> Network config"
 case $FAMILY in

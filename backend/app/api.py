@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
-from . import catalogue, cloudinit, jobs
+from . import catalogue, cloudinit, extras, jobs
 from .config import settings
 from .db import get_session
 from .models import STABLE_STATES, Job, LogLine, Machine, utcnow
@@ -46,6 +46,11 @@ def machine_out(m: Machine) -> dict:
         "vmName": m.vm_name,
         "username": m.username,
         "password": m.password,
+        "extras": [
+            {"id": c["id"], "name": x.name if (x := extras.find(c["id"])) else c["id"], "options": c["options"]}
+            for c in m.extras or []
+        ],
+        "links": extras.links(m.extras or [], m.ip or ""),
         "log": [{"at": ms(line.at), "text": line.text, **({"tone": line.tone} if line.tone else {})} for line in m.log],
     }
 
@@ -100,14 +105,35 @@ def queue(db: Session, m: Machine, action: str) -> None:
 # Config and status ------------------------------------------------------------------------------------
 
 
+def extra_out(x: extras.Extra) -> dict:
+    return {
+        "id": x.id,
+        "name": x.name,
+        "description": x.description,
+        "conflicts": list(x.conflicts),
+        "options": [
+            {"id": o.id, "label": o.label, "help": o.help, "type": o.type, "required": o.required, "default": o.default}
+            for o in x.options
+        ],
+    }
+
+
 @router.get("/config")
 def config() -> dict:
     cfg = settings()
     return {
         "templates": [
-            {"template": t.template, "version": t.version, "resources": {"cpu": t.cpu, "memoryGB": t.memory_gb, "diskGB": t.disk_gb}, "username": t.username}
+            {
+                "template": t.template,
+                "version": t.version,
+                "resources": {"cpu": t.cpu, "memoryGB": t.memory_gb, "diskGB": t.disk_gb},
+                "username": t.username,
+                "extras": [extra_out(extras.find(i)) for i in t.extras],
+            }
             for t in catalogue.catalogue().values()
         ],
+        # Fills {fqdn} in option defaults: "<name>.<machineDomain>", or just the name when empty.
+        "machineDomain": cfg.machine_domain.strip("."),
         "graceMs": cfg.grace_minutes * 60_000,
         "maxMachines": cfg.max_machines,
         "maxPermanent": cfg.max_permanent,
@@ -154,6 +180,12 @@ def capacity() -> dict:
 # Machines -------------------------------------------------------------------------------------------
 
 
+class ExtraChoice(BaseModel):
+    id: str = Field(max_length=64)
+    # Option id -> value; blank or missing means its default.
+    options: dict[str, str] = Field(default_factory=dict, max_length=20)
+
+
 class DeployRequest(BaseModel):
     template: str
     version: str
@@ -161,6 +193,7 @@ class DeployRequest(BaseModel):
     # None: keep permanently.
     hours: int | None = Field(default=None, ge=1, le=MAX_HOURS)
     sshKey: str | None = Field(default=None, max_length=4096)
+    extras: list[ExtraChoice] = Field(default_factory=list, max_length=10)
 
 
 class Hours(BaseModel):
@@ -185,6 +218,10 @@ def deploy_machine(req: DeployRequest, db: Db) -> dict:
         raise HTTPException(422, f"{req.template} {req.version} can't be deployed yet.")
     if not NAME_RULE.match(req.name):
         raise HTTPException(422, "Use 1 to 15 lowercase letters, digits or hyphens, starting with a letter.")
+    try:
+        chosen = extras.resolve(tpl.extras, [c.model_dump() for c in req.extras], req.name)
+    except extras.ExtraError as e:
+        raise HTTPException(422, str(e)) from e
     if db.scalar(select(Machine).where(Machine.name == req.name)):
         raise HTTPException(409, f"There's already a machine called {req.name}.")
     count = db.scalar(select(func.count()).select_from(Machine))
@@ -213,9 +250,14 @@ def deploy_machine(req: DeployRequest, db: Db) -> dict:
         username=tpl.username,
         password=cloudinit.generate_password(cfg.password_length),
         ssh_key=(req.sshKey or "").strip() or None,
+        extras=chosen,
     )
     db.add(m)
     add_log(db, m, f"Deploy requested ({'kept permanently' if req.hours is None else hours_label(req.hours)})", "muted")
+    for c in chosen:
+        x = extras.find(c["id"])
+        details = ", ".join(f"{o.label.lower()} {c['options'][o.id]}" for o in x.options if c["options"].get(o.id))
+        add_log(db, m, f"With {x.name}{f' ({details})' if details else ''}", "muted")
     queue(db, m, "deploy")
     db.refresh(m)
     return machine_out(m)
