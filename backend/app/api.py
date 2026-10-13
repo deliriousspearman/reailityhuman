@@ -24,6 +24,7 @@ from .vsphere import VSphereError, connect
 ANYONE = "anyone"
 NAME_RULE = re.compile(r"^[a-z][a-z0-9-]{0,14}$")
 OWNER_RULE = re.compile(r"^[a-z][a-z0-9-]{0,19}$")
+PASSWORD_MIN = 8
 OWNER_PROBLEM = "Use 1 to 20 lowercase letters, digits or hyphens for your name, starting with a letter."
 MAX_HOURS = 24 * 30
 
@@ -207,6 +208,8 @@ class DeployRequest(BaseModel):
     sshKey: str | None = Field(default=None, max_length=4096)
     # Who it's for; part of the VM's name in vCenter.
     owner: str = Field(max_length=64)
+    # The user's password; empty or missing: one is generated.
+    password: str | None = Field(default=None, max_length=128)
     extras: list[ExtraChoice] = Field(default_factory=list, max_length=10)
 
 
@@ -235,6 +238,9 @@ def deploy_machine(req: DeployRequest, db: Db) -> dict:
     owner = req.owner.strip().lower()
     if not OWNER_RULE.match(owner):
         raise HTTPException(422, OWNER_PROBLEM)
+    password = req.password or None
+    if password is not None and (len(password) < PASSWORD_MIN or any(not c.isprintable() for c in password)):
+        raise HTTPException(422, f"Use a password of at least {PASSWORD_MIN} characters, without line breaks or tabs.")
     try:
         chosen = extras.resolve(tpl.extras, [c.model_dump() for c in req.extras], req.name)
     except extras.ExtraError as e:
@@ -266,7 +272,7 @@ def deploy_machine(req: DeployRequest, db: Db) -> dict:
         # "<owner>-<name>-<id>": whose it is, at a glance in vCenter, and never clashing.
         vm_name=f"{owner}-{req.name}-{machine_id.removeprefix('m-')}",
         username=tpl.username,
-        password=cloudinit.generate_password(cfg.password_length),
+        password=password or cloudinit.generate_password(cfg.password_length),
         ssh_key=(req.sshKey or "").strip() or None,
         extras=chosen,
     )

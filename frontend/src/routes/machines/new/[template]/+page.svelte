@@ -21,6 +21,9 @@
 	/** Hours to keep it, or 'keep' for permanently. */
 	let keep = $state<number | 'keep'>(4);
 	let sshKey = $state('');
+	/** Blank: the panel generates one. */
+	let password = $state('');
+	let showPassword = $state(false);
 	/** Ticked extras, and what's typed in their options, by extra id. */
 	let picked = $state<Record<string, Record<string, string>>>({});
 	let submitting = $state(false);
@@ -59,6 +62,10 @@
 			: !OWNER_RULE.test(owner.trim().toLowerCase())
 				? 'Use 1 to 20 lowercase letters, digits or hyphens, starting with a letter.'
 				: null,
+	);
+	// The API's rule (backend/app/api.py): at least 8 characters, no line breaks or tabs.
+	const passwordProblem = $derived(
+		!password ? null : password.length < 8 ? 'At least 8 characters.' : /[\t\n\r]/.test(password) ? 'No line breaks or tabs.' : null,
 	);
 	const vmName = $derived(`${owner.trim().toLowerCase() || 'you'}-${name || 'name'}-…`);
 	const canKeep = $derived(store.permanentCount < store.permanentQuota);
@@ -105,12 +112,12 @@
 
 	async function deploy(event: SubmitEvent) {
 		event.preventDefault();
-		if (!template || nameProblem || ownerProblem || blocker || extrasProblem || submitting) return;
+		if (!template || nameProblem || ownerProblem || passwordProblem || blocker || extrasProblem || submitting) return;
 		submitting = true;
 		failure = null;
 		const extras: ExtraChoice[] = chosen.map((x) => ({ id: x.id, options: { ...picked[x.id] } }));
 		try {
-			const m = await store.deployMachine(template, version, name, keep === 'keep' ? null : keep, sshKey, extras, owner);
+			const m = await store.deployMachine(template, version, name, keep === 'keep' ? null : keep, sshKey, extras, owner, password);
 			goto(`/machines/${m.id}`);
 		} catch (e) {
 			failure = e instanceof ApiError ? e.message : String(e);
@@ -259,6 +266,30 @@
 			</fieldset>
 
 			<div class="field">
+				<label for="password">Password <span class="optional">optional</span></label>
+				<div class="password-row">
+					<input
+						id="password"
+						class="input mono-input"
+						type={showPassword ? 'text' : 'password'}
+						bind:value={password}
+						autocomplete="new-password"
+						spellcheck="false"
+						placeholder="Leave blank for a random one"
+						aria-invalid={!!passwordProblem}
+						aria-describedby="password-hint"
+					/>
+					<button class="btn btn-quiet btn-sm" type="button" onclick={() => (showPassword = !showPassword)}>
+						<Icon name="eye" />{showPassword ? 'Hide' : 'Show'}
+					</button>
+				</div>
+				<p id="password-hint" class="hint" class:problem={passwordProblem}>
+					{passwordProblem ??
+						`For ${username ?? 'the user'}, and sudo. Blank: a random one, shown once it's deployed. Anyone who can open the panel can see it, so don't reuse one you use elsewhere.`}
+				</p>
+			</div>
+
+			<div class="field">
 				<label for="ssh-key">SSH public key <span class="optional">optional</span></label>
 				<textarea
 					id="ssh-key"
@@ -285,7 +316,10 @@
 					<div><dt>Extras</dt><dd>{chosen.map((x) => x.name).join(', ')}</dd></div>
 				{/if}
 				{#if username}
-					<div><dt>First sign-in</dt><dd><code>{username}</code>, with a password shown once it's deployed</dd></div>
+					<div>
+						<dt>First sign-in</dt>
+						<dd><code>{username}</code>, {password ? 'with your password' : "with a password shown once it's deployed"}</dd>
+					</div>
 				{:else if template.credentials}
 					<div><dt>First sign-in</dt><dd><code>{template.credentials}</code></dd></div>
 				{/if}
@@ -297,7 +331,7 @@
 					{/each}
 				</ul>
 			{/if}
-			<button class="btn btn-primary" type="submit" disabled={!!nameProblem || !!ownerProblem || !!blocker || !!extrasProblem || submitting}>
+			<button class="btn btn-primary" type="submit" disabled={!!nameProblem || !!ownerProblem || !!passwordProblem || !!blocker || !!extrasProblem || submitting}>
 				<Icon name="plus" /> {submitting ? 'Deploying…' : `Deploy ${name || 'machine'}`}
 			</button>
 			{#if blocker || failure || extrasProblem}<p class="blocker" role="status"><Icon name="alert" /> {failure ?? blocker ?? extrasProblem}</p>{/if}
@@ -423,6 +457,11 @@
 	.option.disabled {
 		opacity: 0.45;
 		cursor: not-allowed;
+	}
+	.password-row {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
 	}
 	textarea.mono-input {
 		resize: vertical;

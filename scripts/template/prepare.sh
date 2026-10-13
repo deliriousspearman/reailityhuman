@@ -17,7 +17,8 @@
 #      hand each clone its hostname, user and password.
 #   3. Grows the root filesystem into the rest of the disk (Ubuntu's installer only uses half).
 #   4. Lets cloud-init run on clones and read its data from vCenter. Ubuntu's installer turns it
-#      off (/etc/cloud/cloud-init.disabled) and limits it to its own seed.
+#      off (/etc/cloud/cloud-init.disabled) and limits it to its own seed. Also makes sure OpenSSH is
+#      installed and on at boot, with host keys made on first boot.
 #   5. Installs the packages for the panel's extras (backend/extras.yaml: nginx, Apache, …), switched
 #      off. A machine deployed with an extra has it set up and started on its first boot, without
 #      downloading anything. --no-extras leaves them out; then list no extras for this template in
@@ -158,6 +159,42 @@ for unit in open-vm-tools vmtoolsd; do
 	if systemctl list-unit-files --no-legend "$unit.service" | grep -q .; then
 		systemctl enable --now "$unit" >/dev/null 2>&1
 		echo "  $unit is $(systemctl is-active "$unit")"
+		break
+	fi
+done
+
+# --- SSH -------------------------------------------------------------------------------------------
+
+# Every machine is reached over SSH, so it's on in every template. clean.sh deletes the host keys so
+# each clone makes its own; cloud-init normally does that on first boot, and this unit makes sure
+# of it even if cloud-init doesn't run, so sshd never starts without keys.
+echo "==> SSH"
+case $FAMILY in
+debian) apt-get install -yq openssh-server >/dev/null ;;
+rhel) dnf -y -q install openssh-server ;;
+esac
+cat >/etc/systemd/system/lab-ssh-hostkeys.service <<'UNIT'
+[Unit]
+Description=Make SSH host keys if there are none (lab panel template)
+DefaultDependencies=no
+After=local-fs.target
+Before=ssh.socket ssh.service sshd.service
+ConditionPathExists=!/etc/ssh/ssh_host_ed25519_key
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/ssh-keygen -A
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+systemctl daemon-reload
+systemctl enable lab-ssh-hostkeys.service >/dev/null 2>&1
+# Ubuntu 22.10+ starts sshd from ssh.socket; elsewhere it's ssh.service (Debian) or sshd.service.
+for unit in ssh.socket ssh.service sshd.service; do
+	if systemctl list-unit-files --no-legend "$unit" | grep -q .; then
+		systemctl enable "$unit" >/dev/null 2>&1
+		echo "  $unit: $(systemctl is-enabled "$unit")"
 		break
 	fi
 done

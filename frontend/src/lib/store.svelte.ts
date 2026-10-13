@@ -203,11 +203,12 @@ class PanelStore {
 		sshKey: string | undefined,
 		extras: ExtraChoice[],
 		owner: string,
+		password = '',
 	): Promise<SingleMachine> {
 		this.setUser(owner);
 		const m = await api<SingleMachine>('/machines', {
 			method: 'POST',
-			body: { template: template.id, version, name, hours, sshKey: sshKey?.trim() || null, extras, owner: this.user },
+			body: { template: template.id, version, name, hours, sshKey: sshKey?.trim() || null, extras, owner: this.user, password: password || null },
 		});
 		this.#put(m);
 		void this.refresh();

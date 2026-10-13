@@ -184,3 +184,16 @@ def test_owner_names_the_vm_and_the_jobs(queued):
     texts = [line["text"] for line in client.get(f"/api/machines/{m['id']}").json()["log"]]
     assert "Deploy requested by john (2 h)" in texts
     assert "Stopping, asked by sam" in texts
+
+
+def test_chosen_password_or_a_generated_one(queued):
+    def make(name, **extra):
+        body = {"template": "ubuntu", "version": "26.04", "owner": "jo", "name": name, "hours": 2, **extra}
+        return client.post("/api/machines", json=body)
+
+    r = make("pw01", password="correct horse 9")
+    assert r.status_code == 201 and r.json()["password"] == "correct horse 9"
+    r = make("pw02", password="")
+    assert r.status_code == 201 and len(r.json()["password"]) == 16  # generated
+    assert make("pw03", password="short").status_code == 422
+    assert make("pw04", password="has\nnewline").status_code == 422
