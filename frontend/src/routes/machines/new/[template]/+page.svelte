@@ -94,7 +94,7 @@
 	const blocker = $derived(
 		template ? (store.machineBlocker(template) ?? (store.isLive(template.id, version) ? null : `${version} isn't available yet.`)) : null,
 	);
-	const resources = $derived(template ? store.resourcesFor(template, version) : { cpu: 0, memoryGB: 0, diskGB: 0 });
+	const deployed = $derived(template && store.asDeployed(template, version));
 	const eol = $derived(template?.versions.find((v) => v.version === version)?.eol);
 	const username = $derived(store.config?.templates.find((t) => t.template === template?.id && t.version === version)?.username);
 
@@ -332,9 +332,9 @@
 			<dl>
 				<div><dt>Machine</dt><dd>{template.name} {version}</dd></div>
 				<div><dt>Owner</dt><dd>{owner.trim().toLowerCase() || '–'}</dd></div>
-				<div><dt>Uses</dt><dd>{resources.cpu} vCPU, {resources.memoryGB} GB memory, {resources.diskGB} GB disk</dd></div>
+				<div><dt>Uses</dt><dd>{deployed?.resources.cpu} vCPU, {deployed?.resources.memoryGB} GB memory, {deployed?.resources.diskGB} GB disk</dd></div>
 				<div><dt>Network</dt><dd>The LAN, with an address from DHCP</dd></div>
-				<div><dt>Sign in with</dt><dd>{template.access.map((a) => accessNames[a]).join(', ')}</dd></div>
+				<div><dt>Sign in with</dt><dd>{(deployed ?? template).access.map((a) => accessNames[a]).join(', ')}</dd></div>
 				{#if chosen.length}
 					<div><dt>Extras</dt><dd>{chosen.map((x) => x.name).join(', ')}</dd></div>
 				{/if}

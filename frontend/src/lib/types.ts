@@ -225,6 +225,9 @@ export interface PanelConfig {
 		username: string;
 		/** Extras this version's template offers. */
 		extras: Extra[];
+		/** Set in templates.yaml; otherwise the catalogue's (templates.ts). */
+		access?: Access[];
+		webUrl?: string;
 	}[];
 	/** Domain for default names ({fqdn} in option defaults); empty: just the machine's name. */
 	machineDomain: string;

@@ -146,11 +146,18 @@ class PanelStore {
 		return !!this.config?.templates.some((t) => t.template === templateId && (version === undefined || t.version === version));
 	}
 
-	/** What a machine of this template uses: as deployed (templates.yaml, via the API) when that
-	 * version can be deployed, else the catalogue's estimate. No version: the first live one. */
-	resourcesFor(template: MachineTemplate, version?: string): MachineTemplate['resources'] {
+	/** A template as this version is really deployed: its sizes, access and web address from
+	 * templates.yaml (via the API) where that sets them, else the catalogue's. No version: the first
+	 * version that can be deployed. */
+	asDeployed(template: MachineTemplate, version?: string): MachineTemplate {
 		const live = this.config?.templates.find((t) => t.template === template.id && (version === undefined || t.version === version));
-		return live?.resources ?? template.resources;
+		if (!live) return template;
+		return {
+			...template,
+			resources: live.resources,
+			access: live.access ?? template.access,
+			webUrl: live.webUrl ?? template.webUrl,
+		};
 	}
 
 	/** Extras this version of a template offers. */

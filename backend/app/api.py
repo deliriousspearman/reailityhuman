@@ -146,6 +146,8 @@ def config() -> dict:
                 "resources": {"cpu": t.cpu, "memoryGB": t.memory_gb, "diskGB": t.disk_gb},
                 "username": t.username,
                 "extras": [extra_out(extras.find(i)) for i in t.extras],
+                **({"access": list(t.access)} if t.access else {}),
+                **({"webUrl": t.web_url} if t.web_url else {}),
             }
             for t in catalogue.catalogue().values()
         ],

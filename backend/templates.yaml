@@ -11,6 +11,13 @@
 #   extras      optional: extras (extras.yaml) people can tick at deploy. Only list those whose
 #               packages are in the template, i.e. it was built with scripts/template/prepare.sh
 #               from after extras existed; older templates list none.
+#   access      optional: how people reach it, from ssh, rdp, web and console. Default: what the
+#               frontend's catalogue (frontend/src/lib/templates.ts) says for the template.
+#   webUrl      optional: its web interface, with {ip} for its address. Default: the catalogue's,
+#               else https://{ip}/
+#
+# Each template and version here must also be in the frontend's catalogue, which has its name,
+# description and category (a test checks).
 
 - template: ubuntu
   version: "26.04"

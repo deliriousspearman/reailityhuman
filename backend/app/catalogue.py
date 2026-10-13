@@ -29,6 +29,13 @@ class LiveTemplate:
     admin_group: str = "sudo"
     # Extras (extras.yaml) whose packages are in this template, so they can be chosen at deploy.
     extras: tuple[str, ...] = ()
+    # How people reach it (ssh, rdp, web, console), and its web address with {ip}. Empty: the
+    # frontend catalogue's (src/lib/templates.ts).
+    access: tuple[str, ...] = ()
+    web_url: str = ""
+
+
+ACCESS = ("ssh", "rdp", "web", "console")
 
 
 @lru_cache
@@ -51,7 +58,11 @@ def catalogue() -> dict[tuple[str, str], LiveTemplate]:
             family=family,
             admin_group=e.get("adminGroup", "wheel" if family == "rhel" else "sudo"),
             extras=tuple(e.get("extras", [])),
+            access=tuple(e.get("access", [])),
+            web_url=e.get("webUrl", ""),
         )
+        if unknown := [a for a in t.access if a not in ACCESS]:
+            raise ValueError(f"templates.yaml: {t.template} {t.version}: unknown access {', '.join(unknown)}")
         for extra_id in t.extras:
             x = extras.find(extra_id)
             if x is None or family not in x.families:

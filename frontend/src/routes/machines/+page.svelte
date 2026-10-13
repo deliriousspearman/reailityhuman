@@ -97,7 +97,7 @@
 		<div class="templates">
 			{#each group.items as t (t.id)}
 				{@const live = store.isLive(t.id)}
-				{@const r = store.resourcesFor(t)}
+				{@const r = store.asDeployed(t).resources}
 				<article class="template" class:soon={!live}>
 					<header>
 						<h4>{#if live}<a href="/machines/new/{t.id}">{t.name}</a>{:else}{t.name}{/if}</h4>

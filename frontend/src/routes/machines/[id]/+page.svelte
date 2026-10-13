@@ -14,10 +14,9 @@
 	const HOUR = 3_600_000;
 
 	const m = $derived(store.machine(page.params.id ?? ''));
-	const t = $derived(m && templateFor(m.template));
+	const t = $derived(m && store.asDeployed(templateFor(m.template), m.version));
 	const canControl = $derived(m ? store.canControlMachine(m) : false);
 	const busy = $derived(m ? !['running', 'stopped', 'expired', 'error'].includes(m.state) : true);
-	const uses = $derived(m && t ? store.resourcesFor(t, m.version) : { cpu: 0, memoryGB: 0, diskGB: 0 });
 	const keepBlocker = $derived(m ? store.keepBlocker(m) : null);
 	const webUrl = $derived(m && t ? (t.webUrl ?? 'https://{ip}/').replace('{ip}', m.ip) : '');
 
@@ -184,10 +183,10 @@
 				<span class="stat-note">on the LAN, from DHCP</span>
 			</dd>
 		</div>
-		{#if uses.cpu}
+		{#if t.resources.cpu}
 			<div>
 				<dt>Uses</dt>
-				<dd>{uses.cpu} vCPU, {uses.memoryGB} GB<span class="stat-note">{uses.diskGB} GB disk</span></dd>
+				<dd>{t.resources.cpu} vCPU, {t.resources.memoryGB} GB<span class="stat-note">{t.resources.diskGB} GB disk</span></dd>
 			</div>
 		{/if}
 		<div>
