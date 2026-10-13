@@ -45,7 +45,7 @@ def describe(fault: vmodl.MethodFault) -> str:
             f"The panel's vCenter account is missing the privilege {', '.join(missing)}. "
             "Re-run scripts/setup_vcenter.py to grant what the panel needs."
         )
-    return fault.msg or type(fault).__name__
+    return fault.msg or type(fault).__name__.rsplit(".", 1)[-1]
 
 
 # Longest a vCenter task may take before the job gives up on it (and asks vCenter to cancel it).
@@ -350,7 +350,7 @@ class VCenter:
                 "Guest operations → Query; re-run scripts/setup_vcenter.py)"
             ) from e
         except vmodl.MethodFault as e:
-            raise VSphereError(f"Couldn't read {path} in the machine: {e.msg}") from e
+            raise VSphereError(f"Couldn't read {path} in the machine: {describe(e)}") from e
         # The URL names the host as "*" when vCenter can't tell which address the caller can reach.
         url = info.url
         if "://*" in url:

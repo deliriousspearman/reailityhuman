@@ -109,3 +109,11 @@ def test_a_task_that_never_finishes_times_out():
     with pytest.raises(VSphereError, match="Clone didn't finish"):
         wait(task, "Clone", timeout=0)
     assert cancelled
+
+
+def test_faults_without_a_message_are_named():
+    from pyVmomi import vim
+
+    from app.vsphere import describe
+
+    assert describe(vim.fault.InvalidState()) == "InvalidState"
