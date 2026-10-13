@@ -11,6 +11,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select, text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from . import catalogue, cloudinit, extras, jobs
@@ -277,6 +278,11 @@ def deploy_machine(req: DeployRequest, db: Db) -> dict:
         extras=chosen,
     )
     db.add(m)
+    try:
+        db.flush()
+    except IntegrityError as e:  # deployed under the same name a moment ago
+        db.rollback()
+        raise HTTPException(409, f"There's already a machine called {req.name}.") from e
     add_log(db, m, f"Deploy requested by {owner} ({'kept permanently' if req.hours is None else hours_label(req.hours)})", "muted")
     for c in chosen:
         x = extras.find(c["id"])

@@ -235,3 +235,14 @@ def test_jobs_the_worker_lost_are_failed(queued):
     finally:
         with session() as s:
             s.execute(text("DELETE FROM procrastinate_jobs"))
+
+
+def test_names_are_unique_in_the_database(queued):
+    """Backs up the API's check, for two deploys of one name at the same moment."""
+    from sqlalchemy.exc import IntegrityError
+
+    deploy(queued, "same01")
+    with pytest.raises(IntegrityError):
+        with session() as s:
+            s.add(Machine(id="m-dupe", name="same01", template="ubuntu", version="26.04", owner="jo", state="running",
+                          vm_name="x", username="ubuntu", password="x"))

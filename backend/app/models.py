@@ -24,7 +24,7 @@ class Machine(Base):
 
     id: Mapped[str] = mapped_column(String(16), primary_key=True)
     # Hostname inside the VM, chosen by the person who deployed it.
-    name: Mapped[str] = mapped_column(String(15))
+    name: Mapped[str] = mapped_column(String(15), unique=True)
     template: Mapped[str] = mapped_column(String(64))
     version: Mapped[str] = mapped_column(String(32))
     owner: Mapped[str] = mapped_column(String(64))
