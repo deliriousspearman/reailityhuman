@@ -5,12 +5,15 @@ machines) on VMware vSphere, for a LAN without internet access. The labs are adv
 lab slugs match its `labs/<slug>.md` pages.
 
 What works so far is **single machines**: deploy one VM from a template (Ubuntu 26.04 for now) onto
-the LAN, then start, stop, reboot, reset, extend and destroy it. Pro Labs, the VPN and sign-in come
-later; the panel shows them greyed out.
+the LAN, with optional extras (nginx, Apache), then start, stop, reboot, reset, redeploy, extend and
+destroy it. Machines expire unless they're extended or kept. The admin page shows capacity, every
+machine, leftover VMs and the job queue. Pro Labs, the VPN and sign-in come later; the panel shows
+them greyed out.
 
 - [`frontend/`](frontend/): the panel UI (SvelteKit, static build).
 - [`backend/`](backend/): the API and job worker (FastAPI, pyVmomi, PostgreSQL with Procrastinate).
-  [`backend/templates.yaml`](backend/templates.yaml) lists what can be deployed.
+  [`backend/templates.yaml`](backend/templates.yaml) lists what can be deployed, and
+  [`backend/extras.yaml`](backend/extras.yaml) the extras that can be ticked at deploy.
 - [`deploy/`](deploy/): server setup and deployment (Docker Compose, Caddy).
 - [`scripts/setup_vcenter.py`](scripts/setup_vcenter.py): prepares vCenter (folders, roles, permissions).
 - [`scripts/template/`](scripts/template/): `prepare.sh` and `clean.sh` turn a fresh Linux VM (Ubuntu, Debian,
@@ -42,7 +45,9 @@ sudo bash deploy/setup-server.sh   # Docker, full-size root volume, /srv/lab-dep
 
 After that, every push to `main` deploys itself: the GitLab pipeline ([`.gitlab-ci.yml`](.gitlab-ci.yml))
 checks and builds the panel and tests the backend, then runs `deploy/deploy.sh` against the server.
-The CI/CD variables it needs are listed at the top of that file.
+The CI/CD variables it needs are listed at the top of that file. A deploy waits for jobs the worker
+is running (deploys, resets) to finish, for up to 15 minutes; any it cuts off anyway are marked
+failed within a minute or two, and their machines show as errors.
 
 The first deploy creates `/srv/lab-deploy/lab-deploy.env` on the server, with a generated database
 password. Fill in its vCenter settings ([`docs/setup-vsphere.md`](docs/setup-vsphere.md)) before

@@ -190,15 +190,15 @@ Added after the first design pass. Alongside Pro Labs, people can deploy **one m
 
 ### Lifecycle
 - **Duration:** chosen at deploy time (2 h, 4 h, 8 h, 1 d, 3 d or 7 d), or **permanently**.
-- **Expiry:** when time runs out, the machine is powered off and marked *expired*. It's deleted 24 hours later unless it's extended.
+- **Expiry:** when time runs out, the machine is powered off and marked *expired*. It's deleted after a grace period (`GRACE_MINUTES`, a day by default) unless it's extended.
   - This gives a grace period for anyone who missed the warning. Extending an expired machine starts it again.
-  - A banner warns when less than an hour is left.
+  - A banner on every page warns when one of your machines has less than an hour left.
 - **Extending:** +2 h or +1 day, as often as wanted. Or keep it permanently, and put it back on a timer later.
 - **Quotas (configurable):**
   - Learners: up to 3 machines, 1 of them permanent.
   - Admins: up to 10, 5 of them permanent.
   - Permanent machines count against capacity indefinitely, so the limit matters.
-- **Other actions:** start, stop, reboot, reset to the clean snapshot, and destroy.
+- **Other actions:** start, stop, reboot, reset to the clean snapshot, redeploy (a new VM with the same settings, e.g. after a failed deploy), "deploy another like this", and destroy.
 
 ### Personal network
 - **Layout:** each person gets one network (a VLAN slot plus a small gateway VM, like a lab instance). It's created with their first machine and removed with their last.
@@ -208,7 +208,7 @@ Added after the first design pass. Alongside Pro Labs, people can deploy **one m
 
 ### Templates
 - **Catalogue:** 39 templates in 11 categories: firewalls and routers, Linux, Windows, Windows Server (including a ready-made Active Directory domain), hypervisors, mail, storage, self-hosted apps (such as Vaultwarden, MinIO, WordPress and Keycloak), developer tools, security tools and practice targets.
-  - It's defined in `frontend/src/lib/mock/templates.ts` for now; the API will serve it later.
+  - The catalogue (names, descriptions, categories, versions) is `frontend/src/lib/templates.ts`. What can actually be deployed, and how, is `backend/templates.yaml`, which the API serves; a test checks every entry there is in the catalogue too.
   - Practice targets (Metasploitable, Juice Shop, DVWA) are vulnerable on purpose. Like everything else, they're only reachable inside their owner's personal network.
 - **Apps:** app templates are Ubuntu with the app installed. The machine page separates the app's own sign-in from the SSH user, and knows each app's web address (e.g. MinIO's console on port 9001).
 - **How they're stored:** each version is a vSphere template with a `clean` snapshot, deployed as a linked clone.

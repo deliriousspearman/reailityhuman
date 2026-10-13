@@ -33,7 +33,7 @@ class Machine(Base):
     # None: kept permanently.
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     ip: Mapped[str | None] = mapped_column(String(64))
-    # Name of the VM in vCenter: "<name>-<id>", unique within the folder.
+    # Name of the VM in vCenter: "<owner>-<name>-<id>", unique within the folder.
     vm_name: Mapped[str] = mapped_column(String(80))
     username: Mapped[str] = mapped_column(String(32))
     # Shown on the machine page so people can sign in. The panel has no sign-in yet, so anyone who

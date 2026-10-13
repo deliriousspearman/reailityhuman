@@ -225,12 +225,16 @@ on the port group; the panel reads them from VMware Tools.
 ## 4. Check it
 
 1. Open the panel, go to **Machines → Ubuntu Server**, and deploy `ubuntu01` for 2 hours.
-2. In vCenter, `ubuntu01-xxxx` appears in `Labs/Machines`, as a linked clone, and powers on.
+2. In vCenter, `<owner>-ubuntu01-xxxx` (your name, the machine's, and its id) appears in
+   `Labs/Machines`, as a linked clone, and powers on.
 3. Within a minute or two, the panel shows its address. `ssh ubuntu@<address>` works with the
    password on its page, and `hostname` prints `ubuntu01`.
 4. Try **Stop**, **Start**, **Reboot**, and **Reset to clean**: a file you created is gone, and
    the password is unchanged.
 5. **Destroy** it: the VM is deleted in vCenter.
 
-If something fails, the machine's **Activity** log and **Admin → Jobs** show vCenter's error message.
+If something fails, the machine's **Activity** log and **Jobs** (on its page, and **Admin → Jobs**)
+show vCenter's error message. **Redeploy** on the machine's page tries again with the same settings.
+A deploy that failed partway can leave a VM no machine owns; **Admin → Leftover VMs** lists those
+and deletes them.
 The worker's own log has the rest: `docker compose -f /srv/lab-deploy/compose.yaml logs worker`.
