@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import MachineTable from '$lib/components/MachineTable.svelte';
 	import Meter from '$lib/components/Meter.svelte';
+	import Icon from '$lib/components/Icon.svelte';
 	import Status from '$lib/components/Status.svelte';
 	import { ago, duration, type Tone } from '$lib/format';
 	import { store } from '$lib/store.svelte';
@@ -24,6 +25,24 @@
 	const cap = $derived(store.capacity);
 	// How many more of the biggest machine fit in the free memory.
 	const biggest = $derived(Math.max(1, ...(store.config?.templates.map((t) => t.resources.memoryGB) ?? [1])));
+	// Job errors show one line; long ones open in place. Kept by job id, so they stay open across polls.
+	const LONG = 140;
+	let openErrors = $state(new Set<string>());
+	let copied = $state('');
+	const isLong = (text: string) => text.length > LONG || text.includes('\n');
+	function toggleError(id: string) {
+		const next = new Set(openErrors);
+		if (!next.delete(id)) next.add(id);
+		openErrors = next;
+	}
+	async function copy(id: string, text: string) {
+		try {
+			await navigator.clipboard.writeText(text);
+			copied = id;
+			setTimeout(() => (copied = ''), 1500);
+		} catch {}
+	}
+
 	const roomFor = $derived(cap ? Math.max(0, Math.floor((cap.total.memoryGB - cap.used.memoryGB) / biggest)) : 0);
 </script>
 
@@ -100,9 +119,33 @@
 					<td class="mono">{job.finishedAt ? duration(job.finishedAt - job.startedAt) : '…'}</td>
 				</tr>
 				{#if job.detail}
+					{@const open = openErrors.has(job.id)}
+					{@const long = isLong(job.detail)}
 					<tr class="detail">
 						<td colspan="7">
-							<span>{job.detail}</span>
+							{#if open}
+								<pre class="error-full" id="error-{job.id}">{job.detail}</pre>
+							{:else}
+								<p class="error-line" id="error-{job.id}">{job.detail.split('\n')[0]}</p>
+							{/if}
+							{#if long}
+								<div class="error-actions">
+									<button
+										class="btn btn-quiet btn-sm"
+										type="button"
+										aria-expanded={open}
+										aria-controls="error-{job.id}"
+										onclick={() => toggleError(job.id)}
+									>
+										{open ? 'Hide' : 'Show full error'}
+									</button>
+									{#if open}
+										<button class="btn btn-quiet btn-sm" type="button" onclick={() => copy(job.id, job.detail!)}>
+											<Icon name="copy" />{copied === job.id ? 'Copied' : 'Copy'}
+										</button>
+									{/if}
+								</div>
+							{/if}
 						</td>
 					</tr>
 				{/if}
@@ -125,12 +168,38 @@
 	.jobs tr.has-detail > * {
 		border-bottom: none;
 	}
+	/* The error cell mustn't widen the table: with max-width 0 it takes the width the other
+	   columns set, and its text fits inside that. */
 	.detail td {
-		white-space: normal;
+		max-width: 0;
+		width: 100%;
 		padding-top: 0;
-	}
-	.detail td {
+		white-space: normal;
 		color: var(--lab-error);
+	}
+	.error-line {
+		margin: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.error-full {
+		max-height: 16rem;
+		margin: 0;
+		padding: 0.6rem 0.75rem;
+		overflow: auto;
+		border: 1px solid var(--lms-gray-5);
+		border-radius: var(--lms-radius-sm);
+		background: var(--lms-panel);
+		font: 0.8rem/1.6 var(--lms-mono);
+		color: var(--lab-error);
+		white-space: pre-wrap;
+		overflow-wrap: anywhere;
+	}
+	.error-actions {
+		display: flex;
+		gap: 0.25rem;
+		margin-top: 0.35rem;
 	}
 	.problem,
 	.loading {
