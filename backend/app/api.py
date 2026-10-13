@@ -421,13 +421,13 @@ def keep_machine(machine_id: str, db: Db, who: Actor) -> dict:
 
 
 @router.post("/machines/{machine_id}/expiry")
-def set_expiry(machine_id: str, req: Hours, db: Db) -> dict:
+def set_expiry(machine_id: str, req: Hours, db: Db, who: Actor) -> dict:
     m = get_machine(db, machine_id)
+    require_idle(m)
     m.expires_at = utcnow() + timedelta(hours=req.hours)
-    add_log(db, m, f"Expiry set: deleted in {hours_label(req.hours)} unless extended")
-    db.commit()
-    db.refresh(m)
-    return machine_out(m)
+    text_ = f"Expiry set: powered off in {hours_label(req.hours)} unless extended"
+    add_log(db, m, text_ if who == ANYONE else f"{text_}, asked by {who}")
+    return _revive_or_save(db, m, who)
 
 
 def _revive_or_save(db: Session, m: Machine, who: str) -> dict:

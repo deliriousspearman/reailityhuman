@@ -350,3 +350,18 @@ def test_reboot_says_rebooting(queued):
     assert client.post(f"/api/machines/{m['id']}/reboot").json()["state"] == "rebooting"
     run_queued(queued)
     assert client.get(f"/api/machines/{m['id']}").json()["state"] == "running"
+
+
+def test_set_expiry_on_busy_or_expired_machines(queued):
+    r = client.post("/api/machines", json={"template": "ubuntu", "version": "26.04", "owner": "jo", "name": "exp02", "hours": 2})
+    m = r.json()
+    assert client.post(f"/api/machines/{m['id']}/expiry", json={"hours": 4}).status_code == 409  # still deploying
+    run_queued(queued)
+    with session() as s:
+        s.get(Machine, m["id"]).state = "expired"
+    r = client.post(f"/api/machines/{m['id']}/expiry", json={"hours": 4}, headers={"X-Lab-User": "sam"})
+    assert r.json()["state"] == "deploying"  # started again, like extending
+    run_queued(queued)
+    m = client.get(f"/api/machines/{m['id']}").json()
+    assert m["state"] == "running"
+    assert "Expiry set: powered off in 4 h unless extended, asked by sam" in [line["text"] for line in m["log"]]
