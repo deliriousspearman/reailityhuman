@@ -25,11 +25,10 @@
 	const cap = $derived(store.capacity);
 	// How many more of the biggest machine fit in the free memory.
 	const biggest = $derived(Math.max(1, ...(store.config?.templates.map((t) => t.resources.memoryGB) ?? [1])));
-	// Job errors show one line; long ones open in place. Kept by job id, so they stay open across polls.
-	const LONG = 140;
+	// A failed job's error opens under it from the arrow at the end of its row. Kept by job id, so it
+	// stays open across polls.
 	let openErrors = $state(new Set<string>());
 	let copied = $state('');
-	const isLong = (text: string) => text.length > LONG || text.includes('\n');
 	function toggleError(id: string) {
 		const next = new Set(openErrors);
 		if (!next.delete(id)) next.add(id);
@@ -99,11 +98,13 @@
 				<th scope="col">State</th>
 				<th scope="col">Started</th>
 				<th scope="col">Took</th>
+				<th scope="col"><span class="visually-hidden">Error</span></th>
 			</tr>
 		</thead>
 		<tbody>
 			{#each store.jobs as job (job.id)}
-				<tr class:has-detail={job.detail}>
+				{@const open = !!job.detail && openErrors.has(job.id)}
+				<tr class:has-detail={open}>
 					<th scope="row">{job.id}</th>
 					<td>{job.action}</td>
 					<td>
@@ -117,40 +118,37 @@
 					<td><Status size="sm" {...jobStates[job.state]} /></td>
 					<td class="mono">{ago(job.startedAt, store.now)}</td>
 					<td class="mono">{job.finishedAt ? duration(job.finishedAt - job.startedAt) : '…'}</td>
+					<td class="toggle-cell">
+						{#if job.detail}
+							<button
+								class="btn btn-quiet btn-sm toggle"
+								class:open
+								type="button"
+								aria-expanded={open}
+								aria-controls="error-{job.id}"
+								aria-label="{open ? 'Hide' : 'Show'} the error for {job.id}"
+								title={open ? 'Hide error' : 'Show error'}
+								onclick={() => toggleError(job.id)}
+							>
+								<Icon name="chevron" />
+							</button>
+						{/if}
+					</td>
 				</tr>
-				{#if job.detail}
-					{@const open = openErrors.has(job.id)}
-					{@const long = isLong(job.detail)}
+				{#if open}
 					<tr class="detail">
-						<td colspan="7">
-							{#if open}
-								<pre class="error-full" id="error-{job.id}">{job.detail}</pre>
-							{:else}
-								<p class="error-line" id="error-{job.id}">{job.detail.split('\n')[0]}</p>
-							{/if}
-							{#if long}
-								<div class="error-actions">
-									<button
-										class="btn btn-quiet btn-sm"
-										type="button"
-										aria-expanded={open}
-										aria-controls="error-{job.id}"
-										onclick={() => toggleError(job.id)}
-									>
-										{open ? 'Hide' : 'Show full error'}
-									</button>
-									{#if open}
-										<button class="btn btn-quiet btn-sm" type="button" onclick={() => copy(job.id, job.detail!)}>
-											<Icon name="copy" />{copied === job.id ? 'Copied' : 'Copy'}
-										</button>
-									{/if}
-								</div>
-							{/if}
+						<td colspan="8">
+							<pre class="error-full" id="error-{job.id}">{job.detail}</pre>
+							<div class="error-actions">
+								<button class="btn btn-quiet btn-sm" type="button" onclick={() => copy(job.id, job.detail!)}>
+									<Icon name="copy" />{copied === job.id ? 'Copied' : 'Copy'}
+								</button>
+							</div>
 						</td>
 					</tr>
 				{/if}
 			{:else}
-				<tr><td colspan="7">{store.loaded ? 'No jobs yet.' : 'Loading…'}</td></tr>
+				<tr><td colspan="8">{store.loaded ? 'No jobs yet.' : 'Loading…'}</td></tr>
 			{/each}
 		</tbody>
 	</table>
@@ -177,11 +175,20 @@
 		white-space: normal;
 		color: var(--lab-error);
 	}
-	.error-line {
-		margin: 0;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
+	.toggle-cell {
+		width: 1%;
+		padding-block: 0.3rem;
+		text-align: end;
+	}
+	.toggle {
+		padding-inline: 0.35rem;
+		color: var(--lab-error);
+	}
+	.toggle :global(svg) {
+		transition: transform 0.15s ease;
+	}
+	.toggle.open :global(svg) {
+		transform: rotate(180deg);
 	}
 	.error-full {
 		max-height: 16rem;
