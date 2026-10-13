@@ -54,6 +54,7 @@ PRIVILEGES = [
     "VirtualMachine.Config.Settings",
     "VirtualMachine.Config.EditDevice",  # point the NIC at the port group
     "VirtualMachine.GuestOperations.Query",  # read whether extras finished, through VMware Tools
+    "VirtualMachine.Interact.DeviceConnection",  # NIC connected at power on (if the template's isn't)
     "VirtualMachine.Inventory.CreateFromExisting",
     "VirtualMachine.Inventory.Delete",
     "VirtualMachine.Interact.PowerOff",

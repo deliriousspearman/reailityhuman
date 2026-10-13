@@ -35,12 +35,23 @@ class Capacity:
     used_disk_gb: int
 
 
+def describe(fault: vmodl.MethodFault) -> str:
+    """A vCenter fault as a sentence for people, naming missing privileges."""
+    if isinstance(fault, vim.fault.NoPermission):
+        missing = sorted({p for e in fault.missingPrivileges or [] for p in e.privilegeIds or []} or {fault.privilegeId})
+        return (
+            f"The panel's vCenter account is missing the privilege {', '.join(missing)}. "
+            "Re-run scripts/setup_vcenter.py to grant what the panel needs."
+        )
+    return fault.msg or type(fault).__name__
+
+
 def wait(task: vim.Task, what: str) -> object:
     while task.info.state in (vim.TaskInfo.State.queued, vim.TaskInfo.State.running):
         time.sleep(0.5)
     if task.info.state != vim.TaskInfo.State.success:
         err = task.info.error
-        raise VSphereError(f"{what} failed: {getattr(err, 'msg', None) or err}")
+        raise VSphereError(f"{what} failed: {describe(err) if isinstance(err, vmodl.MethodFault) else err}")
     return task.info.result
 
 
@@ -151,13 +162,21 @@ class VCenter:
         return search(info.rootSnapshotList if info else None)
 
     def _nic_change(self, vm: vim.VirtualMachine) -> list[vim.vm.device.VirtualDeviceSpec]:
-        """Points the first NIC at the configured port group."""
+        """Points the first NIC at the configured port group, connected at power on. Nothing, if it
+        already is (the usual case: the template was built on that port group)."""
         net = self.network
         devices = self.props(vm, "config.hardware.device").get("config.hardware.device") or []
         nics = [d for d in devices if isinstance(d, vim.vm.device.VirtualEthernetCard)]
         if not nics:
             raise VSphereError(f"Template '{vm.name}' has no network adapter")
         nic = nics[0]
+        backing = nic.backing
+        if isinstance(net, vim.dvs.DistributedVirtualPortgroup):
+            on_net = getattr(getattr(backing, "port", None), "portgroupKey", None) == net.key
+        else:
+            on_net = getattr(backing, "deviceName", None) == net.name
+        if on_net and nic.connectable and nic.connectable.startConnected:
+            return []
         if isinstance(net, vim.dvs.DistributedVirtualPortgroup):
             nic.backing = vim.vm.device.VirtualEthernetCard.DistributedVirtualPortBackingInfo(
                 port=vim.dvs.PortConnection(
@@ -166,7 +185,10 @@ class VCenter:
             )
         else:
             nic.backing = vim.vm.device.VirtualEthernetCard.NetworkBackingInfo(network=net, deviceName=net.name)
-        nic.connectable = vim.vm.device.VirtualDevice.ConnectInfo(startConnected=True, connected=True, allowGuestControl=True)
+        # The VM is powered off: only connect it at power on. Changing "connected" now would need
+        # the Device connection privilege as well.
+        connected = bool(nic.connectable and nic.connectable.connected)
+        nic.connectable = vim.vm.device.VirtualDevice.ConnectInfo(startConnected=True, connected=connected, allowGuestControl=True)
         return [vim.vm.device.VirtualDeviceSpec(operation=vim.vm.device.VirtualDeviceSpec.Operation.edit, device=nic)]
 
     def clone(self, template_path: str, name: str, cpu: int, memory_gb: int, extra_config: dict[str, str]) -> vim.VirtualMachine:

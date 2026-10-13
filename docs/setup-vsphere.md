@@ -71,7 +71,7 @@ It's safe to re-run, e.g. after a new version of the panel needs another privile
    | Virtual machine → Change Configuration | Advanced configuration; Change CPU count; Change Memory; Change Settings; Modify device settings |
    | Virtual machine → Guest operations | Guest operation queries |
    | Virtual machine → Edit Inventory | Create from existing; Remove |
-   | Virtual machine → Interaction | Power off; Power on; Reset |
+   | Virtual machine → Interaction | Device connection; Power off; Power on; Reset |
    | Virtual machine → Provisioning | Clone template; Clone virtual machine; Deploy template |
    | Virtual machine → Snapshot management | Create snapshot; Revert to snapshot |
 

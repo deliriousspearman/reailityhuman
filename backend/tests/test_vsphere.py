@@ -70,3 +70,28 @@ def test_clone_onto_distributed_port_group(monkeypatch):
         devices = vc.props(vm, "config.hardware.device")["config.hardware.device"]
         nic = next(d for d in devices if isinstance(d, vim.vm.device.VirtualEthernetCard))
         assert isinstance(nic.backing, vim.vm.device.VirtualEthernetCard.DistributedVirtualPortBackingInfo)
+
+
+def test_missing_privilege_is_named():
+    from pyVmomi import vim
+
+    from app.vsphere import describe
+
+    fault = vim.fault.NoPermission(
+        privilegeId="VirtualMachine.Interact.DeviceConnection",
+        missingPrivileges=[vim.fault.NoPermission.EntityPrivileges(privilegeIds=["VirtualMachine.Interact.DeviceConnection"])],
+    )
+    text = describe(fault)
+    assert "missing the privilege VirtualMachine.Interact.DeviceConnection" in text
+    assert "setup_vcenter.py" in text
+
+
+def test_nic_left_alone_when_already_on_the_port_group():
+    with connect() as vc:
+        tpl = vc.template(TEMPLATE)
+        changes = vc._nic_change(tpl)
+        # vcsim's VMs are on "VM Network", the configured port group. At most it's set to connect at
+        # power on; never "connected" now, which needs the Device connection privilege.
+        for change in changes:
+            assert change.device.connectable.startConnected is True
+            assert not change.device.connectable.connected

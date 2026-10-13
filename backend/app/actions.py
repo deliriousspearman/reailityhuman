@@ -15,7 +15,9 @@ from . import catalogue, cloudinit, extras
 from .config import settings
 from .db import session
 from .models import Job, LogLine, Machine, utcnow
-from .vsphere import VCenter, VSphereError, connect
+from pyVmomi import vmodl
+
+from .vsphere import VCenter, VSphereError, connect, describe
 
 log = logging.getLogger(__name__)
 
@@ -171,8 +173,13 @@ def run(job_id: int, machine_id: str, action: str) -> None:
         with connect() as vc:
             ACTIONS[action](vc, m)
     except Exception as e:  # noqa: BLE001: any failure is reported on the job and the machine
-        message = str(e) if isinstance(e, VSphereError) else f"Unexpected error: {e}"
-        if not isinstance(e, VSphereError):
+        if isinstance(e, VSphereError):
+            message = str(e)
+        elif isinstance(e, vmodl.MethodFault):
+            message = describe(e)
+        else:
+            message = f"Unexpected error: {e}"
+        if not isinstance(e, (VSphereError, vmodl.MethodFault)):
             log.exception("Job %s (%s %s) failed", job_id, action, machine_id)
         with session() as s:
             job = s.get(Job, job_id)
