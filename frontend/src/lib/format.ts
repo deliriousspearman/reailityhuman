@@ -86,6 +86,14 @@ export function inWords(ms: number): string {
 	return duration(ms);
 }
 
+/** States a machine rests in; in any other, a job is working on it and actions must wait. As the
+ * API's STABLE_STATES (backend/app/models.py). */
+const STABLE: SingleMachineState[] = ['running', 'stopped', 'expired', 'error'];
+
+export function isBusy(state: SingleMachineState): boolean {
+	return !STABLE.includes(state);
+}
+
 /** "2 h", "1 d", "3 d" for the duration choices. */
 export function hoursLabel(hours: number): string {
 	return hours < 24 ? `${hours} h` : `${hours / 24} d`;

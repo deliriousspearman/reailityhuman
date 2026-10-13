@@ -1,7 +1,7 @@
 <script lang="ts">
 	// Single machines in a table: name, what it runs, its address, state and how long it has left.
 	// Used on the Machines page and the admin page.
-	import { duration, singleMachineStates } from '$lib/format';
+	import { duration, isBusy, singleMachineStates } from '$lib/format';
 	import { store } from '$lib/store.svelte';
 	import { templateFor } from '$lib/templates';
 	import type { SingleMachine } from '$lib/types';
@@ -54,7 +54,7 @@
 					</td>
 					<td class="row-actions">
 						{#if store.canControlMachine(m) && m.expiresAt !== null && m.state !== 'destroying'}
-							{@const busy = !['running', 'stopped', 'expired', 'error'].includes(m.state)}
+							{@const busy = isBusy(m.state)}
 							<button class="btn btn-sm" type="button" disabled={busy} onclick={() => store.extendMachine(m, 2)}>
 								<Icon name="clock" />
 								{m.state === 'expired' ? 'Extend and start' : '+2 h'}

@@ -5,7 +5,7 @@
 	import ConfirmDialog, { type ConfirmRequest } from '$lib/components/ConfirmDialog.svelte';
 	import Icon from '$lib/components/Icon.svelte';
 	import Status from '$lib/components/Status.svelte';
-	import { ago, clock, duration, inWords, jobStates, singleMachineStates, tookLabel } from '$lib/format';
+	import { ago, clock, duration, inWords, isBusy, jobStates, singleMachineStates, tookLabel } from '$lib/format';
 	import { api } from '$lib/api';
 	import type { Job } from '$lib/types';
 	import { store } from '$lib/store.svelte';
@@ -16,7 +16,7 @@
 	const m = $derived(store.machine(page.params.id ?? ''));
 	const t = $derived(m && store.asDeployed(templateFor(m.template), m.version));
 	const canControl = $derived(m ? store.canControlMachine(m) : false);
-	const busy = $derived(m ? !['running', 'stopped', 'expired', 'error'].includes(m.state) : true);
+	const busy = $derived(m ? isBusy(m.state) : true);
 	const keepBlocker = $derived(m ? store.keepBlocker(m) : null);
 	const webUrl = $derived(m && t ? (t.webUrl ?? 'https://{ip}/').replace('{ip}', m.ip) : '');
 
