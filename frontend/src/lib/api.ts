@@ -10,12 +10,21 @@ export class ApiError extends Error {
 	}
 }
 
+/** Who's using the panel (no sign-in yet: the name they typed), sent so jobs record who did what. */
+let actor = '';
+export function setActor(name: string) {
+	actor = name;
+}
+
 export async function api<T>(path: string, init: { method?: string; body?: unknown } = {}): Promise<T> {
 	let res: Response;
 	try {
 		res = await fetch(`/api${path}`, {
 			method: init.method ?? 'GET',
-			headers: init.body === undefined ? undefined : { 'Content-Type': 'application/json' },
+			headers: {
+				...(init.body === undefined ? {} : { 'Content-Type': 'application/json' }),
+				...(actor ? { 'X-Lab-User': actor } : {}),
+			},
 			body: init.body === undefined ? undefined : JSON.stringify(init.body),
 		});
 	} catch {

@@ -42,7 +42,7 @@ def guest(monkeypatch):
 
 def deploy(name="web01", chosen=()):
     return client.post(
-        "/api/machines", json={"template": "ubuntu", "version": "26.04", "name": name, "hours": 2, "extras": list(chosen)}
+        "/api/machines", json={"template": "ubuntu", "version": "26.04", "owner": "jo", "name": name, "hours": 2, "extras": list(chosen)}
     )
 
 

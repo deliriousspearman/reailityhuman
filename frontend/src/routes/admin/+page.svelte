@@ -63,7 +63,7 @@
 	<h2 id="machines">Machines</h2>
 	<p>{store.machines.filter((m) => m.expiresAt === null).length} kept permanently</p>
 </div>
-<MachineTable machines={store.machines} empty={store.loaded ? 'Nobody has deployed a machine.' : 'Loading…'} />
+<MachineTable machines={store.machines} owners empty={store.loaded ? 'Nobody has deployed a machine.' : 'Loading…'} />
 
 <div class="section-heading">
 	<h2 id="jobs">Jobs</h2>

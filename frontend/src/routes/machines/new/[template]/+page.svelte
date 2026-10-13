@@ -5,7 +5,7 @@
 	import Icon from '$lib/components/Icon.svelte';
 	import { clock, hoursLabel } from '$lib/format';
 	import { ApiError } from '$lib/api';
-	import { store } from '$lib/store.svelte';
+	import { OWNER_RULE, store } from '$lib/store.svelte';
 	import { findTemplate, flagNotes } from '$lib/templates';
 	import type { Access, Extra, ExtraChoice, ExtraOption } from '$lib/types';
 
@@ -16,6 +16,8 @@
 
 	let version = $state('');
 	let name = $state('');
+	/** Who it's for: remembered from last time, as there's no sign-in yet. */
+	let owner = $state(store.user);
 	/** Hours to keep it, or 'keep' for permanently. */
 	let keep = $state<number | 'keep'>(4);
 	let sshKey = $state('');
@@ -51,6 +53,14 @@
 					? `There's already a machine called ${name}.`
 					: null,
 	);
+	const ownerProblem = $derived(
+		!owner.trim()
+			? 'Add your name, so people can tell whose machine it is.'
+			: !OWNER_RULE.test(owner.trim().toLowerCase())
+				? 'Use 1 to 20 lowercase letters, digits or hyphens, starting with a letter.'
+				: null,
+	);
+	const vmName = $derived(`${owner.trim().toLowerCase() || 'you'}-${name || 'name'}-…`);
 	const canKeep = $derived(store.permanentCount < store.permanentQuota);
 	const blocker = $derived(
 		template ? (store.machineBlocker(template) ?? (store.isLive(template.id, version) ? null : `${version} isn't available yet.`)) : null,
@@ -95,12 +105,12 @@
 
 	async function deploy(event: SubmitEvent) {
 		event.preventDefault();
-		if (!template || nameProblem || blocker || extrasProblem || submitting) return;
+		if (!template || nameProblem || ownerProblem || blocker || extrasProblem || submitting) return;
 		submitting = true;
 		failure = null;
 		const extras: ExtraChoice[] = chosen.map((x) => ({ id: x.id, options: { ...picked[x.id] } }));
 		try {
-			const m = await store.deployMachine(template, version, name, keep === 'keep' ? null : keep, sshKey, extras);
+			const m = await store.deployMachine(template, version, name, keep === 'keep' ? null : keep, sshKey, extras, owner);
 			goto(`/machines/${m.id}`);
 		} catch (e) {
 			failure = e instanceof ApiError ? e.message : String(e);
@@ -207,6 +217,23 @@
 				</p>
 			</div>
 
+			<div class="field">
+				<label for="owner">Owner</label>
+				<input
+					id="owner"
+					class="input mono-input"
+					bind:value={owner}
+					autocomplete="username"
+					spellcheck="false"
+					placeholder="e.g. john"
+					aria-invalid={!!ownerProblem}
+					aria-describedby="owner-hint"
+				/>
+				<p id="owner-hint" class="hint" class:problem={ownerProblem}>
+					{#if ownerProblem}{ownerProblem}{:else}Your name. In vCenter it's called <code>{vmName}</code>; remembered in this browser.{/if}
+				</p>
+			</div>
+
 			<fieldset>
 				<legend>Keep it for</legend>
 				<div class="options">
@@ -250,6 +277,7 @@
 			<h2>Summary</h2>
 			<dl>
 				<div><dt>Machine</dt><dd>{template.name} {version}</dd></div>
+				<div><dt>Owner</dt><dd>{owner.trim().toLowerCase() || '–'}</dd></div>
 				<div><dt>Uses</dt><dd>{template.resources.cpu} vCPU, {template.resources.memoryGB} GB memory, {template.resources.diskGB} GB disk</dd></div>
 				<div><dt>Network</dt><dd>The LAN, with an address from DHCP</dd></div>
 				<div><dt>Sign in with</dt><dd>{template.access.map((a) => accessNames[a]).join(', ')}</dd></div>
@@ -269,7 +297,7 @@
 					{/each}
 				</ul>
 			{/if}
-			<button class="btn btn-primary" type="submit" disabled={!!nameProblem || !!blocker || !!extrasProblem || submitting}>
+			<button class="btn btn-primary" type="submit" disabled={!!nameProblem || !!ownerProblem || !!blocker || !!extrasProblem || submitting}>
 				<Icon name="plus" /> {submitting ? 'Deploying…' : `Deploy ${name || 'machine'}`}
 			</button>
 			{#if blocker || failure || extrasProblem}<p class="blocker" role="status"><Icon name="alert" /> {failure ?? blocker ?? extrasProblem}</p>{/if}

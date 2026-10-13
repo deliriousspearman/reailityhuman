@@ -162,6 +162,10 @@
 			<dd>{duration(store.now - m.createdAt)} ago<span class="stat-note">{clock(m.createdAt, store.now)}</span></dd>
 		</div>
 		<div>
+			<dt>Owner</dt>
+			<dd>{m.owner}<span class="stat-note">in vCenter: {m.vmName}</span></dd>
+		</div>
+		<div>
 			<dt>Template</dt>
 			<dd><code>{t.id}/{m.version}</code></dd>
 		</div>

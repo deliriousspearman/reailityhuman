@@ -6,6 +6,9 @@
 
 	let query = $state('');
 	let category = $state<string>('All');
+	/** Just your machines, or everyone's (the limits are shared). */
+	let whose = $state<'mine' | 'all'>('mine');
+	const listed = $derived(whose === 'mine' && store.user ? store.myMachines : store.machines);
 
 	const shown = $derived(
 		templates.filter((t) => {
@@ -51,9 +54,24 @@
 		<p>{store.machines.length} of {store.machineQuota}, {store.permanentCount} of {store.permanentQuota} kept permanently</p>
 	{/if}
 </div>
+{#if store.user}
+	<div class="chips whose" role="group" aria-label="Whose machines">
+		<button type="button" class="chip" aria-pressed={whose === 'mine'} onclick={() => (whose = 'mine')}>
+			Mine ({store.myMachines.length})
+		</button>
+		<button type="button" class="chip" aria-pressed={whose === 'all'} onclick={() => (whose = 'all')}>
+			Everyone ({store.machines.length})
+		</button>
+	</div>
+{/if}
 <MachineTable
-	machines={store.machines}
-	empty={store.loaded ? 'No machines yet. Pick one below to deploy it.' : 'Loading…'}
+	machines={listed}
+	owners
+	empty={!store.loaded
+		? 'Loading…'
+		: whose === 'mine' && store.user
+			? `No machines for ${store.user}. Pick one below to deploy it.`
+			: 'No machines yet. Pick one below to deploy it.'}
 />
 
 <div class="section-heading">
@@ -123,6 +141,9 @@
 	.search {
 		flex: 1 1 16rem;
 		max-width: 24rem;
+	}
+	.whose {
+		margin-bottom: 0.75rem;
 	}
 	.chips {
 		display: flex;

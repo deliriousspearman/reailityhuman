@@ -8,7 +8,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, FastAPI, HTTPException
+from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
@@ -19,13 +19,25 @@ from .db import get_session
 from .models import STABLE_STATES, Job, LogLine, Machine, utcnow
 from .vsphere import VSphereError, connect
 
-# No sign-in yet: everything belongs to everyone.
-OWNER = "anyone"
+# No sign-in yet: people type their name when they deploy, and the panel sends it with every
+# request (X-Lab-User) so jobs record who did what. Without one, it's "anyone".
+ANYONE = "anyone"
 NAME_RULE = re.compile(r"^[a-z][a-z0-9-]{0,14}$")
+OWNER_RULE = re.compile(r"^[a-z][a-z0-9-]{0,19}$")
+OWNER_PROBLEM = "Use 1 to 20 lowercase letters, digits or hyphens for your name, starting with a letter."
 MAX_HOURS = 24 * 30
 
 router = APIRouter(prefix="/api")
 Db = Annotated[Session, Depends(get_session)]
+
+
+def actor(x_lab_user: Annotated[str | None, Header()] = None) -> str:
+    """Who's asking, as the panel says (no sign-in yet, so it's taken on trust)."""
+    name = (x_lab_user or "").strip().lower()
+    return name if OWNER_RULE.match(name) else ANYONE
+
+
+Actor = Annotated[str, Depends(actor)]
 
 
 def ms(t: datetime | None) -> int | None:
@@ -93,11 +105,11 @@ def add_log(db: Session, m: Machine, text_: str, tone: str | None = None) -> Non
     db.add(LogLine(machine_id=m.id, text=text_, tone=tone))
 
 
-def queue(db: Session, m: Machine, action: str) -> None:
+def queue(db: Session, m: Machine, action: str, by: str) -> None:
     """Commits what's been changed, then queues the job (which runs on another connection)."""
     db.commit()
     try:
-        jobs.enqueue(m.id, action, OWNER)
+        jobs.enqueue(m.id, action, by)
     except Exception as e:
         raise HTTPException(503, f"Couldn't queue the job: {e}") from e
 
@@ -193,6 +205,8 @@ class DeployRequest(BaseModel):
     # None: keep permanently.
     hours: int | None = Field(default=None, ge=1, le=MAX_HOURS)
     sshKey: str | None = Field(default=None, max_length=4096)
+    # Who it's for; part of the VM's name in vCenter.
+    owner: str = Field(max_length=64)
     extras: list[ExtraChoice] = Field(default_factory=list, max_length=10)
 
 
@@ -218,6 +232,9 @@ def deploy_machine(req: DeployRequest, db: Db) -> dict:
         raise HTTPException(422, f"{req.template} {req.version} can't be deployed yet.")
     if not NAME_RULE.match(req.name):
         raise HTTPException(422, "Use 1 to 15 lowercase letters, digits or hyphens, starting with a letter.")
+    owner = req.owner.strip().lower()
+    if not OWNER_RULE.match(owner):
+        raise HTTPException(422, OWNER_PROBLEM)
     try:
         chosen = extras.resolve(tpl.extras, [c.model_dump() for c in req.extras], req.name)
     except extras.ExtraError as e:
@@ -243,22 +260,23 @@ def deploy_machine(req: DeployRequest, db: Db) -> dict:
         name=req.name,
         template=tpl.template,
         version=tpl.version,
-        owner=OWNER,
+        owner=owner,
         state="deploying",
         expires_at=None if req.hours is None else utcnow() + timedelta(hours=req.hours),
-        vm_name=f"{req.name}-{machine_id.removeprefix('m-')}",
+        # "<owner>-<name>-<id>": whose it is, at a glance in vCenter, and never clashing.
+        vm_name=f"{owner}-{req.name}-{machine_id.removeprefix('m-')}",
         username=tpl.username,
         password=cloudinit.generate_password(cfg.password_length),
         ssh_key=(req.sshKey or "").strip() or None,
         extras=chosen,
     )
     db.add(m)
-    add_log(db, m, f"Deploy requested ({'kept permanently' if req.hours is None else hours_label(req.hours)})", "muted")
+    add_log(db, m, f"Deploy requested by {owner} ({'kept permanently' if req.hours is None else hours_label(req.hours)})", "muted")
     for c in chosen:
         x = extras.find(c["id"])
         details = ", ".join(f"{o.label.lower()} {c['options'][o.id]}" for o in x.options if c["options"].get(o.id))
         add_log(db, m, f"With {x.name}{f' ({details})' if details else ''}", "muted")
-    queue(db, m, "deploy")
+    queue(db, m, "deploy", owner)
     db.refresh(m)
     return machine_out(m)
 
@@ -285,56 +303,56 @@ def capacity_blocker(tpl: catalogue.LiveTemplate) -> str | None:
     return None
 
 
-def _action(machine_id: str, db: Session, action: str, state: str, message: str) -> dict:
+def _action(machine_id: str, db: Session, who: str, action: str, state: str, message: str) -> dict:
     m = get_machine(db, machine_id)
     require_idle(m)
     if m.state == "expired" and action != "destroy":
         raise HTTPException(409, f"{m.name} has expired. Extend it or keep it to use it again.")
     m.state = state
-    add_log(db, m, message, "muted")
-    queue(db, m, action)
+    add_log(db, m, message if who == ANYONE else f"{message}, asked by {who}", "muted")
+    queue(db, m, action, who)
     db.refresh(m)
     return machine_out(m)
 
 
 @router.post("/machines/{machine_id}/start")
-def start_machine(machine_id: str, db: Db) -> dict:
-    return _action(machine_id, db, "start", "deploying", "Starting")
+def start_machine(machine_id: str, db: Db, who: Actor) -> dict:
+    return _action(machine_id, db, who, "start", "deploying", "Starting")
 
 
 @router.post("/machines/{machine_id}/stop")
-def stop_machine(machine_id: str, db: Db) -> dict:
-    return _action(machine_id, db, "stop", "stopping", "Stopping")
+def stop_machine(machine_id: str, db: Db, who: Actor) -> dict:
+    return _action(machine_id, db, who, "stop", "stopping", "Stopping")
 
 
 @router.post("/machines/{machine_id}/reboot")
-def reboot_machine(machine_id: str, db: Db) -> dict:
-    return _action(machine_id, db, "reboot", "deploying", "Rebooting")
+def reboot_machine(machine_id: str, db: Db, who: Actor) -> dict:
+    return _action(machine_id, db, who, "reboot", "deploying", "Rebooting")
 
 
 @router.post("/machines/{machine_id}/reset")
-def reset_machine(machine_id: str, db: Db) -> dict:
-    return _action(machine_id, db, "reset", "resetting", "Reset requested")
+def reset_machine(machine_id: str, db: Db, who: Actor) -> dict:
+    return _action(machine_id, db, who, "reset", "resetting", "Reset requested")
 
 
 @router.delete("/machines/{machine_id}")
-def destroy_machine(machine_id: str, db: Db) -> dict:
-    return _action(machine_id, db, "destroy", "destroying", "Destroy requested")
+def destroy_machine(machine_id: str, db: Db, who: Actor) -> dict:
+    return _action(machine_id, db, who, "destroy", "destroying", "Destroy requested")
 
 
 @router.post("/machines/{machine_id}/extend")
-def extend_machine(machine_id: str, req: Hours, db: Db) -> dict:
+def extend_machine(machine_id: str, req: Hours, db: Db, who: Actor) -> dict:
     m = get_machine(db, machine_id)
     if m.expires_at is None:
         raise HTTPException(409, f"{m.name} is kept permanently, so there's nothing to extend.")
     require_idle(m)
     m.expires_at = max(m.expires_at, utcnow()) + timedelta(hours=req.hours)
     add_log(db, m, f"Extended by {hours_label(req.hours)}")
-    return _revive_or_save(db, m)
+    return _revive_or_save(db, m, who)
 
 
 @router.post("/machines/{machine_id}/keep")
-def keep_machine(machine_id: str, db: Db) -> dict:
+def keep_machine(machine_id: str, db: Db, who: Actor) -> dict:
     cfg = settings()
     m = get_machine(db, machine_id)
     require_idle(m)
@@ -344,7 +362,7 @@ def keep_machine(machine_id: str, db: Db) -> dict:
             raise HTTPException(409, f"{cfg.max_permanent} machines can be kept permanently. Set an expiry on another one first.")
     m.expires_at = None
     add_log(db, m, "Kept permanently")
-    return _revive_or_save(db, m)
+    return _revive_or_save(db, m, who)
 
 
 @router.post("/machines/{machine_id}/expiry")
@@ -357,12 +375,12 @@ def set_expiry(machine_id: str, req: Hours, db: Db) -> dict:
     return machine_out(m)
 
 
-def _revive_or_save(db: Session, m: Machine) -> dict:
+def _revive_or_save(db: Session, m: Machine, who: str) -> dict:
     """An expired machine that gets more time is started again."""
     if m.state == "expired":
         m.state = "deploying"
         add_log(db, m, "Starting", "muted")
-        queue(db, m, "start")
+        queue(db, m, "start", who)
     else:
         db.commit()
     db.refresh(m)

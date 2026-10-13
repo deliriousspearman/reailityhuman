@@ -2,7 +2,7 @@
 // put the machine it returns straight into the list, so the page reacts before the next poll; the
 // worker's progress (log lines, state changes) arrives with the polls.
 // There's no sign-in yet, so every machine is everyone's.
-import { api, ApiError } from './api';
+import { api, ApiError, setActor } from './api';
 import type { Capacity, ExtraChoice, Job, MachineTemplate, PanelConfig, SingleMachine } from './types';
 
 const SEC = 1000;
@@ -10,6 +10,10 @@ const HOUR = 3600 * SEC;
 /** How often to poll while the tab is visible, and while it's hidden. */
 const POLL = 3 * SEC;
 const POLL_HIDDEN = 15 * SEC;
+/** Where the browser remembers who you are (no sign-in yet). */
+const USER_KEY = 'lab-deploy:user';
+/** The API's rule for owner names (backend/app/api.py). */
+export const OWNER_RULE = /^[a-z][a-z0-9-]{0,19}$/;
 
 export interface Notice {
 	text: string;
@@ -31,12 +35,17 @@ class PanelStore {
 	notice = $state<Notice | null>(null);
 	/** Ticks every second, for countdowns and uptimes. */
 	now = $state(Date.now());
+	/** Your name, as typed when you last deployed; '' until then. Stands in for signing in. */
+	user = $state('');
 
 	#lastPoll = 0;
 	#noticeTimer: ReturnType<typeof setTimeout> | undefined;
 
 	constructor() {
 		if (typeof window === 'undefined') return;
+		try {
+			this.setUser(localStorage.getItem(USER_KEY) ?? '', false);
+		} catch {}
 		void this.loadConfig();
 		void this.refresh();
 		setInterval(() => {
@@ -80,6 +89,19 @@ class PanelStore {
 		}
 	}
 
+	/** Remembers who you are in this browser. */
+	setUser(name: string, remember = true) {
+		const clean = name.trim().toLowerCase();
+		if (clean && !OWNER_RULE.test(clean)) return;
+		this.user = clean;
+		setActor(clean);
+		if (!remember) return;
+		try {
+			if (clean) localStorage.setItem(USER_KEY, clean);
+			else localStorage.removeItem(USER_KEY);
+		} catch {}
+	}
+
 	say(text: string, tone: Notice['tone'] = 'error') {
 		this.notice = { text, tone };
 		clearTimeout(this.#noticeTimer);
@@ -93,9 +115,9 @@ class PanelStore {
 		return this.config?.graceMs ?? 24 * HOUR;
 	}
 
-	/** No sign-in yet: everyone's machines are "yours". */
+	/** Machines deployed under your name; everyone's until you've given one. */
 	get myMachines(): SingleMachine[] {
-		return this.machines;
+		return this.user ? this.machines.filter((m) => m.owner === this.user) : this.machines;
 	}
 
 	get machineQuota() {
@@ -178,12 +200,14 @@ class PanelStore {
 		version: string,
 		name: string,
 		hours: number | null,
-		sshKey?: string,
-		extras: ExtraChoice[] = [],
+		sshKey: string | undefined,
+		extras: ExtraChoice[],
+		owner: string,
 	): Promise<SingleMachine> {
+		this.setUser(owner);
 		const m = await api<SingleMachine>('/machines', {
 			method: 'POST',
-			body: { template: template.id, version, name, hours, sshKey: sshKey?.trim() || null, extras },
+			body: { template: template.id, version, name, hours, sshKey: sshKey?.trim() || null, extras, owner: this.user },
 		});
 		this.#put(m);
 		void this.refresh();

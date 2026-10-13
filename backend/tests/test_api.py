@@ -17,7 +17,7 @@ client = TestClient(app)
 
 
 def deploy(queued, name="ubuntu01", hours=4):
-    r = client.post("/api/machines", json={"template": "ubuntu", "version": "26.04", "name": name, "hours": hours})
+    r = client.post("/api/machines", json={"template": "ubuntu", "version": "26.04", "owner": "jo", "name": name, "hours": hours})
     assert r.status_code == 201, r.text
     run_queued(queued)
     return client.get(f"/api/machines/{r.json()['id']}").json()
@@ -73,7 +73,7 @@ def test_deploy_then_lifecycle(queued):
 
 
 def test_busy_machine_rejects_actions(queued):
-    r = client.post("/api/machines", json={"template": "ubuntu", "version": "26.04", "name": "busy01", "hours": 2})
+    r = client.post("/api/machines", json={"template": "ubuntu", "version": "26.04", "owner": "jo", "name": "busy01", "hours": 2})
     assert client.post(f"/api/machines/{r.json()['id']}/stop").status_code == 409
     run_queued(queued)
 
@@ -82,8 +82,11 @@ def test_busy_machine_rejects_actions(queued):
     "body, status",
     [
         ({"template": "pfsense", "version": "2.8.0", "name": "fw01", "hours": 2}, 422),
-        ({"template": "ubuntu", "version": "26.04", "name": "Bad_Name", "hours": 2}, 422),
-        ({"template": "ubuntu", "version": "26.04", "name": "ok01", "hours": 0}, 422),
+        ({"template": "ubuntu", "version": "26.04", "owner": "jo", "name": "Bad_Name", "hours": 2}, 422),
+        ({"template": "ubuntu", "version": "26.04", "owner": "jo", "name": "ok01", "hours": 0}, 422),
+        ({"template": "ubuntu", "version": "26.04", "name": "ok01", "hours": 2}, 422),  # no owner
+        ({"template": "ubuntu", "version": "26.04", "owner": "Jo Bloggs", "name": "ok01", "hours": 2}, 422),
+        ({"template": "ubuntu", "version": "26.04", "owner": "1jo", "name": "ok01", "hours": 2}, 422),
     ],
 )
 def test_deploy_validation(body, status):
@@ -92,11 +95,11 @@ def test_deploy_validation(body, status):
 
 def test_duplicate_name_and_limits(queued, monkeypatch):
     deploy(queued, "dup01")
-    assert client.post("/api/machines", json={"template": "ubuntu", "version": "26.04", "name": "dup01", "hours": 2}).status_code == 409
+    assert client.post("/api/machines", json={"template": "ubuntu", "version": "26.04", "owner": "jo", "name": "dup01", "hours": 2}).status_code == 409
     from app.config import settings
 
     monkeypatch.setattr(settings(), "max_permanent", 0)
-    r = client.post("/api/machines", json={"template": "ubuntu", "version": "26.04", "name": "perm01", "hours": None})
+    r = client.post("/api/machines", json={"template": "ubuntu", "version": "26.04", "owner": "jo", "name": "perm01", "hours": None})
     assert r.status_code == 409 and "permanently" in r.json()["detail"]
 
 
@@ -156,3 +159,28 @@ def test_reconcile_picks_up_changes_made_in_vcenter(queued):
         vc.power_off(vc.require_vm(m["vmName"]))
     actions.reconcile()
     assert client.get(f"/api/machines/{m['id']}").json()["state"] == "stopped"
+
+
+def test_owner_names_the_vm_and_the_jobs(queued):
+    r = client.post(
+        "/api/machines", json={"template": "ubuntu", "version": "26.04", "owner": " John ", "name": "ubuntu02", "hours": 2}
+    )
+    assert r.status_code == 201, r.text
+    m = r.json()
+    assert m["owner"] == "john"
+    assert m["name"] == "ubuntu02"  # the hostname stays as chosen
+    assert m["vmName"] == f"john-ubuntu02-{m['id'].removeprefix('m-')}"
+    run_queued(queued)
+    with connect() as vc:
+        assert vc.vm(m["vmName"]) is not None
+
+    # Actions record who asked (X-Lab-User), or "anyone" without it.
+    assert client.post(f"/api/machines/{m['id']}/stop", headers={"X-Lab-User": "sam"}).status_code == 200
+    run_queued(queued)
+    assert client.post(f"/api/machines/{m['id']}/start").status_code == 200
+    run_queued(queued)
+    by = {j["action"]: j["by"] for j in client.get("/api/jobs").json()}
+    assert by == {"Deploy ubuntu02": "john", "Stop ubuntu02": "sam", "Start ubuntu02": "anyone"}
+    texts = [line["text"] for line in client.get(f"/api/machines/{m['id']}").json()["log"]]
+    assert "Deploy requested by john (2 h)" in texts
+    assert "Stopping, asked by sam" in texts
