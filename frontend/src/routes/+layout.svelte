@@ -8,6 +8,7 @@
 	import { page } from '$app/state';
 	import AppHeader from '$lib/components/AppHeader.svelte';
 	import AppSidebar from '$lib/components/AppSidebar.svelte';
+	import ExpiryWarning from '$lib/components/ExpiryWarning.svelte';
 	import { store } from '$lib/store.svelte';
 
 	let { children } = $props();
@@ -35,6 +36,7 @@
 						<span><strong>vCenter isn't set up yet.</strong> Machines can't be deployed until an admin configures it.</span>
 					</p>
 				{/if}
+				<ExpiryWarning />
 				{@render children()}
 			</main>
 			{#if store.notice}
