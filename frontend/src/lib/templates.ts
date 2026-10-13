@@ -525,6 +525,23 @@ export function findTemplate(id: string): MachineTemplate | undefined {
 	return templates.find((t) => t.id === id);
 }
 
+/** A machine's template, or a plain stand-in when the catalogue no longer has it (renamed or
+ * removed), so machines deployed from it can still be seen and controlled. */
+export function templateFor(id: string): MachineTemplate {
+	return (
+		findTemplate(id) ?? {
+			id,
+			name: id,
+			category: 'Linux',
+			os: 'Other',
+			description: '',
+			versions: [],
+			resources: { cpu: 0, memoryGB: 0, diskGB: 0 },
+			access: ['ssh'],
+		}
+	);
+}
+
 /** Categories in the order the catalogue shows them. */
 export const categories: MachineTemplate['category'][] = [
 	'Firewalls and routers',

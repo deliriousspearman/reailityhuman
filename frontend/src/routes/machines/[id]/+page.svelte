@@ -9,12 +9,12 @@
 	import { api } from '$lib/api';
 	import type { Job } from '$lib/types';
 	import { store } from '$lib/store.svelte';
-	import { findTemplate, flagNotes } from '$lib/templates';
+	import { flagNotes, templateFor } from '$lib/templates';
 
 	const HOUR = 3_600_000;
 
 	const m = $derived(store.machine(page.params.id ?? ''));
-	const t = $derived(m && findTemplate(m.template));
+	const t = $derived(m && templateFor(m.template));
 	const canControl = $derived(m ? store.canControlMachine(m) : false);
 	const busy = $derived(m ? !['running', 'stopped', 'expired', 'error'].includes(m.state) : true);
 	const uses = $derived(m && t ? store.resourcesFor(t, m.version) : { cpu: 0, memoryGB: 0, diskGB: 0 });
@@ -184,10 +184,12 @@
 				<span class="stat-note">on the LAN, from DHCP</span>
 			</dd>
 		</div>
-		<div>
-			<dt>Uses</dt>
-			<dd>{uses.cpu} vCPU, {uses.memoryGB} GB<span class="stat-note">{uses.diskGB} GB disk</span></dd>
-		</div>
+		{#if uses.cpu}
+			<div>
+				<dt>Uses</dt>
+				<dd>{uses.cpu} vCPU, {uses.memoryGB} GB<span class="stat-note">{uses.diskGB} GB disk</span></dd>
+			</div>
+		{/if}
 		<div>
 			<dt>Deployed</dt>
 			<dd>{duration(store.now - m.createdAt)} ago<span class="stat-note">{clock(m.createdAt, store.now)}</span></dd>

@@ -3,7 +3,7 @@
 	// Used on the Machines page and the admin page.
 	import { duration, singleMachineStates } from '$lib/format';
 	import { store } from '$lib/store.svelte';
-	import { findTemplate } from '$lib/templates';
+	import { templateFor } from '$lib/templates';
 	import type { SingleMachine } from '$lib/types';
 	import Icon from './Icon.svelte';
 	import Status from './Status.svelte';
@@ -32,13 +32,13 @@
 		</thead>
 		<tbody>
 			{#each machines as m (m.id)}
-				{@const t = findTemplate(m.template)}
+				{@const t = templateFor(m.template)}
 				{@const left = m.expiresAt === null ? null : m.expiresAt - store.now}
 				<tr>
 					<th scope="row"><a href="/machines/{m.id}">{m.name}</a></th>
 					<td>
-						{#if t}<span class="os" data-os={t.os.toLowerCase()}>{t.os}</span>{/if}
-						{t?.name} {m.version}
+						<span class="os" data-os={t.os.toLowerCase()}>{t.os}</span>
+						{t.name} {m.version}
 					</td>
 					{#if owners}<td class="mono">{m.owner}</td>{/if}
 					<td class="mono">{m.ip || '–'}</td>
