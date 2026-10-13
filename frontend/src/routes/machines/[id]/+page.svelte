@@ -20,12 +20,18 @@
 	const keepBlocker = $derived(m ? store.keepBlocker(m) : null);
 	const webUrl = $derived(m && t ? (t.webUrl ?? 'https://{ip}/').replace('{ip}', m.ip) : '');
 
+	// Its log only comes with the machine on its own, so poll that while this page is open.
+	$effect(() => {
+		store.watch(page.params.id ?? null);
+		return () => store.watch(null);
+	});
+
 	// This machine's jobs, with any errors in full. Fetched again whenever its state or log changes.
 	let jobs = $state<Job[]>([]);
 	$effect(() => {
 		const id = m?.id;
 		void m?.state;
-		void m?.log.length;
+		void m?.log?.length;
 		if (!id) return;
 		api<Job[]>(`/jobs?machine=${encodeURIComponent(id)}&limit=20`)
 			.then((j) => (jobs = j))
@@ -296,7 +302,7 @@
 			<div class="section-heading">
 				<h2 id="activity-title">Activity</h2>
 			</div>
-			<ActivityLog lines={m.log} title="machines/{m.name}" />
+			<ActivityLog lines={m.log ?? []} title="machines/{m.name}" />
 			{#if jobs.length}
 				<div class="section-heading">
 					<h2>Jobs</h2>

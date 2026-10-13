@@ -385,3 +385,9 @@ def test_old_finished_jobs_are_pruned(queued):
         old.finished_at = utcnow() - timedelta(days=91)
     actions.prune_history()
     assert [j["action"] for j in client.get("/api/jobs").json()] == ["Deploy new01"]
+
+
+def test_the_list_leaves_logs_out(queued):
+    m = deploy(queued, "list01")
+    assert "log" not in client.get("/api/machines").json()[0]
+    assert client.get(f"/api/machines/{m['id']}").json()["log"]

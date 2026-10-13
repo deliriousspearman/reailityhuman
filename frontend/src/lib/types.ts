@@ -185,7 +185,8 @@ export interface SingleMachine {
 	extras: { id: string; name: string; options: Record<string, string> }[];
 	/** Addresses the extras serve, e.g. http://<ip>/; empty until the machine has an address. */
 	links: string[];
-	log: LogLine[];
+	/** Only from GET /machines/{id}: the list leaves it out. */
+	log?: LogLine[];
 }
 
 /** A setting on an extra, e.g. the domain name a certificate is for. */

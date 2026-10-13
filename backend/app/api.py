@@ -49,7 +49,8 @@ def ms(t: datetime | None) -> int | None:
     return None if t is None else int(t.timestamp() * 1000)
 
 
-def machine_out(m: Machine) -> dict:
+def machine_out(m: Machine, log: bool = True) -> dict:
+    """`log`: with its activity log (left out of the list, which the panel polls every few seconds)."""
     return {
         "id": m.id,
         "name": m.name,
@@ -68,7 +69,11 @@ def machine_out(m: Machine) -> dict:
             for c in m.extras or []
         ],
         "links": extras.links(m.extras or [], m.ip or ""),
-        "log": [{"at": ms(line.at), "text": line.text, **({"tone": line.tone} if line.tone else {})} for line in m.log],
+        **(
+            {"log": [{"at": ms(line.at), "text": line.text, **({"tone": line.tone} if line.tone else {})} for line in m.log]}
+            if log
+            else {}
+        ),
     }
 
 
@@ -253,7 +258,8 @@ class Hours(BaseModel):
 
 @router.get("/machines")
 def list_machines(db: Db) -> list[dict]:
-    return [machine_out(m) for m in db.scalars(select(Machine).order_by(Machine.created_at))]
+    """Every machine, without its log (GET /machines/{id} has it)."""
+    return [machine_out(m, log=False) for m in db.scalars(select(Machine).order_by(Machine.created_at))]
 
 
 @router.get("/machines/{machine_id}")

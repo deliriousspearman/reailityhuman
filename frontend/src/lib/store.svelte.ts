@@ -37,6 +37,8 @@ class PanelStore {
 	user = $state('');
 
 	#lastPoll = 0;
+	/** The machine whose page is open: polled in full, with its log, which the list leaves out. */
+	#watched: string | null = null;
 	#noticeTimer: ReturnType<typeof setTimeout> | undefined;
 
 	constructor() {
@@ -67,8 +69,15 @@ class PanelStore {
 	async refresh() {
 		this.#lastPoll = Date.now();
 		try {
-			const [machines, jobs] = await Promise.all([api<SingleMachine[]>('/machines'), api<Job[]>('/jobs?limit=50')]);
-			this.machines = machines;
+			const watched = this.#watched;
+			const [machines, jobs, detail] = await Promise.all([
+				api<SingleMachine[]>('/machines'),
+				api<Job[]>('/jobs?limit=50'),
+				watched ? api<SingleMachine>(`/machines/${encodeURIComponent(watched)}`).catch(() => null) : null,
+			]);
+			// Keep logs already fetched until a newer one arrives, so the page doesn't flicker.
+			const before = new Map(this.machines.map((m) => [m.id, m.log]));
+			this.machines = machines.map((m) => (m.id === detail?.id ? detail : { ...m, log: before.get(m.id) }));
 			this.jobs = jobs;
 			this.offline = null;
 			this.loaded = true;
@@ -85,6 +94,12 @@ class PanelStore {
 		} catch (e) {
 			this.capacityProblem = e instanceof Error ? e.message : String(e);
 		}
+	}
+
+	/** Follows this machine in full (with its log) from now on, or none; polls it straight away. */
+	watch(id: string | null) {
+		this.#watched = id;
+		if (id) void this.refresh();
 	}
 
 	/** Remembers who you are in this browser. */
