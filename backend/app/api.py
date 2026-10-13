@@ -1,5 +1,6 @@
 """The panel's HTTP API, under /api. Responses use the frontend's shapes (src/lib/types.ts)."""
 
+import logging
 import re
 import secrets
 import time
@@ -29,6 +30,7 @@ PASSWORD_MIN = 8
 OWNER_PROBLEM = "Use 1 to 20 lowercase letters, digits or hyphens for your name, starting with a letter."
 MAX_HOURS = 24 * 30
 
+log = logging.getLogger(__name__)
 router = APIRouter(prefix="/api")
 Db = Annotated[Session, Depends(get_session)]
 
@@ -438,6 +440,42 @@ def _revive_or_save(db: Session, m: Machine, who: str) -> dict:
         db.commit()
     db.refresh(m)
     return machine_out(m)
+
+
+# Leftover VMs -------------------------------------------------------------------------------------
+
+
+def _leftovers(db: Session) -> dict[str, bool]:
+    """VMs in the machines folder that no machine owns (name -> powered on): left by a deploy that
+    failed partway, or by a machine whose record was lost."""
+    try:
+        with connect() as vc:
+            vms = vc.machine_vms()
+    except VSphereError as e:
+        raise HTTPException(503, str(e)) from e
+    owned = set(db.scalars(select(Machine.vm_name)))
+    return {name: on for name, on in vms.items() if name not in owned}
+
+
+@router.get("/leftovers")
+def list_leftovers(db: Db) -> list[dict]:
+    return [{"name": name, "poweredOn": on} for name, on in sorted(_leftovers(db).items())]
+
+
+@router.delete("/leftovers/{name}")
+def delete_leftover(name: str, db: Db, who: Actor) -> dict:
+    """Deletes a leftover VM, after checking again that no machine owns it."""
+    if name not in _leftovers(db):
+        raise HTTPException(404, f"{name} isn't a leftover VM: it's gone already, or a machine owns it.")
+    try:
+        with connect() as vc:
+            if vm := vc.vm(name):
+                vc.destroy(vm)
+    except VSphereError as e:
+        raise HTTPException(503, str(e)) from e
+    log.info("Leftover VM %s deleted, asked by %s", name, who)
+    forget_capacity()
+    return {"name": name}
 
 
 # Jobs -----------------------------------------------------------------------------------------------

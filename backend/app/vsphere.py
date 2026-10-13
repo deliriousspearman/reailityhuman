@@ -154,6 +154,15 @@ class VCenter:
                 return child
         return None
 
+    def machine_vms(self) -> dict[str, bool]:
+        """Every VM in the machines folder: name -> powered on."""
+        out = {}
+        for child in self.folder.childEntity:
+            if isinstance(child, vim.VirtualMachine):
+                p = self.props(child, "name", "runtime.powerState")
+                out[p["name"]] = p.get("runtime.powerState") == "poweredOn"
+        return out
+
     def require_vm(self, name: str) -> vim.VirtualMachine:
         vm = self.vm(name)
         if vm is None:

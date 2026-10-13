@@ -26,5 +26,6 @@ export const categorySlug = (category: string) => `cat-${category.toLowerCase().
 export const adminSections = [
 	{ id: 'capacity', label: 'Capacity' },
 	{ id: 'machines', label: 'Machines' },
+	{ id: 'leftovers', label: 'Leftover VMs' },
 	{ id: 'jobs', label: 'Jobs' },
 ];

@@ -2,9 +2,11 @@
 	import { onMount } from 'svelte';
 	import MachineTable from '$lib/components/MachineTable.svelte';
 	import Meter from '$lib/components/Meter.svelte';
+	import ConfirmDialog, { type ConfirmRequest } from '$lib/components/ConfirmDialog.svelte';
 	import Icon from '$lib/components/Icon.svelte';
 	import Status from '$lib/components/Status.svelte';
 	import { ago, duration, type Tone } from '$lib/format';
+	import { api, ApiError } from '$lib/api';
 	import { store } from '$lib/store.svelte';
 	import type { JobState } from '$lib/types';
 
@@ -40,6 +42,36 @@
 			copied = id;
 			setTimeout(() => (copied = ''), 1500);
 		} catch {}
+	}
+
+	// VMs in the machines folder that no machine owns, e.g. from a deploy that failed partway.
+	let leftovers = $state<{ name: string; poweredOn: boolean }[] | null>(null);
+	let leftoversProblem = $state<string | null>(null);
+	let request = $state<ConfirmRequest>();
+	async function loadLeftovers() {
+		try {
+			leftovers = await api('/leftovers');
+			leftoversProblem = null;
+		} catch (e) {
+			leftoversProblem = e instanceof Error ? e.message : String(e);
+		}
+	}
+	onMount(() => void loadLeftovers());
+	function deleteLeftover(name: string) {
+		request = {
+			title: `Delete ${name}?`,
+			body: `The VM ${name} and its disk are deleted from vCenter. No machine in the panel owns it. This can't be undone.`,
+			label: 'Delete',
+			danger: true,
+			run: async () => {
+				try {
+					await api(`/leftovers/${encodeURIComponent(name)}`, { method: 'DELETE' });
+				} catch (e) {
+					store.say(e instanceof ApiError ? e.message : String(e));
+				}
+				await loadLeftovers();
+			},
+		};
 	}
 
 	const roomFor = $derived(cap ? Math.max(0, Math.floor((cap.total.memoryGB - cap.used.memoryGB) / biggest)) : 0);
@@ -82,6 +114,41 @@
 	<p>{store.machines.filter((m) => m.expiresAt === null).length} kept permanently</p>
 </div>
 <MachineTable machines={store.machines} owners empty={store.loaded ? 'Nobody has deployed a machine.' : 'Loading…'} />
+
+<div class="section-heading">
+	<h2 id="leftovers">Leftover VMs</h2>
+	<p>VMs in the machines folder that no machine owns, e.g. from a deploy that failed partway</p>
+</div>
+{#if leftoversProblem}
+	<p class="problem"><strong>Can't list them:</strong> {leftoversProblem}</p>
+{:else if !leftovers}
+	<p class="loading">Asking vCenter…</p>
+{:else if !leftovers.length}
+	<p class="loading">None.</p>
+{:else}
+	<div class="table-wrap">
+		<table class="table">
+			<thead>
+				<tr>
+					<th scope="col">VM in vCenter</th>
+					<th scope="col">Power</th>
+					<th scope="col"><span class="visually-hidden">Actions</span></th>
+				</tr>
+			</thead>
+			<tbody>
+				{#each leftovers as vm (vm.name)}
+					<tr>
+						<th scope="row" class="mono">{vm.name}</th>
+						<td>{vm.poweredOn ? 'On' : 'Off'}</td>
+						<td class="toggle-cell">
+							<button class="btn btn-sm" type="button" onclick={() => deleteLeftover(vm.name)}><Icon name="trash" /> Delete</button>
+						</td>
+					</tr>
+				{/each}
+			</tbody>
+		</table>
+	</div>
+{/if}
 
 <div class="section-heading">
 	<h2 id="jobs">Jobs</h2>
@@ -153,6 +220,8 @@
 		</tbody>
 	</table>
 </div>
+
+<ConfirmDialog bind:request />
 
 <style>
 	.lead {

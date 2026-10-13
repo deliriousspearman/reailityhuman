@@ -316,3 +316,18 @@ def test_redeploy_starts_over_with_the_same_settings(queued):
     with connect() as vc:
         assert vc.vm(m["vmName"]) is not None
     assert client.get("/api/jobs").json()[0]["action"] == "Redeploy again01"
+
+
+def test_leftover_vms_can_be_listed_and_deleted(queued):
+    from app import cloudinit
+    from .conftest import TEMPLATE
+
+    m = deploy(queued, "kept01")
+    with connect() as vc:
+        vc.clone(TEMPLATE, "jo-half01-dead", 1, 1, cloudinit.guestinfo("m-dead", "half01", "ubuntu", "secret", None))
+    assert client.get("/api/leftovers").json() == [{"name": "jo-half01-dead", "poweredOn": False}]
+    assert client.delete(f"/api/leftovers/{m['vmName']}").status_code == 404  # a machine owns it
+    assert client.delete("/api/leftovers/jo-half01-dead").status_code == 200
+    assert client.get("/api/leftovers").json() == []
+    with connect() as vc:
+        assert vc.vm("jo-half01-dead") is None and vc.vm(m["vmName"]) is not None
