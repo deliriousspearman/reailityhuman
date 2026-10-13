@@ -145,6 +145,13 @@ class PanelStore {
 		return !!this.config?.templates.some((t) => t.template === templateId && (version === undefined || t.version === version));
 	}
 
+	/** What a machine of this template uses: as deployed (templates.yaml, via the API) when that
+	 * version can be deployed, else the catalogue's estimate. No version: the first live one. */
+	resourcesFor(template: MachineTemplate, version?: string): MachineTemplate['resources'] {
+		const live = this.config?.templates.find((t) => t.template === template.id && (version === undefined || t.version === version));
+		return live?.resources ?? template.resources;
+	}
+
 	/** Extras this version of a template offers. */
 	extrasFor(templateId: string, version: string) {
 		return this.config?.templates.find((t) => t.template === templateId && t.version === version)?.extras ?? [];

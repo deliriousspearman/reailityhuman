@@ -15,6 +15,7 @@
 	const t = $derived(m && findTemplate(m.template));
 	const canControl = $derived(m ? store.canControlMachine(m) : false);
 	const busy = $derived(m ? !['running', 'stopped', 'expired', 'error'].includes(m.state) : true);
+	const uses = $derived(m && t ? store.resourcesFor(t, m.version) : { cpu: 0, memoryGB: 0, diskGB: 0 });
 	const keepBlocker = $derived(m ? store.keepBlocker(m) : null);
 	const webUrl = $derived(m && t ? (t.webUrl ?? 'https://{ip}/').replace('{ip}', m.ip) : '');
 
@@ -155,7 +156,7 @@
 		</div>
 		<div>
 			<dt>Uses</dt>
-			<dd>{t.resources.cpu} vCPU, {t.resources.memoryGB} GB<span class="stat-note">{t.resources.diskGB} GB disk</span></dd>
+			<dd>{uses.cpu} vCPU, {uses.memoryGB} GB<span class="stat-note">{uses.diskGB} GB disk</span></dd>
 		</div>
 		<div>
 			<dt>Deployed</dt>

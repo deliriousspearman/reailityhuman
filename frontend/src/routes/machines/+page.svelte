@@ -114,7 +114,7 @@
 						</ul>
 					{/if}
 					<footer>
-						<span>{t.resources.cpu} vCPU, {t.resources.memoryGB} GB</span>
+						<span>{r.cpu} vCPU, {r.memoryGB} GB</span>
 						{#if live}<span class="deploy">Deploy</span>{:else}<span class="soon-tag">Soon</span>{/if}
 					</footer>
 				</article>
