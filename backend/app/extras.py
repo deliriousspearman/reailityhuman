@@ -8,7 +8,7 @@ shell-quoted variables.
 
 import re
 import shlex
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from functools import lru_cache
 from pathlib import Path
 
@@ -74,11 +74,22 @@ class Option:
     pattern: str | None = None
 
 
+# Services a web app can run inside, and the ports they own. A web app (`uses: apache`) can be
+# combined with an extra that `provides` that service, but not with anything else on those ports.
+SERVICES = {"apache": (80, 443)}
+
+
 @dataclass(frozen=True)
 class Extra:
     id: str
     name: str
     description: str
+    # Ports it listens on itself, e.g. (80,) for a web server; which ones clash is worked out from these.
+    ports: tuple[int, ...] = ()
+    # A service from SERVICES it runs inside (web apps), or that it is (the Apache extras).
+    uses: str | None = None
+    provides: str | None = None
+    # Worked out from the above at load: the extras it can't be chosen with.
     conflicts: tuple[str, ...] = ()
     links: tuple[str, ...] = ()
     options: tuple[Option, ...] = ()
@@ -113,19 +124,42 @@ def extras() -> dict[str, Extra]:
                 raise ValueError(f"extras.yaml: {e['id']}.{o.id} has unknown type '{o.type}'")
             if not re.fullmatch(r"[a-z][a-z0-9_]*", o.id) or o.id == "hostname":
                 raise ValueError(f"extras.yaml: {e['id']}: option id '{o.id}' must be a lowercase shell name other than 'hostname'")
+        for key in ("uses", "provides"):
+            if e.get(key) and e[key] not in SERVICES:
+                raise ValueError(f"extras.yaml: {e['id']}: {key} '{e[key]}' isn't one of {', '.join(SERVICES)}")
         out[e["id"]] = Extra(
             id=e["id"],
             name=e["name"],
             description=e["description"],
-            conflicts=tuple(e.get("conflicts", [])),
+            ports=tuple(int(p) for p in e.get("ports", [])),
+            uses=e.get("uses"),
+            provides=e.get("provides"),
             links=tuple(e.get("links", [])),
             options=options,
             families={f: (tuple(e[f].get("packages", [])), e[f]["script"]) for f in FAMILIES if f in e},
         )
-    for x in out.values():
-        if unknown := [c for c in x.conflicts if c not in out]:
-            raise ValueError(f"extras.yaml: {x.id} conflicts with unknown extras: {', '.join(unknown)}")
-    return out
+    return {i: replace(x, conflicts=tuple(y.id for y in out.values() if clashes(x, y))) for i, x in out.items()}
+
+
+def _claimed(x: Extra) -> set[int]:
+    """The ports an extra needs to itself: its own, plus its service's when it runs inside one
+    (unless it is that service)."""
+    ports = set(x.ports)
+    if x.uses and x.uses != x.provides:
+        ports |= set(SERVICES[x.uses])
+    return ports
+
+
+def clashes(x: Extra, y: Extra) -> bool:
+    """Whether two extras can't run on one machine: they'd listen on the same port. Web apps inside
+    the same service share its ports, as does an app with the extra that provides that service."""
+    if x.id == y.id:
+        return False
+    if x.uses and (x.uses == y.uses or x.uses == y.provides):
+        return bool(set(x.ports) & set(y.ports))
+    if y.uses and y.uses == x.provides:
+        return bool(set(x.ports) & set(y.ports))
+    return bool(_claimed(x) & _claimed(y))
 
 
 def find(extra_id: str) -> Extra | None:
@@ -159,6 +193,10 @@ def resolve(offered: tuple[str, ...], chosen: list[dict], hostname: str) -> list
     is stored on the machine so a reset applies exactly the same.
     """
     out: list[dict] = []
+    # In the catalogue's order, whatever order they came in: web servers set up before the apps
+    # that run inside them.
+    order = list(extras())
+    chosen = sorted(chosen, key=lambda c: order.index(c["id"]) if c.get("id") in order else len(order))
     ids = [c["id"] for c in chosen]
     if len(set(ids)) != len(ids):
         raise ExtraError("Each extra can only be chosen once.")
@@ -167,7 +205,7 @@ def resolve(offered: tuple[str, ...], chosen: list[dict], hostname: str) -> list
         if x is None or x.id not in offered:
             raise ExtraError(f"'{c['id']}' isn't an extra this template offers.")
         if clash := [find(i).name for i in ids if i in x.conflicts]:
-            raise ExtraError(f"{x.name} can't be combined with {', '.join(clash)}: they both use the same port.")
+            raise ExtraError(f"{x.name} can't be combined with {', '.join(clash)}: they'd use the same port.")
         given = c.get("options") or {}
         if unknown := set(given) - {o.id for o in x.options}:
             raise ExtraError(f"{x.name} has no option {', '.join(sorted(unknown))}.")

@@ -78,6 +78,46 @@ def test_prepare_sh_installs_every_extras_packages():
 # Choosing ---------------------------------------------------------------------------------------------
 
 
+def test_clashes_come_from_ports_and_shared_services():
+    from app.extras import Extra, clashes
+
+    nginx = Extra("nginx", "nginx", "", ports=(80,))
+    apache = Extra("apache", "Apache", "", ports=(80,), provides="apache")
+    https = Extra("apache-https", "Apache + HTTPS", "", ports=(80, 443), provides="apache")
+    wordpress = Extra("wordpress", "WordPress", "", uses="apache")
+    nextcloud = Extra("nextcloud", "Nextcloud", "", uses="apache")
+    mail = Extra("mail", "Mail", "", ports=(25, 143), uses="apache")
+    snap = Extra("nextcloud-snap", "Nextcloud (snap)", "", ports=(80, 443))
+    ftp = Extra("ftp", "FTP", "", ports=(21,))
+
+    # Web servers all want port 80.
+    assert clashes(nginx, apache) and clashes(apache, https) and clashes(nginx, snap)
+    # Web apps share Apache: with each other, and with whichever Apache extra is ticked.
+    for app in (wordpress, nextcloud, mail):
+        assert not clashes(app, apache) and not clashes(apache, app) and not clashes(app, https)
+        assert clashes(app, nginx) and clashes(nginx, app) and clashes(app, snap)
+    assert not clashes(wordpress, nextcloud) and not clashes(wordpress, mail)
+    # Different ports, no clash.
+    assert not clashes(ftp, nginx) and not clashes(ftp, mail)
+    assert not clashes(nginx, nginx)
+
+
+def test_catalogue_conflicts_are_worked_out():
+    found = {i: set(x.conflicts) for i, x in extras.extras().items()}
+    assert found["nginx"] == {"apache", "apache-https", "iis"}
+    assert found["apache-https"] == {"nginx", "apache", "iis"}
+
+
+def test_extras_run_in_catalogue_order(monkeypatch):
+    """Web servers come before the apps that run inside them, whatever order they were ticked in."""
+    from app.extras import Extra
+
+    catalogue_ = {"apache": Extra("apache", "Apache", "", ports=(80,), provides="apache"), "wordpress": Extra("wordpress", "WordPress", "", uses="apache")}
+    monkeypatch.setattr(extras, "extras", lambda: catalogue_)
+    chosen = extras.resolve(("apache", "wordpress"), [{"id": "wordpress"}, {"id": "apache"}], "web01")
+    assert [c["id"] for c in chosen] == ["apache", "wordpress"]
+
+
 def test_defaults_follow_the_name_and_machine_domain(monkeypatch):
     [c] = extras.resolve(ALL, [{"id": "apache-https", "options": {}}], "web01")
     assert c == {"id": "apache-https", "options": {"domain": "web01"}}
@@ -94,6 +134,7 @@ def test_defaults_follow_the_name_and_machine_domain(monkeypatch):
     "chosen, problem",
     [
         ([{"id": "nginx"}, {"id": "apache"}], "can't be combined"),
+        ([{"id": "apache"}, {"id": "nginx"}], "can't be combined"),
         ([{"id": "nginx"}, {"id": "nginx"}], "only be chosen once"),
         ([{"id": "mysql"}], "isn't an extra"),
         ([{"id": "nginx", "options": {"domain": "x"}}], "has no option"),
@@ -148,7 +189,7 @@ def test_parse_status():
 def test_config_lists_extras_for_templates_that_have_them(offered):
     t = client.get("/api/config").json()["templates"][0]
     https = next(x for x in t["extras"] if x["id"] == "apache-https")
-    assert https["conflicts"] == ["nginx", "apache"]
+    assert https["conflicts"] == ["nginx", "apache", "iis"]
     assert https["options"][0]["id"] == "domain" and https["options"][0]["default"] == "{fqdn}"
 
 

@@ -4,7 +4,11 @@
 # without internet. On the machine's first boot, cloud-init runs each chosen extra's `script` for
 # the template's family.
 #
-#   conflicts  extras that can't be chosen with this one (e.g. both want port 80)
+#   ports      the ports it listens on. Extras that would share one can't be chosen together.
+#   provides   apache, for the extras that set Apache up; web apps can run inside them.
+#   uses       apache, for web apps that run inside Apache at their own path: they can be combined
+#              with each other and with an extra that provides Apache, but not with other servers
+#              on Apache's ports (80, 443).
 #   links      shown on the machine's page; {ip} is its address
 #   options    fields shown when the extra is ticked. Each value reaches the script as a shell
 #              variable of the same name, already validated and quoted; scripts never get raw input.
@@ -25,7 +29,7 @@
 - id: nginx
   name: nginx
   description: Web server on port 80, with a page showing the machine's name.
-  conflicts: [apache, apache-https]
+  ports: [80]
   links: ["http://{ip}/"]
   debian:
     packages: [nginx]
@@ -42,7 +46,8 @@
 - id: apache
   name: Apache
   description: Apache web server on port 80, with a page showing the machine's name.
-  conflicts: [nginx, apache-https]
+  ports: [80]
+  provides: apache
   links: ["http://{ip}/"]
   debian:
     packages: [apache2]
@@ -59,7 +64,8 @@
 - id: apache-https
   name: Apache + HTTPS
   description: Apache on ports 80 and 443, with a self-signed certificate made for this machine.
-  conflicts: [nginx, apache]
+  ports: [80, 443]
+  provides: apache
   links: ["http://{ip}/", "https://{ip}/"]
   options:
     - id: domain
@@ -103,6 +109,7 @@
 - id: iis
   name: IIS
   description: Microsoft's web server on port 80, with a page showing the machine's name.
+  ports: [80]
   links: ["http://{ip}/"]
   windows:
     script: |
