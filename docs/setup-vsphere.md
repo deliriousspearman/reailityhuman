@@ -145,7 +145,8 @@ read its data from vCenter. The installer turned cloud-init off: while
 `/etc/cloud/cloud-init.disabled` exists, clones get no hostname, user or password. It's safe to
 re-run.
 
-It also installs the packages for the panel's extras (nginx, Apache…), switched off: a machine
+It also installs the packages for the panel's extras (web servers, WordPress, Nextcloud, a mail
+server, FTP, a remote desktop: see the template scripts' README), switched off: a machine
 deployed with one has it set up on first boot, without needing the internet. List them under the
 template's `extras:` in `backend/templates.yaml`. Pass `--extras=nginx,apache` for only some of
 them, or `--no-extras` for none.
@@ -200,7 +201,7 @@ database password already filled in. Set the `VCENTER_*` lines:
 with HTTPS and no domain name of its own gets a certificate for `<name>.lab.example`, or just
 `<name>` when it's empty.
 
-**Extras** (nginx, Apache, Apache with HTTPS…, picked when deploying) are installed in the template
+**Extras** (web servers, web apps, mail, FTP, a remote desktop, picked when deploying) are installed in the template
 and switched on at first boot. The panel then reads, through VMware Tools, whether they worked. For
 that it needs the **Guest operation queries** privilege (`setup_vcenter.py` adds it: re-run it after
 upgrading), and the panel's server must reach the **ESXi hosts** on port 443, not just vCenter.

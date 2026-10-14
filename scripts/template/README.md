@@ -34,11 +34,23 @@ Name the build user anything except an account the panel creates on clones (`ubu
 
 ## Extras
 
-The panel's extras (nginx, Apache, Apache + HTTPS; defined in
-[backend/extras.yaml](../../backend/extras.yaml)) are installed by `prepare.sh` but left switched
-off. When someone ticks one while deploying, cloud-init sets it up and starts it on the machine's
-first boot, so nothing is downloaded and it works without internet. Each one's log is on the machine
-in `/var/log/lab-deploy/<extra>.log`.
+The panel's extras, defined in [backend/extras.yaml](../../backend/extras.yaml), are installed by
+`prepare.sh` but left switched off. When someone ticks one while deploying, cloud-init sets it up and
+starts it on the machine's first boot, so nothing is downloaded and it works without internet. Each
+one's log is on the machine in `/var/log/lab-deploy/<extra>.log`.
+
+| Category | Extras (Debian family) |
+|---|---|
+| Web servers | nginx; Apache; Apache + HTTPS (self-signed certificate for a domain you give) |
+| Web apps | WordPress and Nextcloud (inside Apache, at `/wordpress` and `/nextcloud`); Nextcloud as the snap (its own web server) |
+| Mail | Postfix + Dovecot (IMAP, POP3, submission) + Roundcube at `/roundcube`, with optional test users |
+| File transfer | FTP (vsftpd), optionally FTPS only |
+| Remote desktop | XFCE over RDP (xrdp), VNC (TigerVNC), or both |
+
+Web apps sign in with the machine's own user and password. `prepare.sh` downloads WordPress, WP-CLI
+and Nextcloud while building and checks their checksums; set `WORDPRESS_URL`, `WP_CLI_URL` or
+`NEXTCLOUD_URL` to fetch them from a mirror instead. The RHEL family has the web servers only, for
+now.
 
 - After building a template with them, list them under its `extras:` in
   `backend/templates.yaml`. Until then the panel doesn't offer them for it.

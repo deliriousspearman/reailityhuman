@@ -28,7 +28,9 @@
   diskGB: 25
   username: ubuntu
   family: debian
-  # Rebuilt 2026-10-14 with prepare.sh's extras' packages.
+  # Built 2026-10-14, before the web apps, mail, FTP and desktop extras existed. Once rebuilt with
+  # today's prepare.sh: extras: [nginx, apache, apache-https, wordpress, nextcloud, nextcloud-snap,
+  # mail, ftp, desktop]
   extras: [nginx, apache, apache-https]
 
 # Windows Server 2025, with Desktop Experience and as Server Core. Uncomment each once its template
