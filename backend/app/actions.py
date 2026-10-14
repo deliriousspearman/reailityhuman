@@ -67,6 +67,7 @@ def deploy(vc: VCenter, m: Machine) -> None:
     add_log(m.id, "Powered on. Waiting for it to get an address…", "muted")
     _record_ip(vc, vm, m.id, settings().ip_timeout_seconds)
     _await_setup(vc, vm, m)
+    _recheck_ip(vc, vm, m)
     set_machine(m.id, state="running")
     add_log(m.id, f"Ready. Sign in as {m.username}.", "ok")
 
@@ -114,6 +115,7 @@ def reset(vc: VCenter, m: Machine) -> None:
     vc.power_on(vm)
     _record_ip(vc, vm, m.id, settings().ip_timeout_seconds)
     _await_setup(vc, vm, m)
+    _recheck_ip(vc, vm, m)
     set_machine(m.id, state="running")
     add_log(m.id, "Running", "ok")
 
@@ -138,6 +140,17 @@ def _record_ip(vc: VCenter, vm, machine_id: str, timeout: float) -> None:
         add_log(machine_id, f"Address on the LAN: {ip}")
     else:
         add_log(machine_id, "No address yet. VMware Tools hasn't reported one; check the DHCP server.", "warn")
+
+
+def _recheck_ip(vc: VCenter, vm, m: Machine) -> None:
+    """Windows restarts while setting up, and can be slow to report an address first time round:
+    read it again now it's done."""
+    if m.family != "windows":
+        return
+    ip = vc.ipv4(vm)
+    if ip and ip != load(m.id).ip:
+        set_machine(m.id, ip=ip)
+        add_log(m.id, f"Address on the LAN: {ip}")
 
 
 def _wait_for_status(vc: VCenter, vm, m: Machine, family: str, timeout: float) -> str:

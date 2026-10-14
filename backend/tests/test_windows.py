@@ -263,3 +263,15 @@ def test_reset_remembers_its_windows_even_after_templates_yaml_changes(queued, w
     assert client.post(f"/api/machines/{r.json()['id']}/reset").status_code == 200
     run_queued(queued)
     assert guest["reads"] == [("labadmin", extras.WINDOWS_STATUS_FILE)]  # still waited for Windows setup
+
+
+def test_address_read_again_after_setup(queued, windows, guest, monkeypatch):
+    """vcsim's VMs report no address while waiting; once set up, Windows reports one."""
+    monkeypatch.setattr(VCenter, "wait_for_ip", lambda self, vm, timeout: None)  # none at first
+    monkeypatch.setattr(VCenter, "ipv4", lambda self, vm: "192.0.2.50")
+    guest["status"] = ""
+    r = deploy()
+    run_queued(queued)
+    m = client.get(f"/api/machines/{r.json()['id']}").json()
+    assert m["ip"] == "192.0.2.50"
+    assert "Address on the LAN: 192.0.2.50" in [line["text"] for line in m["log"]]
