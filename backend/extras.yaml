@@ -14,9 +14,10 @@
 #   <family>   debian or rhel: `packages` (must be in prepare.sh's EXTRA_PACKAGES_<FAMILY>, which a
 #              test checks) and `script`, run with bash -e as root. $hostname is always set.
 #              windows: just `script`, PowerShell run as SYSTEM with $ErrorActionPreference = 'Stop'
-#              (any error fails the extra). Options and $hostname are PowerShell variables. Windows
-#              roles and features install from files already on the machine, so no packages are
-#              baked into the template.
+#              (any PowerShell error fails the extra). A program that fails doesn't stop it, though:
+#              after running one, check it, e.g. `if ($LASTEXITCODE) { throw "x.exe failed" }`.
+#              Options and $hostname are PowerShell variables. Windows roles and features install
+#              from files already on the machine, so no packages are baked into the template.
 
 - id: nginx
   name: nginx
