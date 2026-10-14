@@ -69,6 +69,7 @@ def test_userdata_is_a_powershell_script_carrying_values_encoded():
     values = decoded(script)
     assert password in values and "ssh-ed25519 AAAA test" in values and "labadmin" in values
     assert "S-1-5-32-544" in script  # Administrators, by SID
+    assert "Get-LocalGroupMember" not in script and "catch [Microsoft.PowerShell.Commands.MemberExistsException]" in script
     # As commands' arguments, encoded values must be in brackets, or PowerShell takes them as text.
     assert "ConvertTo-SecureString ([Text.Encoding]::UTF8.GetString(" in script
     assert "Add-Content -Path $keys -Value ([Text.Encoding]::UTF8.GetString(" in script
