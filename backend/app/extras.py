@@ -240,7 +240,8 @@ def windows_setup(chosen: list[dict], hostname: str) -> str:
     Part of a Windows machine's first-boot script (cloudinit.windows_userdata)."""
 
     def write(path: str, content: str) -> str:
-        return f"[IO.File]::WriteAllText('{path}', {ps_string(content)})"
+        # UTF-8 with a byte-order mark: without one, Windows PowerShell reads a script as ANSI.
+        return f"[IO.File]::WriteAllText('{path}', {ps_string(content)}, (New-Object Text.UTF8Encoding $true))"
 
     lines = [f"New-Item -ItemType Directory -Force -Path '{WINDOWS_DIR}\\extras' | Out-Null"]
     lines.append(write(rf"{WINDOWS_DIR}\extras\run.ps1", WINDOWS_RUNNER))

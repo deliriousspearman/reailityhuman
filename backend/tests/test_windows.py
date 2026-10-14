@@ -237,3 +237,17 @@ def test_ssh_trouble_is_a_warning_not_a_failure(queued, windows, guest):
     assert m["state"] == "running"
     warning = next(line for line in m["log"] if line["text"].startswith("SSH"))
     assert warning["tone"] == "warn" and warning["text"] == "SSH isn't working: Cannot start service sshd on computer '.'. Use Remote Desktop instead."
+
+
+def test_first_boot_script_is_ascii(monkeypatch):
+    """Cloudbase-Init writes it to disk byte for byte, and Windows PowerShell reads a file without a
+    byte-order mark as ANSI: anything else must reach it encoded. Scripts it writes have a mark."""
+    from app import extras as extras_module
+
+    iis = extras_module.find("iis")
+    fancy = replace(iis, families={"windows": ((), 'Write-Output "Café … ‘quoted’"')})
+    monkeypatch.setitem(extras_module.extras(), "iis", fancy)
+    script = cloudinit.windows_userdata("labadmin", "Pässwörd-1", "ssh-ed25519 AAAA ünïcode", [{"id": "iis", "options": {}}], "win01")
+    script.encode("ascii")  # raises if not
+    assert script.count("(New-Object Text.UTF8Encoding $true)") == 2  # the runner and IIS
+    assert any("Café … ‘quoted’" in v for v in decoded(script))
