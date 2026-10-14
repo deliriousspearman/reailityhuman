@@ -158,6 +158,8 @@ def windows_userdata(
         "#ps1_sysnative",
         "# First-boot setup for a lab machine, written by the lab panel.",
         "$ErrorActionPreference = 'Stop'",
+        "# What didn't work but doesn't stop the machine being used, as \"warn <what> <why>\" lines.",
+        "$warnings = @()",
         "try {",
         f"    $user = {extras.ps_string(username)}",
         f"    $password = ConvertTo-SecureString {extras.ps_string(password)} -AsPlainText -Force",
@@ -176,21 +178,30 @@ def windows_userdata(
         "    # switch it off, so only this machine's own user can sign in.",
         "    Get-LocalUser | Where-Object { $_.SID.Value -like 'S-1-5-21-*-500' -and $_.Name -ne $user } | Disable-LocalUser",
     ]
-    if key:
-        lines += [
-            "    # OpenSSH reads administrators' keys from one shared file, which only Administrators and",
-            "    # SYSTEM may be able to read.",
-            "    $keys = Join-Path $env:ProgramData 'ssh\\administrators_authorized_keys'",
-            "    New-Item -ItemType Directory -Force -Path (Split-Path $keys) | Out-Null",
-            f"    Add-Content -Path $keys -Value {extras.ps_string(key)} -Encoding ascii",
-            "    icacls.exe $keys /inheritance:r /grant '*S-1-5-32-544:F' /grant '*S-1-5-18:F' | Out-Null",
-        ]
     if ssh:
         lines += [
-            "    # OpenSSH Server, if the template has it: its first start makes this machine's own host keys.",
-            "    if (Get-Service -Name sshd -ErrorAction SilentlyContinue) {",
-            "        Set-Service -Name sshd -StartupType Automatic",
-            "        Start-Service -Name sshd",
+            "    # OpenSSH Server, if the template has it. Its first start makes this machine's own host keys",
+            "    # and its folder, with the permissions it insists on; so start it before adding the key.",
+            "    # If it fails, the machine still works through Remote Desktop: warn rather than fail.",
+            "    try {",
+            "        if (Get-Service -Name sshd -ErrorAction SilentlyContinue) {",
+            "            Set-Service -Name sshd -StartupType Automatic",
+            "            Start-Service -Name sshd",
+        ]
+        if key:
+            lines += [
+                "            # Administrators' keys are in one shared file, which only Administrators and SYSTEM",
+                "            # may be able to read.",
+                "            $keys = Join-Path $env:ProgramData 'ssh\\administrators_authorized_keys'",
+                f"            Add-Content -Path $keys -Value {extras.ps_string(key)} -Encoding ascii",
+                "            icacls.exe $keys /inheritance:r /grant '*S-1-5-32-544:F' /grant '*S-1-5-18:F' | Out-Null",
+            ]
+        lines += [
+            "        } else {",
+            '            $warnings += "warn ssh OpenSSH Server is not installed on this template"',
+            "        }",
+            "    } catch {",
+            '        $warnings += "warn ssh $($_.Exception.Message)"',
             "    }",
         ]
     lines += ["    " + line for line in extras.windows_setup(chosen, hostname).split("\r\n")]

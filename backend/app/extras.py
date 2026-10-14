@@ -220,7 +220,7 @@ def cloud_config(chosen: list[dict], family: str, hostname: str) -> dict:
 # file in one go, in the same format as RUNNER's. With no extras, it writes an empty one: the panel
 # waits for it either way, as the sign that the machine has finished setting up.
 WINDOWS_RUNNER = rf"""# Written by the lab panel: applies the extras chosen for this machine (run once, on first boot).
-param([string[]]$Ids = @())
+param([string[]]$Ids = @(), [string[]]$Warnings = @())
 # Not "Stop": an extra writing to stderr (redirected to its log) would then end this script.
 $ErrorActionPreference = 'Continue'
 $dir = '{WINDOWS_DIR}'
@@ -230,7 +230,7 @@ $lines = foreach ($id in $Ids) {{
     & powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$dir\extras\$id.ps1" *> $log
     if ($LASTEXITCODE -eq 0) {{ "ok $id" }} else {{ "failed $id $(Get-Content -Path $log -Tail 1)" }}
 }}
-[IO.File]::WriteAllLines("$dir\extras.status.part", [string[]]@($lines))
+[IO.File]::WriteAllLines("$dir\extras.status.part", [string[]]@(@($Warnings) + @($lines)))
 Move-Item -Force -Path "$dir\extras.status.part" -Destination "$dir\extras.status"
 """.replace("\n", "\r\n")
 
@@ -248,18 +248,21 @@ def windows_setup(chosen: list[dict], hostname: str) -> str:
         x = extras()[c["id"]]
         lines.append(write(rf"{WINDOWS_DIR}\extras\{x.id}.ps1", script(x, "windows", hostname, c["options"])))
     ids = ", ".join(f"'{c['id']}'" for c in chosen)
-    lines.append(f"& '{WINDOWS_DIR}\\extras\\run.ps1' -Ids @({ids})")
+    # $warnings: lines the first-boot script collected ("warn <what> <why>"), reported with the rest.
+    lines.append(f"& '{WINDOWS_DIR}\\extras\\run.ps1' -Ids @({ids}) -Warnings $warnings")
     return "\r\n".join(lines)
 
 
-def parse_status(text: str) -> list[tuple[str, bool, str]]:
-    """STATUS_FILE's lines as (extra id, ok, last log line)."""
+def parse_status(text: str) -> list[tuple[str, str, str]]:
+    """The status file's lines as (outcome, what, detail). Outcome is "ok" or "failed" for an extra
+    (detail: the last line of its log) or for "setup" on Windows, or "warn" for something that didn't
+    work but doesn't stop the machine being used (e.g. "warn ssh <why>")."""
     out = []
     for line in text.splitlines():
         word, _, rest = line.partition(" ")
-        extra_id, _, detail = rest.partition(" ")
-        if word in ("ok", "failed") and extra_id:
-            out.append((extra_id, word == "ok", detail.strip()))
+        what, _, detail = rest.partition(" ")
+        if word in ("ok", "failed", "warn") and what:
+            out.append((word, what, detail.strip()))
     return out
 
 

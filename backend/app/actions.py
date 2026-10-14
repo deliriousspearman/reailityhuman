@@ -192,14 +192,19 @@ def _await_setup(vc: VCenter, vm, m: Machine) -> None:
             # with it (a reset puts it back from the snapshot).
             vc.clear_guestinfo(vm, "guestinfo.userdata")
     results = extras.parse_status(text)
-    for extra_id, ok, detail in results:
-        if extra_id == "setup" and not ok:
+    for outcome, what, detail in results:
+        if outcome == "failed" and what == "setup":
             raise VSphereError(f"Setting up the machine failed: {detail or 'no output'}")
-    failed = [(i, detail) for i, ok, detail in results if not ok]
-    for extra_id, ok, _ in results:
-        if ok:
-            x = extras.find(extra_id)
-            add_log(m.id, f"{x.name if x else extra_id} is ready")
+    for outcome, what, detail in results:
+        if outcome == "warn":
+            label = {"ssh": "SSH"}.get(what, what)
+            why = detail.rstrip(".") or "no details"
+            add_log(m.id, f"{label} isn't working: {why}. Use Remote Desktop instead.", "warn")
+    failed = [(what, detail) for outcome, what, detail in results if outcome == "failed"]
+    for outcome, what, _ in results:
+        if outcome == "ok":
+            x = extras.find(what)
+            add_log(m.id, f"{x.name if x else what} is ready")
     if failed:
         raise VSphereError(
             "; ".join(f"{i} didn't install: {detail or 'no output'} (log: {extras.log_file(family, i)})" for i, detail in failed)

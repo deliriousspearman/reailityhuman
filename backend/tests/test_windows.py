@@ -80,14 +80,17 @@ def test_userdata_is_a_powershell_script_carrying_values_encoded():
     assert any("applies the extras" in line for line in files)
     iis = next(v for v in values if v.startswith("# IIS"))
     assert "Install-WindowsFeature" in iis and "$hostname = " in iis and "win01" in decoded(iis)
-    assert f"& '{extras.WINDOWS_DIR}\\extras\\run.ps1' -Ids @('iis')" in script
+    assert f"& '{extras.WINDOWS_DIR}\\extras\\run.ps1' -Ids @('iis') -Warnings $warnings" in script
+    # sshd is started before the key is added (its first start sets up its folder), and failing is a warning.
+    assert script.index("Start-Service -Name sshd") < script.index("administrators_authorized_keys")
+    assert '$warnings += "warn ssh' in script
     assert "failed setup" in script and extras.WINDOWS_STATUS_FILE in script
 
 
 def test_userdata_without_key_or_extras_still_writes_the_status_file():
     script = cloudinit.windows_userdata("labadmin", "Pass-word1", None, [], "win01")
     assert "administrators_authorized_keys" not in script
-    assert "run.ps1' -Ids @()" in script  # an empty status file: set up, nothing to install
+    assert "run.ps1' -Ids @() -Warnings $warnings" in script  # an empty status file: set up, nothing to install
 
 
 def test_guestinfo_keys():
@@ -224,3 +227,13 @@ def test_deploy_follows_the_templates_access(queued, windows, guest, monkeypatch
     deploy()
     run_queued(queued)
     assert seen["ssh"] is False
+
+
+def test_ssh_trouble_is_a_warning_not_a_failure(queued, windows, guest):
+    guest["status"] = "warn ssh Cannot start service sshd on computer '.'.\n"
+    r = deploy()
+    run_queued(queued)
+    m = client.get(f"/api/machines/{r.json()['id']}").json()
+    assert m["state"] == "running"
+    warning = next(line for line in m["log"] if line["text"].startswith("SSH"))
+    assert warning["tone"] == "warn" and warning["text"] == "SSH isn't working: Cannot start service sshd on computer '.'. Use Remote Desktop instead."

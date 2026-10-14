@@ -135,9 +135,10 @@ def test_cloud_config_quotes_values_and_runs_each_extra():
 
 
 def test_parse_status():
-    assert extras.parse_status("ok nginx\nfailed apache-https Job for apache2.service failed.\n\n") == [
-        ("nginx", True, ""),
-        ("apache-https", False, "Job for apache2.service failed."),
+    assert extras.parse_status("ok nginx\nfailed apache-https Job for apache2.service failed.\n\nwarn ssh no keys\nnoise\n") == [
+        ("ok", "nginx", ""),
+        ("failed", "apache-https", "Job for apache2.service failed."),
+        ("warn", "ssh", "no keys"),
     ]
 
 
