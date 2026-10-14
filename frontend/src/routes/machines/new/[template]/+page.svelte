@@ -111,6 +111,16 @@
 		});
 	});
 	const chosen = $derived(offered.filter((x) => x.id in picked));
+	/** How to reach the machine: the template's ways, plus a desktop extra's RDP and VNC. */
+	const signInWays = $derived.by(() => {
+		const ways = (deployed ?? template)?.access.map((a) => accessNames[a]) ?? [];
+		const desktop = chosen.find((x) => x.id === 'desktop');
+		const protocol = desktop && picked.desktop?.protocol;
+		if (protocol === 'rdp' || protocol === 'both') ways.push('Remote Desktop');
+		if (protocol === 'vnc' || protocol === 'both') ways.push('VNC');
+		return [...new Set(ways)];
+	});
+
 	/** Ports the chosen extras use, for the summary. */
 	const chosenPorts = $derived([...new Set(chosen.flatMap((x) => x.ports))].sort((a, b) => a - b));
 
@@ -153,9 +163,11 @@
 		return o.type === 'choice' || o.type === 'boolean' ? o.default || (o.type === 'boolean' ? 'no' : '') : '';
 	}
 
-	/** A ticked extra that ticking this one would replace. */
-	function clashWith(x: Extra): Extra | undefined {
-		return chosen.find((y) => clashes(x, y));
+	/** Ticked extras that ticking this one would replace, as "A", "A and B" or "A, B and C". */
+	function replacing(x: Extra): string | null {
+		const names = chosen.filter((y) => clashes(x, y)).map((y) => y.name);
+		if (!names.length) return null;
+		return names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
 	}
 
 	function optionProblem(o: ExtraOption, value: string): string | null {
@@ -238,7 +250,7 @@
 							</summary>
 							<ul class="extras">
 								{#each group.items as x (x.id)}
-									{@const clash = clashWith(x)}
+									{@const clash = replacing(x)}
 									{@const on = x.id in picked}
 									{@const small = tooSmall(x)}
 									<li class="extra" class:on class:disabled={!!small && !on}>
@@ -247,7 +259,7 @@
 											<span class="extra-name">{x.name}</span>
 										</label>
 										<p class="extra-desc">
-											{x.description}{#if small && !on}<span class="replaces"> {small}</span>{:else if clash && !on}<span class="replaces"> Replaces {clash.name}: they use the same port.</span>{/if}
+											{x.description}{#if small && !on}{' '}<span class="replaces">{small}</span>{:else if clash && !on}{' '}<span class="replaces">Replaces {clash}: they'd use the same port.</span>{/if}
 										</p>
 										{#if on}
 											{#each x.options as o (o.id)}
@@ -287,7 +299,7 @@
 															/>
 														{/if}
 														<p id="opt-{x.id}-{o.id}-hint" class="hint" class:problem>
-															{#if problem}{problem}{:else}{o.help}{#if fallback && o.type !== 'choice'} Left blank: <code>{fallback}</code>.{/if}{/if}
+															{#if problem}{problem}{:else}{o.help}{#if fallback && o.type !== 'choice'}{' '}Left blank: <code>{fallback}</code>.{/if}{/if}
 														</p>
 													</div>
 												{/if}
@@ -405,7 +417,7 @@
 				<div><dt>Owner</dt><dd>{owner.trim().toLowerCase() || '–'}</dd></div>
 				<div><dt>Uses</dt><dd>{deployed?.resources.cpu} vCPU, {deployed?.resources.memoryGB} GB memory, {deployed?.resources.diskGB} GB disk</dd></div>
 				<div><dt>Network</dt><dd>The LAN, with an address from DHCP</dd></div>
-				<div><dt>Sign in with</dt><dd>{(deployed ?? template).access.map((a) => accessNames[a]).join(', ')}</dd></div>
+				<div><dt>Sign in with</dt><dd>{signInWays.join(', ')}</dd></div>
 				{#if chosen.length}
 					<div><dt>Extras</dt><dd>{chosen.map((x) => x.name).join(', ')}</dd></div>
 					{#if chosenPorts.length}
@@ -590,6 +602,7 @@
 		margin-top: 0.75rem;
 	}
 	.extra-group summary {
+		list-style: none;
 		display: flex;
 		align-items: baseline;
 		gap: 0.6rem;
@@ -599,6 +612,21 @@
 		text-transform: uppercase;
 		color: var(--lms-gray-2);
 		cursor: pointer;
+	}
+	.extra-group summary::-webkit-details-marker {
+		display: none;
+	}
+	.extra-group summary::before {
+		content: '▸';
+		display: inline-block;
+		width: 0.8rem;
+		transition: transform 0.15s ease;
+	}
+	.extra-group[open] summary::before {
+		transform: rotate(90deg);
+	}
+	.extra-group summary:hover {
+		color: var(--lms-white);
 	}
 	.group-count {
 		font-weight: 400;
