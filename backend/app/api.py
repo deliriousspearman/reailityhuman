@@ -159,6 +159,7 @@ def config() -> dict:
                 "version": t.version,
                 "resources": {"cpu": t.cpu, "memoryGB": t.memory_gb, "diskGB": t.disk_gb},
                 "username": t.username,
+                "family": t.family,
                 "extras": [extra_out(extras.find(i)) for i in t.extras],
                 **({"access": list(t.access)} if t.access else {}),
                 **({"webUrl": t.web_url} if t.web_url else {}),
@@ -281,6 +282,8 @@ def deploy_machine(req: DeployRequest, db: Db) -> dict:
     password = req.password or None
     if password is not None and (len(password) < PASSWORD_MIN or any(not c.isprintable() for c in password)):
         raise HTTPException(422, f"Use a password of at least {PASSWORD_MIN} characters, without line breaks or tabs.")
+    if password is not None and tpl.family == "windows" and (problem := cloudinit.windows_password_problem(password, tpl.username)):
+        raise HTTPException(422, problem)
     try:
         chosen = extras.resolve(tpl.extras, [c.model_dump() for c in req.extras], req.name)
     except extras.ExtraError as e:

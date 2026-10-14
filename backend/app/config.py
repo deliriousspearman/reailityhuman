@@ -42,6 +42,9 @@ class Settings(BaseSettings):
     ip_timeout_seconds: int = 300
     # How long a deploy or reset waits for the chosen extras to finish installing.
     extras_timeout_seconds: int = 600
+    # How long a Windows deploy or reset waits for the machine to finish setting up (sysprep,
+    # renaming and restarting, the user, then any extras).
+    windows_setup_timeout_seconds: int = 1200
     # Domain for default names, e.g. a certificate's: "lab.example" makes it "ubuntu01.lab.example".
     # Empty: just the machine's name.
     machine_domain: str = ""

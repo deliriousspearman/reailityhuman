@@ -2,7 +2,7 @@
 
 Each chosen extra becomes a script on the machine, run on its first boot by a small runner that
 records the outcome in STATUS_FILE; the worker reads that file through VMware Tools to know when
-they're done (actions._await_extras). Option values only ever reach a script as validated,
+they're done (actions._await_setup). Option values only ever reach a script as validated,
 shell-quoted variables.
 """
 
@@ -16,10 +16,25 @@ import yaml
 
 from .config import settings
 
-FAMILIES = ("debian", "rhel")
+import base64
+
+FAMILIES = ("debian", "rhel", "windows")
 DIR = "/var/lib/lab-deploy"
 STATUS_FILE = f"{DIR}/extras.status"
 LOG_DIR = "/var/log/lab-deploy"
+# On Windows, everything is under one folder: the scripts, each extra's log, and the status file.
+WINDOWS_DIR = r"C:\ProgramData\lab-deploy"
+WINDOWS_STATUS_FILE = WINDOWS_DIR + r"\extras.status"
+
+
+def status_file(family: str) -> str:
+    """Where the machine records what it set up (read through VMware Tools)."""
+    return WINDOWS_STATUS_FILE if family == "windows" else STATUS_FILE
+
+
+def log_file(family: str, extra_id: str) -> str:
+    """Where an extra's own log is on the machine."""
+    return rf"{WINDOWS_DIR}\logs\{extra_id}.log" if family == "windows" else f"{LOG_DIR}/{extra_id}.log"
 
 # A DNS name: labels of letters, digits and hyphens (not at either end), optionally "*."-prefixed.
 _LABEL = r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?"
@@ -171,8 +186,20 @@ def resolve(offered: tuple[str, ...], chosen: list[dict], hostname: str) -> list
 # Applying -------------------------------------------------------------------------------------------
 
 
+def ps_string(value: str) -> str:
+    """`value` as a PowerShell expression. Decoded from base64, so no quote, backtick or "smart"
+    quote in it (PowerShell treats those as quotes too) can end the string early. In brackets, so it's
+    evaluated as a command's argument too, where a bare [Type]::Method(...) would be taken as text."""
+    encoded = base64.b64encode(value.encode()).decode()
+    return f"([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{encoded}')))"
+
+
 def script(x: Extra, family: str, hostname: str, options: dict[str, str]) -> str:
     _, body = x.families[family]
+    if family == "windows":
+        lines = [f"# {x.name}, written by the lab panel.", "$ErrorActionPreference = 'Stop'", f"$hostname = {ps_string(hostname)}"]
+        lines += [f"${k} = {ps_string(v)}" for k, v in options.items()]
+        return "\r\n".join(lines) + "\r\n" + body.replace("\r\n", "\n").replace("\n", "\r\n")
     lines = [f"# {x.name}, written by the lab panel.", f"hostname={shlex.quote(hostname)}"]
     lines += [f"{k}={shlex.quote(v)}" for k, v in options.items()]
     return "\n".join(lines) + "\n" + body
@@ -187,6 +214,42 @@ def cloud_config(chosen: list[dict], family: str, hostname: str) -> dict:
         x = extras()[c["id"]]
         files.append({"path": f"{DIR}/extras/{x.id}.sh", "permissions": "0700", "content": script(x, family, hostname, c["options"])})
     return {"write_files": files, "runcmd": [["bash", f"{DIR}/extras/run.sh", *(c["id"] for c in chosen)]]}
+
+
+# Windows: runs each extra's script in turn, logging each to logs\<id>.log, then writes the status
+# file in one go, in the same format as RUNNER's. With no extras, it writes an empty one: the panel
+# waits for it either way, as the sign that the machine has finished setting up.
+WINDOWS_RUNNER = rf"""# Written by the lab panel: applies the extras chosen for this machine (run once, on first boot).
+param([string[]]$Ids = @())
+# Not "Stop": an extra writing to stderr (redirected to its log) would then end this script.
+$ErrorActionPreference = 'Continue'
+$dir = '{WINDOWS_DIR}'
+New-Item -ItemType Directory -Force -Path "$dir\logs" | Out-Null
+$lines = foreach ($id in $Ids) {{
+    $log = "$dir\logs\$id.log"
+    & powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$dir\extras\$id.ps1" *> $log
+    if ($LASTEXITCODE -eq 0) {{ "ok $id" }} else {{ "failed $id $(Get-Content -Path $log -Tail 1)" }}
+}}
+[IO.File]::WriteAllLines("$dir\extras.status.part", [string[]]@($lines))
+Move-Item -Force -Path "$dir\extras.status.part" -Destination "$dir\extras.status"
+""".replace("\n", "\r\n")
+
+
+def windows_setup(chosen: list[dict], hostname: str) -> str:
+    """PowerShell that writes the chosen (resolved) extras' scripts and the runner, then runs it.
+    Part of a Windows machine's first-boot script (cloudinit.windows_userdata)."""
+
+    def write(path: str, content: str) -> str:
+        return f"[IO.File]::WriteAllText('{path}', {ps_string(content)})"
+
+    lines = [f"New-Item -ItemType Directory -Force -Path '{WINDOWS_DIR}\\extras' | Out-Null"]
+    lines.append(write(rf"{WINDOWS_DIR}\extras\run.ps1", WINDOWS_RUNNER))
+    for c in chosen:
+        x = extras()[c["id"]]
+        lines.append(write(rf"{WINDOWS_DIR}\extras\{x.id}.ps1", script(x, "windows", hostname, c["options"])))
+    ids = ", ".join(f"'{c['id']}'" for c in chosen)
+    lines.append(f"& '{WINDOWS_DIR}\\extras\\run.ps1' -Ids @({ids})")
+    return "\r\n".join(lines)
 
 
 def parse_status(text: str) -> list[tuple[str, bool, str]]:

@@ -1,7 +1,9 @@
-"""cloud-init data for a new machine, passed through VM guestinfo (cloud-init's VMware datasource).
+"""First-boot data for a new machine, passed through VM guestinfo.
 
-The template has cloud-init cleaned, so the first boot of each clone reads these, sets the hostname,
-creates the user with its password, and brings the NIC up with DHCP.
+Linux templates have cloud-init cleaned, so the first boot of each clone reads these with cloud-init's
+VMware datasource, sets the hostname, creates the user with its password, and brings the NIC up with
+DHCP. Windows templates are sysprepped with Cloudbase-Init, which reads the same guestinfo keys: it
+sets the hostname, then runs a PowerShell script that creates the user (windows_userdata).
 """
 
 import base64
@@ -11,11 +13,35 @@ import string
 
 import yaml
 
+from . import extras
+
 
 def generate_password(length: int) -> str:
-    # No look-alikes (0/O, 1/l/I), so it can be read off the screen and typed.
+    """Letters and digits, with at least one capital, small letter and digit (as Windows' default
+    password policy needs). No look-alikes (0/O, 1/l/I), so it can be read off the screen and typed."""
     alphabet = "".join(c for c in string.ascii_letters + string.digits if c not in "0O1lI")
-    return "".join(secrets.choice(alphabet) for _ in range(length))
+    while True:
+        password = "".join(secrets.choice(alphabet) for _ in range(length))
+        if any(c.isupper() for c in password) and any(c.islower() for c in password) and any(c.isdigit() for c in password):
+            return password
+
+
+def windows_password_problem(password: str, username: str) -> str | None:
+    """Why Windows' default password policy would refuse this password, or None. It needs three of:
+    capitals, small letters, digits, and other characters; and not the user name."""
+    kinds = sum(
+        [
+            any(c.isupper() for c in password),
+            any(c.islower() for c in password),
+            any(c.isdigit() for c in password),
+            any(not c.isalnum() for c in password),
+        ]
+    )
+    if kinds < 3:
+        return "For Windows, use at least three of: capital letters, small letters, digits, and symbols."
+    if len(username) >= 3 and username.lower() in password.lower():
+        return "For Windows, the password can't contain the user name."
+    return None
 
 
 # SHA-512 crypt ("$6$..."), the hash /etc/shadow and cloud-init's `passwd` take, after Ulrich
@@ -113,6 +139,77 @@ def userdata(
     return "#cloud-config\n" + yaml.safe_dump(config, sort_keys=False)
 
 
+def windows_metadata(instance_id: str, hostname: str) -> str:
+    """For Cloudbase-Init: the instance (it runs again for a new one) and the computer name. No
+    network config: Windows uses DHCP by default, asking by MAC address."""
+    return yaml.safe_dump({"instance-id": instance_id, "local-hostname": hostname}, sort_keys=False)
+
+
+def windows_userdata(username: str, password: str, ssh_key: str | None, chosen: list[dict], hostname: str) -> str:
+    """A PowerShell script Cloudbase-Init runs once, as SYSTEM, after it has set the computer name:
+    it creates the user (an administrator), adds the SSH key, and applies the chosen extras. It
+    always ends by writing the status file, which the panel waits for; if setting up fails, that
+    says "failed setup <why>"."""
+    status = extras.WINDOWS_STATUS_FILE
+    key = (ssh_key or "").strip()
+    lines = [
+        "#ps1_sysnative",
+        "# First-boot setup for a lab machine, written by the lab panel.",
+        "$ErrorActionPreference = 'Stop'",
+        "try {",
+        f"    $user = {extras.ps_string(username)}",
+        f"    $password = ConvertTo-SecureString {extras.ps_string(password)} -AsPlainText -Force",
+        "    if (Get-LocalUser -Name $user -ErrorAction SilentlyContinue) {",
+        "        Set-LocalUser -Name $user -Password $password -PasswordNeverExpires $true",
+        "        Enable-LocalUser -Name $user",
+        "    } else {",
+        "        New-LocalUser -Name $user -Password $password -PasswordNeverExpires -AccountNeverExpires | Out-Null",
+        "    }",
+        "    # Administrators, by its SID: the group's name depends on the language.",
+        "    $admins = Get-LocalGroup -SID 'S-1-5-32-544'",
+        '    if (-not (Get-LocalGroupMember -Group $admins | Where-Object { $_.Name -like "*\\$user" })) {',
+        "        Add-LocalGroupMember -Group $admins -Member $user",
+        "    }",
+    ]
+    if key:
+        lines += [
+            "    # OpenSSH reads administrators' keys from one shared file, which only Administrators and",
+            "    # SYSTEM may be able to read.",
+            "    $keys = Join-Path $env:ProgramData 'ssh\\administrators_authorized_keys'",
+            "    New-Item -ItemType Directory -Force -Path (Split-Path $keys) | Out-Null",
+            f"    Add-Content -Path $keys -Value {extras.ps_string(key)} -Encoding ascii",
+            "    icacls.exe $keys /inheritance:r /grant '*S-1-5-32-544:F' /grant '*S-1-5-18:F' | Out-Null",
+        ]
+    lines += ["    " + line for line in extras.windows_setup(chosen, hostname).split("\r\n")]
+    lines += [
+        "} catch {",
+        f"    New-Item -ItemType Directory -Force -Path (Split-Path '{status}') | Out-Null",
+        f"    [IO.File]::WriteAllLines('{status}', [string[]]@(\"failed setup $($_.Exception.Message)\"))",
+        "}",
+    ]
+    return "\r\n".join(lines) + "\r\n"
+
+
+def _encode(metadata_text: str, userdata_text: str) -> dict[str, str]:
+    def b64(text: str) -> str:
+        return base64.b64encode(text.encode()).decode()
+
+    return {
+        "guestinfo.metadata": b64(metadata_text),
+        "guestinfo.metadata.encoding": "base64",
+        "guestinfo.userdata": b64(userdata_text),
+        "guestinfo.userdata.encoding": "base64",
+    }
+
+
+def windows_guestinfo(
+    instance_id: str, hostname: str, username: str, password: str, ssh_key: str | None, chosen: list[dict]
+) -> dict[str, str]:
+    """extraConfig keys for a Windows VM. The password is in the script as it is (Windows can't take
+    a hash), so the worker clears guestinfo.userdata once the machine is set up."""
+    return _encode(windows_metadata(instance_id, hostname), windows_userdata(username, password, ssh_key, chosen, hostname))
+
+
 def guestinfo(
     instance_id: str,
     hostname: str,
@@ -122,14 +219,5 @@ def guestinfo(
     admin_group: str = "sudo",
     extra: dict | None = None,
 ) -> dict[str, str]:
-    """extraConfig keys for the VM."""
-
-    def b64(text: str) -> str:
-        return base64.b64encode(text.encode()).decode()
-
-    return {
-        "guestinfo.metadata": b64(metadata(instance_id, hostname)),
-        "guestinfo.metadata.encoding": "base64",
-        "guestinfo.userdata": b64(userdata(hostname, username, password, ssh_key, admin_group, extra)),
-        "guestinfo.userdata.encoding": "base64",
-    }
+    """extraConfig keys for a Linux VM."""
+    return _encode(metadata(instance_id, hostname), userdata(hostname, username, password, ssh_key, admin_group, extra))

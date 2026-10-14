@@ -65,7 +65,7 @@ def _prepare_sh() -> Path:
 
 def test_prepare_sh_installs_every_extras_packages():
     text = _prepare_sh().read_text()
-    for family in extras.FAMILIES:
+    for family in ("debian", "rhel"):  # Windows extras install their features at deploy
         m = re.search(rf"^EXTRA_PACKAGES_{family.upper()}=\(([^)]*)\)", text, re.M)
         assert m, f"prepare.sh has no EXTRA_PACKAGES_{family.upper()}"
         in_script = set(m.group(1).split())
@@ -192,7 +192,7 @@ def test_extras_that_never_finish_time_out(queued, offered, guest, monkeypatch):
     run_queued(queued)
     m = client.get(f"/api/machines/{r.json()['id']}").json()
     assert m["state"] == "error"
-    assert "didn't finish within" in m["log"][-1]["text"]
+    assert "didn't finish setting up within" in m["log"][-1]["text"]
 
 
 def test_no_extras_no_waiting(queued, guest):

@@ -23,7 +23,7 @@ class LiveTemplate:
     memory_gb: int
     disk_gb: int
     username: str
-    # OS family: "debian" (Debian, Ubuntu) or "rhel" (CentOS Stream, Rocky, Alma).
+    # OS family: "debian" (Debian, Ubuntu), "rhel" (CentOS Stream, Rocky, Alma) or "windows".
     family: str = "debian"
     # The group that gives the user sudo. Default: "sudo" for the debian family, "wheel" for rhel.
     admin_group: str = "sudo"
@@ -56,7 +56,7 @@ def catalogue() -> dict[tuple[str, str], LiveTemplate]:
             disk_gb=int(e["diskGB"]),
             username=e["username"],
             family=family,
-            admin_group=e.get("adminGroup", "wheel" if family == "rhel" else "sudo"),
+            admin_group=e.get("adminGroup", {"rhel": "wheel", "windows": "Administrators"}.get(family, "sudo")),
             extras=tuple(e.get("extras", [])),
             access=tuple(e.get("access", [])),
             web_url=e.get("webUrl", ""),

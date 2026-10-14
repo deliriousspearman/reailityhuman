@@ -13,6 +13,10 @@
 #                          name plus MACHINE_DOMAIN (just the name when that's empty)
 #   <family>   debian or rhel: `packages` (must be in prepare.sh's EXTRA_PACKAGES_<FAMILY>, which a
 #              test checks) and `script`, run with bash -e as root. $hostname is always set.
+#              windows: just `script`, PowerShell run as SYSTEM with $ErrorActionPreference = 'Stop'
+#              (any error fails the extra). Options and $hostname are PowerShell variables. Windows
+#              roles and features install from files already on the machine, so no packages are
+#              baked into the template.
 
 - id: nginx
   name: nginx
@@ -91,3 +95,12 @@
       systemctl enable httpd
       systemctl restart httpd
       if systemctl is-active -q firewalld; then firewall-cmd -q --permanent --add-service=http --add-service=https && firewall-cmd -q --reload; fi
+
+- id: iis
+  name: IIS
+  description: Microsoft's web server on port 80, with a page showing the machine's name.
+  links: ["http://{ip}/"]
+  windows:
+    script: |
+      Install-WindowsFeature -Name Web-Server -IncludeManagementTools | Out-Null
+      Set-Content -Path C:\inetpub\wwwroot\index.html -Encoding ascii -Value "<h1>$hostname</h1><p>IIS, deployed by the lab panel.</p>"

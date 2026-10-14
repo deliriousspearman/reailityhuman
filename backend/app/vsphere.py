@@ -316,6 +316,10 @@ class VCenter:
         except (vim.fault.ToolsUnavailable, vim.fault.InvalidState):
             wait(vm.ResetVM_Task(), "Reset")
 
+    def clear_guestinfo(self, vm: vim.VirtualMachine, *keys: str) -> None:
+        """Empties these guestinfo keys, e.g. data holding a password once the guest has used it."""
+        wait(vm.ReconfigVM_Task(vim.vm.ConfigSpec(extraConfig=[vim.option.OptionValue(key=k, value="") for k in keys])), "Configure")
+
     def wait_for_guest_down(self, vm: vim.VirtualMachine, timeout: float) -> bool:
         """Waits for VMware Tools to stop reporting the guest as running, as it does while a reboot
         goes through. True if it did within `timeout`."""
@@ -367,9 +371,10 @@ class VCenter:
             info = gom.fileManager.InitiateFileTransferFromGuest(vm=vm, auth=auth, guestFilePath=path)
         except (
             vim.fault.FileNotFound,
-            vim.fault.InvalidGuestLogin,
+            # Any guest-side refusal (bad login, Tools busy...), as during Windows' first boot,
+            # while sysprep runs and the machine restarts.
+            vim.fault.GuestOperationsFault,
             vim.fault.GuestOperationsUnavailable,
-            vim.fault.GuestAuthenticationChallenge,
             vim.fault.ToolsUnavailable,
             vim.fault.InvalidState,
         ):

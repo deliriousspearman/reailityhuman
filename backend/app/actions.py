@@ -53,15 +53,18 @@ def deploy(vc: VCenter, m: Machine) -> None:
     if tpl is None:
         raise VSphereError(f"{m.template} {m.version} can't be deployed (not in templates.yaml)")
     chosen = m.extras or []
-    extra = cloudinit.guestinfo(
-        m.id, m.name, m.username, m.password, m.ssh_key, tpl.admin_group, extras.cloud_config(chosen, tpl.family, m.name)
-    )
+    if tpl.family == "windows":
+        extra = cloudinit.windows_guestinfo(m.id, m.name, m.username, m.password, m.ssh_key, chosen)
+    else:
+        extra = cloudinit.guestinfo(
+            m.id, m.name, m.username, m.password, m.ssh_key, tpl.admin_group, extras.cloud_config(chosen, tpl.family, m.name)
+        )
     vm = vc.clone(tpl.vsphere, m.vm_name, tpl.cpu, tpl.memory_gb, extra)
     add_log(m.id, f"Cloned from {m.template}/{m.version}")
     vc.power_on(vm)
     add_log(m.id, "Powered on. Waiting for it to get an address…", "muted")
     _record_ip(vc, vm, m.id, settings().ip_timeout_seconds)
-    _await_extras(vc, vm, m)
+    _await_setup(vc, vm, m)
     set_machine(m.id, state="running")
     add_log(m.id, f"Ready. Sign in as {m.username}.", "ok")
 
@@ -108,7 +111,7 @@ def reset(vc: VCenter, m: Machine) -> None:
     add_log(m.id, "Reverted to snapshot 'clean'")
     vc.power_on(vm)
     _record_ip(vc, vm, m.id, settings().ip_timeout_seconds)
-    _await_extras(vc, vm, m)
+    _await_setup(vc, vm, m)
     set_machine(m.id, state="running")
     add_log(m.id, "Running", "ok")
 
@@ -135,24 +138,43 @@ def _record_ip(vc: VCenter, vm, machine_id: str, timeout: float) -> None:
         add_log(machine_id, "No address yet. VMware Tools hasn't reported one; check the DHCP server.", "warn")
 
 
-def _await_extras(vc: VCenter, vm, m: Machine) -> None:
-    """Waits for the machine's extras to finish installing on first boot, and fails the job if any
-    didn't. Each one's own log is on the machine, in /var/log/lab-deploy/<extra>.log."""
+def _await_setup(vc: VCenter, vm, m: Machine) -> None:
+    """Waits for the machine to finish setting up on first boot, and fails the job if any part
+    didn't. Linux machines are waited for only when they have extras; Windows machines always, as
+    sysprep and a restart come first. Each extra's own log is on the machine (extras.log_file)."""
+    tpl = catalogue.find(m.template, m.version)
+    family = tpl.family if tpl else "debian"
+    windows = family == "windows"
     chosen = m.extras or []
-    if not chosen:
+    if not chosen and not windows:
         return
     names = ", ".join(x.name if (x := extras.find(c["id"])) else c["id"] for c in chosen)
-    add_log(m.id, f"Installing extras: {names}…", "muted")
-    timeout = settings().extras_timeout_seconds
+    if windows:
+        add_log(m.id, f"Windows is setting up{f', with {names}' if chosen else ''}. This takes a few minutes…", "muted")
+        timeout = settings().windows_setup_timeout_seconds
+    else:
+        add_log(m.id, f"Installing extras: {names}…", "muted")
+        timeout = settings().extras_timeout_seconds
     deadline = time.monotonic() + timeout
-    while (text := vc.read_guest_file(vm, m.username, m.password, extras.STATUS_FILE)) is None:
+    while (text := vc.read_guest_file(vm, m.username, m.password, extras.status_file(family))) is None:
         if time.monotonic() >= deadline:
+            where = (
+                r"C:\Program Files\Cloudbase Solutions\Cloudbase-Init\log\cloudbase-init.log"
+                if windows
+                else "/var/log/cloud-init-output.log"
+            )
             raise VSphereError(
-                f"The extras didn't finish within {timeout // 60} minutes. "
-                "On the machine, /var/log/cloud-init-output.log shows how far they got."
+                f"{'It' if windows else 'The extras'} didn't finish setting up within {timeout // 60} minutes. "
+                f"On the machine, {where} shows how far it got."
             )
         time.sleep(5)
+    if windows:
+        # The first-boot script holds the password as it is; it's done with it now.
+        vc.clear_guestinfo(vm, "guestinfo.userdata")
     results = extras.parse_status(text)
+    for extra_id, ok, detail in results:
+        if extra_id == "setup" and not ok:
+            raise VSphereError(f"Setting up the machine failed: {detail or 'no output'}")
     failed = [(i, detail) for i, ok, detail in results if not ok]
     for extra_id, ok, _ in results:
         if ok:
@@ -160,7 +182,7 @@ def _await_extras(vc: VCenter, vm, m: Machine) -> None:
             add_log(m.id, f"{x.name if x else extra_id} is ready")
     if failed:
         raise VSphereError(
-            "; ".join(f"{i} didn't install: {detail or 'no output'} (log: /var/log/lab-deploy/{i}.log)" for i, detail in failed)
+            "; ".join(f"{i} didn't install: {detail or 'no output'} (log: {extras.log_file(family, i)})" for i, detail in failed)
         )
 
 
