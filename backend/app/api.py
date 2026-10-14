@@ -24,10 +24,11 @@ from .vsphere import Capacity, VSphereError, connect
 # No sign-in yet: people type their name when they deploy, and the panel sends it with every
 # request (X-Lab-User) so jobs record who did what. Without one, it's "anyone".
 ANYONE = "anyone"
-NAME_RULE = re.compile(r"^[a-z][a-z0-9-]{0,14}$")
+# A hostname label: starts with a letter, doesn't end with a hyphen; 15 at most, Windows' limit.
+NAME_RULE = re.compile(r"^[a-z](?:[a-z0-9-]{0,13}[a-z0-9])?$")
 OWNER_RULE = re.compile(r"^[a-z][a-z0-9-]{0,19}$")
 PASSWORD_MIN = 8
-NAME_PROBLEM = "Use 1 to 15 lowercase letters, digits or hyphens, starting with a letter."
+NAME_PROBLEM = "Use 1 to 15 lowercase letters, digits or hyphens, starting with a letter and not ending with a hyphen."
 OWNER_PROBLEM = "Use 1 to 20 lowercase letters, digits or hyphens for your name, starting with a letter."
 MAX_HOURS = 24 * 30
 

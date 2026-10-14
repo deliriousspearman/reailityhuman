@@ -86,6 +86,8 @@ def test_busy_machine_rejects_actions(queued):
     [
         ({"template": "pfsense", "version": "2.8.0", "name": "fw01", "hours": 2}, 422),
         ({"template": "ubuntu", "version": "26.04", "owner": "jo", "name": "Bad_Name", "hours": 2}, 422),
+        ({"template": "ubuntu", "version": "26.04", "owner": "jo", "name": "web-", "hours": 2}, 422),
+        ({"template": "ubuntu", "version": "26.04", "owner": "jo", "name": "a" * 16, "hours": 2}, 422),
         ({"template": "ubuntu", "version": "26.04", "owner": "jo", "name": "ok01", "hours": 0}, 422),
         ({"template": "ubuntu", "version": "26.04", "name": "ok01", "hours": 2}, 422),  # no owner
         ({"template": "ubuntu", "version": "26.04", "owner": "Jo Bloggs", "name": "ok01", "hours": 2}, 422),
@@ -371,7 +373,8 @@ def test_config_sends_the_deploy_rules():
     rules = client.get("/api/config").json()["rules"]
     import re
 
-    assert re.match(rules["name"]["pattern"], "ubuntu01") and not re.match(rules["name"]["pattern"], "Bad_Name")
+    assert re.match(rules["name"]["pattern"], "ubuntu01") and re.match(rules["name"]["pattern"], "a")
+    assert not re.match(rules["name"]["pattern"], "Bad_Name") and not re.match(rules["name"]["pattern"], "web-")
     assert re.match(rules["owner"]["pattern"], "jo") and rules["owner"]["problem"]
     assert rules["passwordMin"] == 8
     assert re.match(rules["hostname"], "intranet.lab.example")
