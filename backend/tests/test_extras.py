@@ -106,8 +106,12 @@ def test_clashes_come_from_ports_and_shared_services():
 
 def test_catalogue_conflicts_are_worked_out():
     found = {i: set(x.conflicts) for i, x in extras.extras().items()}
-    assert found["nginx"] == {"apache", "apache-https", "iis"}
-    assert found["apache-https"] == {"nginx", "apache", "iis"}
+    # nginx clashes with every other web server, and the web apps that would run inside Apache.
+    assert found["nginx"] == {"apache", "apache-https", "iis", "wordpress", "nextcloud", "nextcloud-snap", "mail"}
+    # The Apache extras clash with each other and other servers, but not the apps inside them.
+    assert found["apache-https"] == {"nginx", "apache", "nextcloud-snap", "iis"}
+    assert found["wordpress"] == {"nginx", "nextcloud-snap", "iis"}
+    assert found["ftp"] == set() and found["desktop"] == set()
 
 
 def test_extras_run_in_catalogue_order(monkeypatch):
@@ -194,7 +198,7 @@ def test_parse_status():
 def test_config_lists_extras_for_templates_that_have_them(offered):
     t = client.get("/api/config").json()["templates"][0]
     https = next(x for x in t["extras"] if x["id"] == "apache-https")
-    assert https["conflicts"] == ["nginx", "apache", "iis"]
+    assert https["conflicts"] == ["nginx", "apache", "nextcloud-snap", "iis"]
     assert https["options"][0]["id"] == "domain" and https["options"][0]["default"] == "{fqdn}"
 
 
@@ -296,7 +300,7 @@ def test_links_and_notes_are_filled_in(monkeypatch):
     wp = Extra(
         "wordpress", "WordPress", "",
         links=("http://{ip}/wordpress/",),
-        notes=("Admin: http://{ip}/wordpress/wp-admin as {username}, for {domain} on {hostname}. Keep {braces}.",),
+        notes=(("Admin: http://{ip}/wordpress/wp-admin as {username}, for {domain} on {hostname}. Keep {braces}.", {}),),
     )  # fmt: skip
     monkeypatch.setattr(extras, "find", lambda i: wp)
     chosen = {"id": "wordpress", "options": {"domain": "blog.lab.example"}}
@@ -346,3 +350,11 @@ def test_linux_first_boot_data_is_cleared_when_an_extra_used_the_password(queued
     with connect() as vc:
         config = vc.props(vc.require_vm(r.json()["vmName"]), "config.extraConfig")["config.extraConfig"]
     assert {o.key: o.value for o in config}.get("guestinfo.userdata", "") == ""
+
+
+def test_notes_can_depend_on_options():
+    desktop = extras.find("desktop")
+    rdp = extras.details({"id": "desktop", "options": {"protocol": "rdp"}}, "192.0.2.7", "ubuntu", "web01")["notes"]
+    both = extras.details({"id": "desktop", "options": {"protocol": "both"}}, "192.0.2.7", "ubuntu", "web01")["notes"]
+    assert desktop and len(rdp) == 1 and rdp[0].startswith("RDP: connect to 192.0.2.7 as ubuntu")
+    assert len(both) == 2 and both[1].startswith("VNC: connect to 192.0.2.7:5901")

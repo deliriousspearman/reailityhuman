@@ -14,7 +14,8 @@
 #              on Apache's ports (80, 443).
 #   links      shown on the machine's page, once it has an address; and
 #   notes      sentences shown with them, e.g. how to sign in. In both, {ip} is its address,
-#              {username} its user, {hostname} its name, and {<option id>} that option's value.
+#              {username} its user, {hostname} its name, and {<option id>} that option's value. A
+#              note can be {text, when: {<option id>: [values]}}, shown only for those values.
 #   options    fields shown when the extra is ticked. Each value reaches the script as a shell
 #              variable of the same name, already validated and quoted; scripts never get raw input.
 #                type      hostname: a DNS name, optionally "*."-prefixed; text: matched by `pattern`;
@@ -107,6 +108,299 @@
       echo "<h1>$domain</h1><p>Apache over HTTPS, deployed by the lab panel.</p>" >/var/www/html/index.html
       lab_apache
       lab_open 80/tcp 443/tcp
+
+- id: wordpress
+  name: WordPress
+  category: Web apps
+  description: WordPress at /wordpress, with the machine's user as its administrator.
+  uses: apache
+  password: true
+  links: ["http://{ip}/wordpress/"]
+  notes:
+    - "Sign in at http://{ip}/wordpress/wp-admin/ as {username}, with the machine's password."
+  debian:
+    packages: [apache2, libapache2-mod-php, php-mysql, php-gd, php-curl, php-xml, php-mbstring, php-zip, php-intl, mariadb-server, openssl]
+    script: |
+      db_pass=$(openssl rand -hex 16)
+      systemctl enable -q mariadb
+      systemctl restart mariadb
+      mariadb <<EOF
+      CREATE DATABASE IF NOT EXISTS wordpress;
+      CREATE USER IF NOT EXISTS 'wordpress'@'localhost' IDENTIFIED BY '$db_pass';
+      ALTER USER 'wordpress'@'localhost' IDENTIFIED BY '$db_pass';
+      GRANT ALL ON wordpress.* TO 'wordpress'@'localhost';
+      EOF
+      mkdir -p /var/www/wordpress
+      tar -xzf /opt/lab-deploy/wordpress.tar.gz -C /var/www/wordpress --strip-components=1
+      chown -R www-data:www-data /var/www/wordpress
+      lab_apache_conf wordpress <<'EOF'
+      Alias /wordpress /var/www/wordpress
+      <Directory /var/www/wordpress>
+          AllowOverride All
+          Require all granted
+      </Directory>
+      EOF
+      a2enmod -q rewrite
+      lab_apache
+      wp() { runuser -u www-data -- env HOME=/tmp WP_CLI_CACHE_DIR=/tmp/wp-cli php /usr/local/bin/wp --path=/var/www/wordpress "$@"; }
+      wp config create --dbname=wordpress --dbuser=wordpress --dbpass="$db_pass" --skip-check
+      wp core install --url="http://$(lab_ip)/wordpress" --title="$hostname" --admin_user="$username" \
+        --admin_password="$password" --admin_email="$username@$hostname.lab.invalid" --skip-email
+
+- id: nextcloud
+  name: Nextcloud
+  category: Web apps
+  description: Nextcloud at /nextcloud, installed from its archive, with the machine's user as its administrator.
+  uses: apache
+  password: true
+  links: ["http://{ip}/nextcloud/"]
+  notes:
+    - "Sign in as {username}, with the machine's password."
+  debian:
+    packages: [apache2, libapache2-mod-php, php-mysql, php-gd, php-curl, php-xml, php-mbstring, php-zip, php-intl, php-gmp, php-bcmath, mariadb-server, bzip2, openssl]
+    script: |
+      db_pass=$(openssl rand -hex 16)
+      systemctl enable -q mariadb
+      systemctl restart mariadb
+      mariadb <<EOF
+      CREATE DATABASE IF NOT EXISTS nextcloud CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
+      CREATE USER IF NOT EXISTS 'nextcloud'@'localhost' IDENTIFIED BY '$db_pass';
+      ALTER USER 'nextcloud'@'localhost' IDENTIFIED BY '$db_pass';
+      GRANT ALL ON nextcloud.* TO 'nextcloud'@'localhost';
+      EOF
+      tar -xjf /opt/lab-deploy/nextcloud.tar.bz2 -C /var/www
+      chown -R www-data:www-data /var/www/nextcloud
+      # Nextcloud wants 512 MB for PHP.
+      for dir in /etc/php/*/apache2/conf.d; do echo "memory_limit = 512M" >"$dir/99-lab-nextcloud.ini"; done
+      lab_apache_conf nextcloud <<'EOF'
+      Alias /nextcloud /var/www/nextcloud
+      <Directory /var/www/nextcloud>
+          Require all granted
+          AllowOverride All
+          Options FollowSymLinks MultiViews
+          <IfModule mod_dav.c>
+              Dav off
+          </IfModule>
+      </Directory>
+      EOF
+      a2enmod -q rewrite headers env dir mime
+      lab_apache
+      occ() { runuser -u www-data -- php /var/www/nextcloud/occ "$@"; }
+      occ maintenance:install --database=mysql --database-name=nextcloud --database-user=nextcloud \
+        --database-pass="$db_pass" --admin-user="$username" --admin-pass="$password"
+      ip=$(lab_ip)
+      occ config:system:set trusted_domains 1 --value="$ip"
+      occ config:system:set trusted_domains 2 --value="$hostname"
+      occ config:system:set overwrite.cli.url --value="http://$ip/nextcloud"
+
+- id: nextcloud-snap
+  name: Nextcloud (snap)
+  category: Web apps
+  description: Nextcloud as the snap, with its own web server on ports 80 and 443; the machine's user is its administrator.
+  ports: [80, 443]
+  password: true
+  minMemoryGB: 2
+  links: ["http://{ip}/"]
+  notes:
+    - "Sign in as {username}, with the machine's password."
+  debian:
+    packages: [snapd]
+    script: |
+      snap start --enable nextcloud
+      # Its database and PHP take a moment to come up.
+      for _ in $(seq 60); do nextcloud.occ status >/dev/null 2>&1 && break; sleep 5; done
+      nextcloud.manual-install "$username" "$password"
+      nextcloud.occ config:system:set trusted_domains 1 --value="$(lab_ip)"
+      nextcloud.occ config:system:set trusted_domains 2 --value="$hostname"
+
+- id: mail
+  name: Mail server
+  category: Mail
+  description: Postfix and Dovecot (IMAP, POP3, submission), with Roundcube webmail at /roundcube. Mail is delivered on this machine only.
+  ports: [25, 110, 143, 587, 993, 995]
+  uses: apache
+  password: true
+  links: ["http://{ip}/roundcube/"]
+  notes:
+    - "Mailboxes: {username}@{domain}, and any test users ({users}). Sign in to webmail, IMAP or POP3 with the machine's password."
+    - "IMAP 143 (STARTTLS) and 993, POP3 110 and 995, SMTP submission 587, all with a self-signed certificate for {domain}."
+  options:
+    - id: domain
+      label: Mail domain
+      help: The domain mail is for, e.g. mail.lab.example. Mail to user@domain is delivered here.
+      type: hostname
+      default: "{fqdn}"
+    - id: users
+      label: Test users
+      help: More mailboxes, separated by commas, e.g. alice, bob. Each gets the machine's password.
+      type: text
+      pattern: "[a-z][a-z0-9-]{0,30}(\\s*,\\s*[a-z][a-z0-9-]{0,30}){0,9}"
+  debian:
+    packages: [postfix, dovecot-imapd, dovecot-pop3d, roundcube, roundcube-sqlite3, apache2, libapache2-mod-php, openssl]
+    script: |
+      lab_cert "$domain"
+      echo "$domain" >/etc/mailname
+      # Postfix: mail for the domain is delivered to Maildir in each user's home; sending needs a
+      # sign-in (through Dovecot), except from this machine (Roundcube).
+      # shellcheck disable=SC2016 # $mydomain is Postfix's, not the shell's
+      postconf -e "myhostname = $domain" "mydomain = $domain" 'myorigin = $mydomain' \
+        "mydestination = \$myhostname, $hostname, localhost.\$mydomain, localhost" \
+        'inet_interfaces = all' 'inet_protocols = ipv4' 'home_mailbox = Maildir/' \
+        "smtpd_tls_cert_file = $LAB_CERT" "smtpd_tls_key_file = $LAB_KEY" 'smtpd_tls_security_level = may' \
+        'smtpd_sasl_type = dovecot' 'smtpd_sasl_path = private/auth' 'smtpd_sasl_auth_enable = yes' \
+        'smtpd_relay_restrictions = permit_mynetworks, permit_sasl_authenticated, reject_unauth_destination'
+      postconf -M 'submission/inet=submission inet n - y - - smtpd'
+      postconf -P 'submission/inet/syslog_name=postfix/submission' 'submission/inet/smtpd_tls_security_level=encrypt' \
+        'submission/inet/smtpd_sasl_auth_enable=yes' 'submission/inet/smtpd_client_restrictions=permit_sasl_authenticated,reject'
+      # Dovecot 2.4: the same Maildir, and sign-ins checked for Postfix. Its certificate is where its
+      # own config looks (it opens that file even when told another): this machine's.
+      ln -sf "$LAB_CERT" /etc/dovecot/private/dovecot.pem
+      ln -sf "$LAB_KEY" /etc/dovecot/private/dovecot.key
+      cat >/etc/dovecot/conf.d/99-lab.conf <<EOF
+      # Written by the lab panel's mail extra.
+      mail_driver = maildir
+      mail_path = %{home}/Maildir
+      mail_inbox_path = %{home}/Maildir
+      service auth {
+        unix_listener /var/spool/postfix/private/auth {
+          mode = 0660
+          user = postfix
+          group = postfix
+        }
+      }
+      EOF
+      # Test users: mailboxes with the machine's password.
+      IFS=', ' read -ra more <<<"$users"
+      for user in "${more[@]}"; do
+        [ -n "$user" ] || continue
+        id "$user" >/dev/null 2>&1 || useradd -m -s /bin/bash "$user"
+        echo "$user:$password" | chpasswd
+      done
+      # Roundcube: a key of this machine's own, and mail sent through Postfix here.
+      key=$(openssl rand -hex 12)
+      cat >>/etc/roundcube/config.inc.php <<EOF
+
+      // Lab panel: this machine's own key, and mail sent through its Postfix.
+      \$config['des_key'] = '$key';
+      \$config['imap_host'] = 'localhost:143';
+      \$config['smtp_host'] = 'localhost:25';
+      \$config['smtp_user'] = '';
+      \$config['smtp_pass'] = '';
+      EOF
+      # Ubuntu's Roundcube 1.6.11 and PHP 8.5 both define array_first(), so Roundcube won't load.
+      # Until the package has upstream's fix, do what it does: keep Roundcube's only where PHP has none.
+      boot=/usr/share/roundcube/program/lib/Roundcube/bootstrap.php
+      if grep -q '^function array_first(' "$boot" && php -r 'exit(function_exists("array_first") ? 0 : 1);'; then
+        awk '/^function array_first\(/ { print "if (!function_exists(\"array_first\")) {"; inside = 1 }
+          { print } inside && /^}$/ { print "}"; inside = 0 }' "$boot" >"$boot.lab"
+        mv "$boot.lab" "$boot"
+      fi
+      # The package's Apache config sets up Roundcube's folder but leaves its address commented out.
+      a2enconf -q roundcube
+      echo "Alias /roundcube /var/lib/roundcube/public_html" | lab_apache_conf roundcube
+      systemctl enable -q postfix dovecot
+      # Postfix first: its first start makes the folder Dovecot puts its sign-in socket in.
+      systemctl restart postfix
+      systemctl restart dovecot
+      lab_apache
+
+- id: ftp
+  name: FTP
+  category: File transfer
+  description: vsftpd, for the machine's user, in its home folder. Optionally over TLS (FTPS).
+  ports: [21]
+  notes:
+    - "Connect to {ip} port 21 as {username}, with the machine's password. Passive mode uses ports 40000-40100."
+  options:
+    - id: tls
+      label: Use TLS (FTPS)
+      help: Explicit FTPS with a self-signed certificate; plain FTP sign-ins are then refused.
+      type: boolean
+      default: "no"
+  debian:
+    packages: [vsftpd, openssl]
+    script: |
+      cat >/etc/vsftpd.conf <<EOF
+      # Written by the lab panel's FTP extra.
+      listen=YES
+      listen_ipv6=NO
+      anonymous_enable=NO
+      local_enable=YES
+      write_enable=YES
+      local_umask=022
+      chroot_local_user=YES
+      allow_writeable_chroot=YES
+      pasv_enable=YES
+      pasv_min_port=40000
+      pasv_max_port=40100
+      secure_chroot_dir=/var/run/vsftpd/empty
+      pam_service_name=vsftpd
+      utf8_filesystem=YES
+      EOF
+      if [ "$tls" = yes ]; then
+        lab_cert
+        cat >>/etc/vsftpd.conf <<EOF
+      ssl_enable=YES
+      rsa_cert_file=$LAB_CERT
+      rsa_private_key_file=$LAB_KEY
+      force_local_logins_ssl=YES
+      force_local_data_ssl=YES
+      require_ssl_reuse=NO
+      EOF
+      fi
+      systemctl enable -q vsftpd
+      systemctl restart vsftpd
+
+- id: desktop
+  name: Desktop (XFCE)
+  category: Remote desktop
+  description: An XFCE desktop for the machine's user, over RDP (xrdp), VNC (TigerVNC), or both.
+  ports: [3389, 5901]
+  password: true
+  minMemoryGB: 2
+  notes:
+    - text: "RDP: connect to {ip} as {username}, with the machine's password."
+      when: {protocol: [rdp, both]}
+    - text: "VNC: connect to {ip}:5901. Its password is the first 8 characters of the machine's (VNC allows no more)."
+      when: {protocol: [vnc, both]}
+  options:
+    - id: protocol
+      label: Connect with
+      type: choice
+      default: both
+      choices:
+        - {value: rdp, label: RDP (port 3389)}
+        - {value: vnc, label: VNC (port 5901)}
+        - {value: both, label: Both}
+  debian:
+    packages: [xfce4-session, xfwm4, xfce4-panel, xfdesktop4, xfce4-terminal, thunar, xfce4-settings, xfce4-notifyd, dbus-x11, xrdp, xorgxrdp, tigervnc-standalone-server, tigervnc-tools, ssl-cert, fonts-dejavu-core, adwaita-icon-theme]
+    script: |
+      home=$(getent passwd "$username" | cut -d: -f6)
+      group=$(id -gn "$username")
+      if [ "$protocol" != vnc ]; then
+        # On a D-Bus session of its own, so it can run alongside the VNC desktop.
+        echo "dbus-launch --exit-with-session xfce4-session" >"$home/.xsession"
+        chown "$username:$group" "$home/.xsession"
+        # xrdp's certificate and keys, of this machine's own (clean.sh removed the template's).
+        make-ssl-cert generate-default-snakeoil --force-overwrite
+        xrdp-keygen xrdp auto >/dev/null
+        systemctl enable -q xrdp
+        systemctl restart xrdp
+        lab_open 3389/tcp
+      fi
+      if [ "$protocol" != rdp ]; then
+        # VNC passwords are at most 8 characters: the first 8 of the machine's.
+        config=$home/.config/tigervnc
+        install -d -o "$username" -g "$group" -m 700 "$home/.config" "$config"
+        printf '%s\n' "${password:0:8}" | vncpasswd -f >"$config/passwd"
+        printf 'session=xfce\nlocalhost=no\ngeometry=1600x900\n' >"$config/config"
+        chown "$username:$group" "$config/passwd" "$config/config"
+        chmod 600 "$config/passwd"
+        grep -qx ":1=$username" /etc/tigervnc/vncserver.users || echo ":1=$username" >>/etc/tigervnc/vncserver.users
+        systemctl enable -q tigervncserver@:1
+        systemctl restart tigervncserver@:1
+        lab_open 5901/tcp
+      fi
 
 - id: iis
   name: IIS
