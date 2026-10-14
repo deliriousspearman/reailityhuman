@@ -111,14 +111,22 @@
 	});
 	const chosen = $derived(offered.filter((x) => x.id in picked));
 
+	/** Ticking an extra that clashes with ticked ones (they use the same port) replaces them. */
 	function toggle(x: Extra, on: boolean) {
-		if (on) picked[x.id] = Object.fromEntries(x.options.map((o) => [o.id, '']));
-		else delete picked[x.id];
+		if (on) {
+			for (const y of chosen) if (clashes(x, y)) delete picked[y.id];
+			picked[x.id] = Object.fromEntries(x.options.map((o) => [o.id, '']));
+		} else delete picked[x.id];
 	}
 
 	/** A ticked extra this one can't be combined with. */
+	function clashes(x: Extra, y: Extra): boolean {
+		return y.id !== x.id && (x.conflicts.includes(y.id) || y.conflicts.includes(x.id));
+	}
+
+	/** A ticked extra that ticking this one would replace. */
 	function clashWith(x: Extra): Extra | undefined {
-		return chosen.find((y) => y.id !== x.id && (x.conflicts.includes(y.id) || y.conflicts.includes(x.id)));
+		return chosen.find((y) => clashes(x, y));
 	}
 
 	function optionProblem(o: ExtraOption, value: string): string | null {
@@ -195,13 +203,13 @@
 						{#each offered as x (x.id)}
 							{@const clash = clashWith(x)}
 							{@const on = x.id in picked}
-							<li class="extra" class:on class:disabled={!!clash && !on}>
+							<li class="extra" class:on>
 								<label class="extra-head">
-									<input type="checkbox" checked={on} disabled={!!clash && !on} onchange={(e) => toggle(x, e.currentTarget.checked)} />
+									<input type="checkbox" checked={on} onchange={(e) => toggle(x, e.currentTarget.checked)} />
 									<span class="extra-name">{x.name}</span>
 								</label>
 								<p class="extra-desc">
-									{clash && !on ? `Can't be combined with ${clash.name}: they use the same port.` : x.description}
+									{x.description}{#if clash && !on}<span class="replaces"> Replaces {clash.name}: they use the same port.</span>{/if}
 								</p>
 								{#if on}
 									{#each x.options as o (o.id)}
@@ -513,17 +521,11 @@
 		border-color: var(--lms-lime);
 		box-shadow: inset 3px 0 0 var(--lms-lime);
 	}
-	.extra.disabled {
-		opacity: 0.55;
-	}
 	.extra-head {
 		display: flex;
 		align-items: center;
 		gap: 0.6rem;
 		cursor: pointer;
-	}
-	.extra.disabled .extra-head {
-		cursor: not-allowed;
 	}
 	.extra-head input {
 		width: 1rem;
@@ -538,6 +540,9 @@
 		margin: 0.25rem 0 0 1.6rem;
 		font-size: 0.85rem;
 		color: var(--lms-gray-2);
+	}
+	.replaces {
+		color: var(--lms-gray-3);
 	}
 	.extra-option {
 		margin: 0.75rem 0 0.15rem 1.6rem;
