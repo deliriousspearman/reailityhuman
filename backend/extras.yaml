@@ -102,5 +102,10 @@
   links: ["http://{ip}/"]
   windows:
     script: |
-      Install-WindowsFeature -Name Web-Server -IncludeManagementTools | Out-Null
+      if (Get-Command Install-WindowsFeature -ErrorAction SilentlyContinue) {
+        Install-WindowsFeature -Name Web-Server -IncludeManagementTools | Out-Null
+      } else {
+        # Windows 10/11: an optional feature rather than a server role.
+        Enable-WindowsOptionalFeature -Online -FeatureName IIS-WebServerRole, IIS-WebServer -All -NoRestart | Out-Null
+      }
       Set-Content -Path C:\inetpub\wwwroot\index.html -Encoding ascii -Value "<h1>$hostname</h1><p>IIS, deployed by the lab panel.</p>"
