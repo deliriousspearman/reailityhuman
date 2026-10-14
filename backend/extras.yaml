@@ -21,6 +21,9 @@
 #                          choice: one of `choices` ([{value, label}]); boolean: "yes" or "no"
 #                default   used when it's left blank. {hostname} is the machine's name, {fqdn} the
 #                          name plus MACHINE_DOMAIN (just the name when that's empty)
+#   password   true if the script needs the machine's password as it is ($password), e.g. for a web
+#              app's admin; then the panel clears it from vCenter once the machine is set up.
+#              $username (the machine's user) is always set.
 #   <family>   debian or rhel: `packages` (must be in prepare.sh's EXTRA_PACKAGES_<FAMILY>, which a
 #              test checks) and `script`, run with bash -e as root. $hostname is always set, and
 #              the helpers in extras.py's LIB are there: lab_cert (a self-signed certificate),

@@ -321,3 +321,28 @@ def test_config_sends_category_memory_and_ports(offered):
     t = client.get("/api/config").json()["templates"][0]
     https = next(x for x in t["extras"] if x["id"] == "apache-https")
     assert https["category"] == "Web servers" and https["minMemoryGB"] == 0 and https["ports"] == [80, 443]
+
+
+def test_scripts_get_the_user_and_only_some_the_password(monkeypatch):
+    from app.extras import Extra
+
+    plain = Extra("plain", "Plain", "", families={"debian": ((), "true")})
+    secret = Extra("secret", "Secret", "", password=True, families={"debian": ((), "true")})
+    monkeypatch.setattr(extras, "extras", lambda: {"plain": plain, "secret": secret})
+    monkeypatch.setattr(extras, "find", lambda i: {"plain": plain, "secret": secret}.get(i))
+    assert "username=ubuntu\n" in extras.script(plain, "debian", "web01", {}, "ubuntu", "s3cret pw")
+    assert "s3cret" not in extras.script(plain, "debian", "web01", {}, "ubuntu", "s3cret pw")
+    assert "password='s3cret pw'\n" in extras.script(secret, "debian", "web01", {}, "ubuntu", "s3cret pw")
+    assert not extras.needs_password([{"id": "plain"}]) and extras.needs_password([{"id": "plain"}, {"id": "secret"}])
+
+
+def test_linux_first_boot_data_is_cleared_when_an_extra_used_the_password(queued, offered, guest, monkeypatch):
+    from app.vsphere import connect
+
+    monkeypatch.setattr(extras, "needs_password", lambda chosen: True)
+    guest["status"] = "ok nginx\n"
+    r = deploy(chosen=[{"id": "nginx"}])
+    run_queued(queued)
+    with connect() as vc:
+        config = vc.props(vc.require_vm(r.json()["vmName"]), "config.extraConfig")["config.extraConfig"]
+    assert {o.key: o.value for o in config}.get("guestinfo.userdata", "") == ""

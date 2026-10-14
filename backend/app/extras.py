@@ -40,6 +40,8 @@ def log_file(family: str, extra_id: str) -> str:
 _LABEL = r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?"
 HOSTNAME_RULE = re.compile(rf"^(?:\*\.)?{_LABEL}(?:\.{_LABEL})*$")
 OPTION_TYPES = ("hostname", "text", "choice", "boolean")
+# Variables every script already has, so no option may be called one of them.
+RESERVED = ("hostname", "username", "password")
 # What a boolean option's value can be given as; it reaches scripts as "yes" or "no".
 _YES, _NO = {"yes", "true", "on", "1"}, {"no", "false", "off", "0"}
 
@@ -157,6 +159,9 @@ class Extra:
     # options ({domain}...) are filled in.
     links: tuple[str, ...] = ()
     notes: tuple[str, ...] = ()
+    # Whether its script gets the machine's password as it is (as $password), e.g. to make a web
+    # app's admin account. The worker then clears it from vCenter once the machine is set up.
+    password: bool = False
     options: tuple[Option, ...] = ()
     # family -> (packages, script)
     families: dict[str, tuple[tuple[str, ...], str]] = field(default_factory=dict)
@@ -192,8 +197,8 @@ def extras() -> dict[str, Extra]:
                 raise ValueError(f"extras.yaml: {e['id']}.{o.id}: a choice needs choices, and a default that's one of them")
             if o.type == "boolean" and o.default.lower() not in _YES | _NO | {""}:
                 raise ValueError(f"extras.yaml: {e['id']}.{o.id}: a boolean's default is yes or no")
-            if not re.fullmatch(r"[a-z][a-z0-9_]*", o.id) or o.id == "hostname":
-                raise ValueError(f"extras.yaml: {e['id']}: option id '{o.id}' must be a lowercase shell name other than 'hostname'")
+            if not re.fullmatch(r"[a-z][a-z0-9_]*", o.id) or o.id in RESERVED:
+                raise ValueError(f"extras.yaml: {e['id']}: option id '{o.id}' must be a lowercase shell name other than {', '.join(RESERVED)}")
         for key in ("uses", "provides"):
             if e.get(key) and e[key] not in SERVICES:
                 raise ValueError(f"extras.yaml: {e['id']}: {key} '{e[key]}' isn't one of {', '.join(SERVICES)}")
@@ -208,6 +213,7 @@ def extras() -> dict[str, Extra]:
             provides=e.get("provides"),
             links=tuple(e.get("links", [])),
             notes=tuple(e.get("notes", [])),
+            password=bool(e.get("password", False)),
             options=options,
             families={f: (tuple(e[f].get("packages", [])), e[f]["script"]) for f in FAMILIES if f in e},
         )
@@ -319,19 +325,26 @@ def ps_string(value: str) -> str:
     return f"([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{encoded}')))"
 
 
-def script(x: Extra, family: str, hostname: str, options: dict[str, str]) -> str:
+def needs_password(chosen: list[dict]) -> bool:
+    """Whether any of these extras' scripts get the machine's password as it is."""
+    return any((x := find(c["id"])) and x.password for c in chosen)
+
+
+def script(x: Extra, family: str, hostname: str, options: dict[str, str], username: str = "", password: str = "") -> str:
     _, body = x.families[family]
     if family == "windows":
         lines = [f"# {x.name}, written by the lab panel.", "$ErrorActionPreference = 'Stop'", f"$hostname = {ps_string(hostname)}"]
         lines += [f"${k} = {ps_string(v)}" for k, v in options.items()]
         return "\r\n".join(lines) + "\r\n" + body.replace("\r\n", "\n").replace("\n", "\r\n")
-    lines = [f"# {x.name}, written by the lab panel.", f"hostname={shlex.quote(hostname)}"]
+    lines = [f"# {x.name}, written by the lab panel.", f"hostname={shlex.quote(hostname)}", f"username={shlex.quote(username)}"]
+    if x.password:
+        lines.append(f"password={shlex.quote(password)}")
     lines += [f"{k}={shlex.quote(v)}" for k, v in options.items()]
     lines.append(f". {DIR}/extras/lib.sh")
     return "\n".join(lines) + "\n" + body
 
 
-def cloud_config(chosen: list[dict], family: str, hostname: str) -> dict:
+def cloud_config(chosen: list[dict], family: str, hostname: str, username: str = "", password: str = "") -> dict:
     """write_files and runcmd entries that apply these (resolved) extras on first boot."""
     if not chosen:
         return {}
@@ -341,7 +354,8 @@ def cloud_config(chosen: list[dict], family: str, hostname: str) -> dict:
     ]
     for c in chosen:
         x = extras()[c["id"]]
-        files.append({"path": f"{DIR}/extras/{x.id}.sh", "permissions": "0700", "content": script(x, family, hostname, c["options"])})
+        content = script(x, family, hostname, c["options"], username, password)
+        files.append({"path": f"{DIR}/extras/{x.id}.sh", "permissions": "0700", "content": content})
     return {"write_files": files, "runcmd": [["bash", f"{DIR}/extras/run.sh", *(c["id"] for c in chosen)]]}
 
 

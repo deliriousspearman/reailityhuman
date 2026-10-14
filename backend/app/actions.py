@@ -59,7 +59,7 @@ def deploy(vc: VCenter, m: Machine) -> None:
         extra = cloudinit.windows_guestinfo(m.id, m.name, m.username, m.password, m.ssh_key, chosen, ssh)
     else:
         extra = cloudinit.guestinfo(
-            m.id, m.name, m.username, m.password, m.ssh_key, tpl.admin_group, extras.cloud_config(chosen, tpl.family, m.name)
+            m.id, m.name, m.username, m.password, m.ssh_key, tpl.admin_group, extras.cloud_config(chosen, tpl.family, m.name, m.username, m.password)
         )
     vm = vc.clone(tpl.vsphere, m.vm_name, tpl.cpu, tpl.memory_gb, extra)
     add_log(m.id, f"Cloned from {m.template}/{m.version}")
@@ -212,9 +212,10 @@ def _await_setup(vc: VCenter, vm, m: Machine) -> None:
     try:
         text = _wait_for_status(vc, vm, m, family, timeout)
     finally:
-        if windows:
-            # The first-boot script holds the password as it is. Whether it worked or not, it's done
-            # with it (a reset puts it back from the snapshot).
+        if windows or extras.needs_password(chosen):
+            # The first-boot data holds the password as it is (Windows' script, or an extra that
+            # needs it). Whether it worked or not, it's done with it (a reset puts it back from the
+            # snapshot).
             vc.clear_guestinfo(vm, "guestinfo.userdata")
     results = extras.parse_status(text)
     for outcome, what, detail in results:
