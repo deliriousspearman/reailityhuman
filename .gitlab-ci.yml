@@ -34,6 +34,22 @@ scripts-check:
   script:
     - shellcheck scripts/template/*.sh
 
+# The Windows template scripts: parsed with PowerShell's own parser (they run on VMs, so CI only
+# checks they're well-formed). Not required for deploys: it pulls from Microsoft's registry.
+scripts-check-windows:
+  stage: build
+  image: mcr.microsoft.com/powershell:7.4-ubuntu-22.04
+  script:
+    - |
+      pwsh -NoProfile -Command '
+        $bad = 0
+        foreach ($f in Get-ChildItem scripts/template/*.ps1) {
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile($f.FullName, [ref]$null, [ref]$errors) | Out-Null
+          if ($errors) { $bad++; $errors | ForEach-Object { "$($f.Name):$($_.Extent.StartLineNumber): $($_.Message)" } } else { "$($f.Name): parses" }
+        }
+        exit $bad'
+
 # The backend's tests, against PostgreSQL and vcsim (VMware's vCenter simulator), as
 # backend/compose.test.yaml runs them locally.
 backend-test:

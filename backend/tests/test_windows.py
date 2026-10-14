@@ -73,6 +73,8 @@ def test_userdata_is_a_powershell_script_carrying_values_encoded():
     assert "ConvertTo-SecureString ([Text.Encoding]::UTF8.GetString(" in script
     assert "Add-Content -Path $keys -Value ([Text.Encoding]::UTF8.GetString(" in script
     assert "administrators_authorized_keys" in script
+    assert "-500' -and $_.Name -ne $user } | Disable-LocalUser" in script  # the built-in Administrator
+    assert "Start-Service -Name sshd" in script
     # The extras: the runner and IIS's script written, then run; failures still write the status file.
     files = {v.splitlines()[0]: v for v in values if v.startswith("#")}
     assert any("applies the extras" in line for line in files)

@@ -170,6 +170,9 @@ def windows_userdata(username: str, password: str, ssh_key: str | None, chosen: 
         '    if (-not (Get-LocalGroupMember -Group $admins | Where-Object { $_.Name -like "*\\$user" })) {',
         "        Add-LocalGroupMember -Group $admins -Member $user",
         "    }",
+        "    # The built-in Administrator (its SID ends in -500) has the template builder's password:",
+        "    # switch it off, so only this machine's own user can sign in.",
+        "    Get-LocalUser | Where-Object { $_.SID.Value -like 'S-1-5-21-*-500' -and $_.Name -ne $user } | Disable-LocalUser",
     ]
     if key:
         lines += [
@@ -180,6 +183,13 @@ def windows_userdata(username: str, password: str, ssh_key: str | None, chosen: 
             f"    Add-Content -Path $keys -Value {extras.ps_string(key)} -Encoding ascii",
             "    icacls.exe $keys /inheritance:r /grant '*S-1-5-32-544:F' /grant '*S-1-5-18:F' | Out-Null",
         ]
+    lines += [
+        "    # OpenSSH Server, if the template has it: its first start makes this machine's own host keys.",
+        "    if (Get-Service -Name sshd -ErrorAction SilentlyContinue) {",
+        "        Set-Service -Name sshd -StartupType Automatic",
+        "        Start-Service -Name sshd",
+        "    }",
+    ]
     lines += ["    " + line for line in extras.windows_setup(chosen, hostname).split("\r\n")]
     lines += [
         "} catch {",
