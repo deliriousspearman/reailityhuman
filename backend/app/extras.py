@@ -59,6 +59,60 @@ mv "$status" {STATUS_FILE}
 """
 
 
+# Helpers every Linux extra's script can use (it's sourced after the script's variables are set).
+LIB = r"""# Written by the lab panel: helpers for the extras' scripts.
+
+# lab_ip: the machine's first IPv4 address.
+lab_ip() { hostname -I | awk '{print $1}'; }
+
+# lab_cert [name]: a self-signed certificate for this machine, for `name` (default: its hostname),
+# its hostname and its address. Sets LAB_CERT and LAB_KEY to the files; extras asking for the same
+# name share one.
+lab_cert() {
+	local name=${1:-$hostname} ip san
+	# A wildcard name ("*.lab.example") makes a file name without the "*".
+	LAB_CERT=/etc/ssl/lab-deploy/${name//\*/wildcard}.crt
+	LAB_KEY=/etc/ssl/lab-deploy/${name//\*/wildcard}.key
+	[ -s "$LAB_CERT" ] && return 0
+	mkdir -p /etc/ssl/lab-deploy
+	ip=$(lab_ip)
+	san="DNS:$name"
+	[ "$name" = "$hostname" ] || san="$san,DNS:$hostname"
+	[ -z "$ip" ] || san="$san,IP:$ip"
+	openssl req -x509 -newkey rsa:2048 -nodes -days 825 -subj "/CN=$name" -addext "subjectAltName=$san" \
+		-keyout "$LAB_KEY" -out "$LAB_CERT" 2>/dev/null
+	chmod 600 "$LAB_KEY"
+}
+
+# lab_apache: Apache turned on and (re)started, with whatever configuration it has now.
+lab_apache() {
+	local unit=apache2
+	[ -d /etc/httpd ] && unit=httpd
+	systemctl enable -q "$unit"
+	systemctl restart "$unit"
+}
+
+# lab_apache_conf <app> < config: Apache configuration for a web app at its own path, e.g. an Alias.
+# It applies to every site (HTTP and, with Apache + HTTPS, HTTPS). Then call lab_apache.
+lab_apache_conf() {
+	if [ -d /etc/apache2 ]; then
+		cat >"/etc/apache2/conf-available/lab-$1.conf"
+		a2enconf -q "lab-$1"
+	else
+		cat >"/etc/httpd/conf.d/lab-$1.conf"
+	fi
+}
+
+# lab_open <port/proto>...: opens ports in firewalld, where it's running (RHEL family).
+lab_open() {
+	systemctl is-active -q firewalld || return 0
+	local port
+	for port in "$@"; do firewall-cmd -q --permanent --add-port="$port"; done
+	firewall-cmd -q --reload
+}
+"""
+
+
 class ExtraError(ValueError):
     """A choice that can't be deployed; the message is shown to people as it is."""
 
@@ -240,6 +294,7 @@ def script(x: Extra, family: str, hostname: str, options: dict[str, str]) -> str
         return "\r\n".join(lines) + "\r\n" + body.replace("\r\n", "\n").replace("\n", "\r\n")
     lines = [f"# {x.name}, written by the lab panel.", f"hostname={shlex.quote(hostname)}"]
     lines += [f"{k}={shlex.quote(v)}" for k, v in options.items()]
+    lines.append(f". {DIR}/extras/lib.sh")
     return "\n".join(lines) + "\n" + body
 
 
@@ -247,7 +302,10 @@ def cloud_config(chosen: list[dict], family: str, hostname: str) -> dict:
     """write_files and runcmd entries that apply these (resolved) extras on first boot."""
     if not chosen:
         return {}
-    files = [{"path": f"{DIR}/extras/run.sh", "permissions": "0755", "content": RUNNER}]
+    files = [
+        {"path": f"{DIR}/extras/run.sh", "permissions": "0755", "content": RUNNER},
+        {"path": f"{DIR}/extras/lib.sh", "permissions": "0644", "content": LIB},
+    ]
     for c in chosen:
         x = extras()[c["id"]]
         files.append({"path": f"{DIR}/extras/{x.id}.sh", "permissions": "0700", "content": script(x, family, hostname, c["options"])})

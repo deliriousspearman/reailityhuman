@@ -162,11 +162,14 @@ def test_cloud_config_quotes_values_and_runs_each_extra():
     chosen = [{"id": "apache-https", "options": {"domain": "*.lab.example"}}]
     config = extras.cloud_config(chosen, "debian", "web01")
     paths = [f["path"] for f in config["write_files"]]
-    assert paths == [f"{extras.DIR}/extras/run.sh", f"{extras.DIR}/extras/apache-https.sh"]
-    script = config["write_files"][1]["content"]
+    assert paths == [f"{extras.DIR}/extras/run.sh", f"{extras.DIR}/extras/lib.sh", f"{extras.DIR}/extras/apache-https.sh"]
+    assert "lab_cert()" in config["write_files"][1]["content"]
+    script = config["write_files"][2]["content"]
     assert "hostname=web01\n" in script
     assert "domain='*.lab.example'\n" in script  # quoted, so the * isn't expanded
-    assert "openssl req" in script and "a2ensite" in script
+    # The helpers are loaded after the variables, and used.
+    assert script.index("domain=") < script.index(f". {extras.DIR}/extras/lib.sh") < script.index('lab_cert "$domain"')
+    assert "a2ensite" in script
     assert config["runcmd"] == [["bash", f"{extras.DIR}/extras/run.sh", "apache-https"]]
     assert extras.cloud_config([], "debian", "web01") == {}
 

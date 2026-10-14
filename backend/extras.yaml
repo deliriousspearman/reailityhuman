@@ -16,7 +16,9 @@
 #                default   used when it's left blank. {hostname} is the machine's name, {fqdn} the
 #                          name plus MACHINE_DOMAIN (just the name when that's empty)
 #   <family>   debian or rhel: `packages` (must be in prepare.sh's EXTRA_PACKAGES_<FAMILY>, which a
-#              test checks) and `script`, run with bash -e as root. $hostname is always set.
+#              test checks) and `script`, run with bash -e as root. $hostname is always set, and
+#              the helpers in extras.py's LIB are there: lab_cert (a self-signed certificate),
+#              lab_apache and lab_apache_conf (web apps inside Apache), lab_open (firewalld), lab_ip.
 #              windows: just `script`, PowerShell run as SYSTEM with $ErrorActionPreference = 'Stop'
 #              (any PowerShell error fails the extra). A program that fails doesn't stop it, though:
 #              after running one, check it, e.g. `if ($LASTEXITCODE) { throw "x.exe failed" }`.
@@ -41,7 +43,7 @@
     script: |
       echo "<h1>$hostname</h1><p>nginx, deployed by the lab panel.</p>" >/usr/share/nginx/html/index.html
       systemctl enable --now nginx
-      if systemctl is-active -q firewalld; then firewall-cmd -q --permanent --add-service=http && firewall-cmd -q --reload; fi
+      lab_open 80/tcp
 
 - id: apache
   name: Apache
@@ -59,7 +61,7 @@
     script: |
       echo "<h1>$hostname</h1><p>Apache, deployed by the lab panel.</p>" >/var/www/html/index.html
       systemctl enable --now httpd
-      if systemctl is-active -q firewalld; then firewall-cmd -q --permanent --add-service=http && firewall-cmd -q --reload; fi
+      lab_open 80/tcp
 
 - id: apache-https
   name: Apache + HTTPS
@@ -76,35 +78,23 @@
   debian:
     packages: [apache2, openssl]
     script: |
-      ip=$(hostname -I | awk '{print $1}')
-      san="DNS:$domain"
-      [ "$domain" = "$hostname" ] || san="$san,DNS:$hostname"
-      [ -z "$ip" ] || san="$san,IP:$ip"
-      openssl req -x509 -newkey rsa:2048 -nodes -days 825 -subj "/CN=$domain" -addext "subjectAltName=$san" \
-        -keyout /etc/ssl/private/lab-deploy.key -out /etc/ssl/certs/lab-deploy.crt 2>/dev/null
-      chmod 600 /etc/ssl/private/lab-deploy.key
-      sed -i -e 's#^\(\s*SSLCertificateFile\s\).*#\1/etc/ssl/certs/lab-deploy.crt#' \
-             -e 's#^\(\s*SSLCertificateKeyFile\s\).*#\1/etc/ssl/private/lab-deploy.key#' \
+      lab_cert "$domain"
+      sed -i -e "s#^\(\s*SSLCertificateFile\s\).*#\1$LAB_CERT#" \
+             -e "s#^\(\s*SSLCertificateKeyFile\s\).*#\1$LAB_KEY#" \
         /etc/apache2/sites-available/default-ssl.conf
       echo "<h1>$domain</h1><p>Apache over HTTPS, deployed by the lab panel.</p>" >/var/www/html/index.html
       a2enmod -q ssl
       a2ensite -q default-ssl
-      systemctl enable apache2
-      systemctl restart apache2
+      lab_apache
   rhel:
     packages: [httpd, mod_ssl, openssl]
     script: |
-      ip=$(hostname -I | awk '{print $1}')
-      san="DNS:$domain"
-      [ "$domain" = "$hostname" ] || san="$san,DNS:$hostname"
-      [ -z "$ip" ] || san="$san,IP:$ip"
-      openssl req -x509 -newkey rsa:2048 -nodes -days 825 -subj "/CN=$domain" -addext "subjectAltName=$san" \
-        -keyout /etc/pki/tls/private/localhost.key -out /etc/pki/tls/certs/localhost.crt 2>/dev/null
-      chmod 600 /etc/pki/tls/private/localhost.key
+      lab_cert "$domain"
+      cp "$LAB_CERT" /etc/pki/tls/certs/localhost.crt
+      install -m 600 "$LAB_KEY" /etc/pki/tls/private/localhost.key
       echo "<h1>$domain</h1><p>Apache over HTTPS, deployed by the lab panel.</p>" >/var/www/html/index.html
-      systemctl enable httpd
-      systemctl restart httpd
-      if systemctl is-active -q firewalld; then firewall-cmd -q --permanent --add-service=http --add-service=https && firewall-cmd -q --reload; fi
+      lab_apache
+      lab_open 80/tcp 443/tcp
 
 - id: iis
   name: IIS
