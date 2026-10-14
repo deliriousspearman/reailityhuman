@@ -1,8 +1,9 @@
 # Template scripts
 
-These two scripts turn a freshly installed Linux VM into a template the panel can clone. The
-whole process, including the vCenter steps before and after, is in
-[docs/setup-vsphere.md](../../docs/setup-vsphere.md), part 2.
+These scripts turn a freshly installed VM into a template the panel can clone: `prepare.sh` and
+`clean.sh` for Linux, `prepare.ps1` and `clean.ps1` for Windows. The whole process, including the
+vCenter steps before and after, is in [docs/setup-vsphere.md](../../docs/setup-vsphere.md): part 2
+for Linux, part 5 for Windows.
 
 | Script | What it does | Can be undone? |
 |---|---|---|
@@ -86,3 +87,24 @@ Every OS:
 - Create `builder` with **Make this user administrator** ticked, which puts it in `wheel`.
 - Enable the network on the installer's network screen.
 - In `templates.yaml`, set `family: rhel`. The panel's user then goes in `wheel`, which gives it sudo.
+
+## Windows
+
+| Script | What it does | Can be undone? |
+|---|---|---|
+| [`prepare.ps1`](prepare.ps1) | Checks VMware Tools, installs Cloudbase-Init and configures it to read the panel's data from vCenter, turns on Remote Desktop and OpenSSH Server, and stops Server Manager opening at sign-in. | Yes. It's safe to re-run. |
+| [`clean.ps1`](clean.ps1) | Clears Cloudbase-Init's records and the OpenSSH host keys, then runs sysprep (generalize) with Cloudbase-Init's Unattend.xml and shuts down. | No: sysprep can't be undone. |
+
+Run both in an elevated Windows PowerShell on the VM, from a CD image (part 5 shows how to make one
+with the scripts and the Cloudbase-Init MSI). `-DryRun` (prepare) and leaving out `-Yes` (clean)
+only say what they'd do.
+
+| Windows | `templates.yaml` | Status |
+|---|---|---|
+| Server 2025 (Desktop Experience, Core) | `family: windows` | Written, not tested yet |
+| Server 2016–2022, Windows 10/11 (64-bit) | `family: windows` | Should work the same; not tested |
+
+On clones, the panel's first-boot script (written by the backend, run by Cloudbase-Init) creates
+`labadmin`, disables the built-in Administrator, starts OpenSSH, and runs the Windows extras (IIS),
+logging each to `C:\ProgramData\lab-deploy\logs\<extra>.log`. Windows extras install their roles
+from files already on the machine, so unlike Linux there's nothing to bake into the template.

@@ -238,3 +238,111 @@ show vCenter's error message. **Redeploy** on the machine's page tries again wit
 A deploy that failed partway can leave a VM no machine owns; **Admin → Leftover VMs** lists those
 and deletes them.
 The worker's own log has the rest: `docker compose -f /srv/lab-deploy/compose.yaml logs worker`.
+
+## 5. Windows Server templates
+
+Windows machines work like Linux ones: linked clones of a template's `clean` snapshot, given their
+name, user and password by the panel through vCenter. Instead of cloud-init, Windows templates have
+**Cloudbase-Init**, and are generalized with **sysprep**, so every clone gets its own identity (SID).
+On a clone's first boot:
+
+1. sysprep's setup runs, and Cloudbase-Init sets the computer name from the panel, then Windows restarts;
+2. Cloudbase-Init runs the panel's first-boot script: it creates `labadmin` in Administrators with
+   the machine's password (and your SSH key, if you gave one), disables the built-in Administrator,
+   starts OpenSSH, and sets up any extras (IIS);
+3. the panel sees the script has finished, through VMware Tools, and clears the password from the
+   VM's settings in vCenter.
+
+That takes a few minutes. The panel waits up to `WINDOWS_SETUP_TIMEOUT_SECONDS` (20 minutes).
+
+These steps build Windows Server 2025 with Desktop Experience (`tpl-windows-server-2025`). For
+Server Core, pick Server Core in the installer and name it `tpl-windows-server-2025-core`; the rest
+is the same. Server Core runs in 2 GB, the desktop wants 4. On a small host, that decides how many
+can run at once.
+
+**Licensing:** without internet access, Windows can't activate online. The evaluation edition runs
+for 180 days. Generalizing with sysprep should restart that period for each clone, which suits
+short-lived machines (to be confirmed on the first build). For anything longer-lived, a KMS host on
+the LAN with volume-licence keys is the clean answer.
+
+### What you need
+
+- The Windows Server 2025 ISO (the evaluation is fine), uploaded to the datastore's `ISO` folder.
+- **Cloudbase-Init**'s 64-bit MSI (`CloudbaseInitSetup_x64.msi`, the Stable build) from
+  cloudbase.it, and this repo's `scripts/template/prepare.ps1` and `clean.ps1`. The easiest way to
+  get them onto an offline VM is a small ISO, which works for Server Core too. From this repo:
+
+  ```sh
+  mkdir -p /tmp/lab-tools && cp CloudbaseInitSetup_x64.msi scripts/template/*.ps1 /tmp/lab-tools/
+  genisoimage -quiet -J -R -V LABTOOLS -o lab-tools.iso /tmp/lab-tools   # or mkisofs
+  ```
+
+  Upload `lab-tools.iso` to the `ISO` folder as well.
+
+### Create the VM
+
+1. **Create the VM** in `Labs/Templates`, named `tpl-windows-server-2025`:
+   - Guest OS: Windows, Microsoft Windows Server 2025 (64-bit)
+   - 2 vCPU, 4 GB memory (2 GB for Core), 60 GB disk (40 GB for Core), **thin provisioned**
+   - Firmware **EFI**, with **Secure Boot**
+   - Disk controller: **NVMe** (Windows has the driver built in)
+   - Network adapter: **VMXNET3**, on the LAN port group (its driver comes with VMware Tools)
+   - CD/DVD 1: **Datastore ISO File**, the Windows ISO, **Connect at power on**
+2. **Install Windows Server**: pick *Standard (Desktop Experience)* (or Core), *Custom: install
+   Windows only*, the one disk. At the end, set the **Administrator** password. It's only for
+   building: clones have the built-in Administrator disabled.
+3. **Install VMware Tools**: in vCenter, **Guest OS → Install VMware Tools**, then in the VM run
+   `D:\setup64.exe` and pick *Typical*, then restart. On Server Core, run
+   `D:\setup64.exe /S /v"/qn REBOOT=R"` and then `Restart-Computer`. The network works once Tools
+   is in.
+
+### Prepare it
+
+1. In **Edit Settings**, point the CD/DVD at `lab-tools.iso` (connected).
+2. In the VM, open **PowerShell as Administrator** (on Core, type `powershell` first), and run:
+
+   ```powershell
+   Set-ExecutionPolicy -Scope Process Bypass
+   D:\prepare.ps1 -Msi D:\CloudbaseInitSetup_x64.msi -DryRun   # what it found, and its plan
+   D:\prepare.ps1 -Msi D:\CloudbaseInitSetup_x64.msi
+   ```
+
+   It checks VMware Tools, installs Cloudbase-Init and points it at vCenter, turns on Remote Desktop
+   and OpenSSH Server, and stops Server Manager opening at sign-in. It's safe to re-run. Pass
+   `-NoSsh` to leave OpenSSH off; then remove `ssh` from the template's `access` in
+   `backend/templates.yaml`.
+
+3. Optionally, install anything every machine should have, now. Windows Update needs the internet;
+   on an offline LAN, update the ISO you build from instead.
+
+### Generalize it, and shut it down
+
+```powershell
+D:\clean.ps1          # what it would do
+D:\clean.ps1 -Yes
+```
+
+It clears Cloudbase-Init's records and the OpenSSH host keys, then runs sysprep, which shuts the VM
+down when it has finished (a few minutes). If the VM is still on after ten minutes,
+`C:\Windows\System32\Sysprep\Panther\setuperr.log` says why. Don't start the VM again after this:
+starting it runs the first boot meant for clones.
+
+### Snapshot it, and make it a template
+
+With the VM powered off:
+
+1. In **Edit Settings**, set the CD/DVD to **Client Device**.
+2. **Take a snapshot** named exactly **`clean`**, without memory.
+3. **Convert it:** right-click, then **Template → Convert to Template**.
+
+### Tell the panel
+
+In `backend/templates.yaml`, uncomment the Windows Server 2025 entry (or the Core one), commit and
+push. Then deploy one from **Machines → Windows Server**. Its activity log shows *Windows is setting
+up…*, then *Ready. Sign in as labadmin.* Connect with **Remote Desktop** (the machine page has the
+command and an `.rdp` file) or `ssh labadmin@<address>`.
+
+If the deploy fails, the machine's log has the reason. On the machine, these show how far it got:
+- `C:\Program Files\Cloudbase Solutions\Cloudbase-Init\log\cloudbase-init.log`: the computer name
+  and the first-boot script;
+- `C:\ProgramData\lab-deploy\logs\<extra>.log`: each extra.

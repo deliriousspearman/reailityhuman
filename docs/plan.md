@@ -214,7 +214,7 @@ Added after the first design pass. Alongside Pro Labs, people can deploy **one m
 - **How they're stored:** each version is a vSphere template with a `clean` snapshot, deployed as a linked clone.
 - **Name and first sign-in:**
   - Linux: set by cloud-init.
-  - Windows: set by a vSphere customisation spec (sysprep).
+  - Windows: set by Cloudbase-Init (cloud-init's Windows counterpart, reading the same VMware guestinfo data) in templates generalized with sysprep. Chosen over a vSphere customisation spec so Windows and Linux share one way of passing data, and one way of waiting for setup and extras.
   - Appliances (pfSense, OPNsense, ESXi, TrueNAS, VyOS) can't be customised, so they keep documented defaults, shown on the machine page.
 - **Flags** on a template tell people, and the deploy job, what it needs:
   - **Nested** (Proxmox, ESXi): expose hardware virtualisation to the guest (`vhv.enable`). The port group must let nested VMs talk: MAC learning on a vSphere 8 distributed switch, or promiscuous mode plus forged transmits. Nested VMs are slower.

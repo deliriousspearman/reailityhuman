@@ -4,8 +4,9 @@ A web panel that deploys, resets and tears down Pro Labs (HackTheBox-style netwo
 machines) on VMware vSphere, for a LAN without internet access. The labs are advertised on the LMS;
 lab slugs match its `labs/<slug>.md` pages.
 
-What works so far is **single machines**: deploy one VM from a template (Ubuntu 26.04 for now) onto
-the LAN, with optional extras (nginx, Apache), then start, stop, reboot, reset, redeploy, extend and
+What works so far is **single machines**: deploy one VM from a template (Ubuntu 26.04 for now;
+Windows Server 2025 is written and waiting for its template) onto the LAN, with optional extras
+(nginx, Apache, IIS), then start, stop, reboot, reset, redeploy, extend and
 destroy it. Machines expire unless they're extended or kept. The admin page shows capacity, every
 machine, leftover VMs and the job queue. Pro Labs, the VPN and sign-in come later; the panel shows
 them greyed out.
@@ -17,9 +18,10 @@ them greyed out.
 - [`deploy/`](deploy/): server setup and deployment (Docker Compose, Caddy).
 - [`scripts/setup_vcenter.py`](scripts/setup_vcenter.py): prepares vCenter (folders, roles, permissions).
 - [`scripts/template/`](scripts/template/): `prepare.sh` and `clean.sh` turn a fresh Linux VM (Ubuntu, Debian,
-  CentOS Stream, Rocky, Alma) into a template.
+  CentOS Stream, Rocky, Alma) into a template; `prepare.ps1` and `clean.ps1` do the same for Windows,
+  with Cloudbase-Init and sysprep.
 - [`docs/setup-vsphere.md`](docs/setup-vsphere.md): the one-off vCenter setup and how to build the
-  Ubuntu template.
+  Ubuntu and Windows Server templates.
 - [`docs/plan.md`](docs/plan.md): the plan: stack, vSphere architecture, features, limitations and phases.
 
 **No sign-in yet:** anyone who can reach the panel can deploy and destroy machines and read their
