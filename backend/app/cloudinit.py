@@ -157,7 +157,8 @@ def windows_userdata(
     """A PowerShell script Cloudbase-Init runs once, as SYSTEM, after it has set the computer name:
     it creates the user (an administrator), sets up OpenSSH if `ssh` (with the key), and applies the
     chosen extras. It always ends by writing the status file, which the panel waits for; if setting
-    up fails, that says "failed setup <why>"."""
+    up fails, that says "failed setup <why>". If an extra needs a restart, it exits with 1003 and
+    Cloudbase-Init runs it again after the restart, so every step is safe to repeat."""
     status = extras.WINDOWS_STATUS_FILE
     key = (ssh_key or "").strip() if ssh else ""
     lines = [
@@ -202,7 +203,11 @@ def windows_userdata(
                 "            # Administrators' keys are in one shared file, which only Administrators and SYSTEM",
                 "            # may be able to read.",
                 "            $keys = Join-Path $env:ProgramData 'ssh\\administrators_authorized_keys'",
-                f"            Add-Content -Path $keys -Value {extras.ps_string(key)} -Encoding ascii",
+                f"            $key = {extras.ps_string(key)}",
+                "            # Once: this script runs again after a restart an extra asks for.",
+                "            if (-not ((Test-Path $keys) -and (Select-String -Path $keys -SimpleMatch -Pattern $key -Quiet))) {",
+                "                Add-Content -Path $keys -Value $key -Encoding ascii",
+                "            }",
                 "            icacls.exe $keys /inheritance:r /grant '*S-1-5-32-544:F' /grant '*S-1-5-18:F' | Out-Null",
             ]
         lines += [

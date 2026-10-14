@@ -18,6 +18,9 @@
 #              after running one, check it, e.g. `if ($LASTEXITCODE) { throw "x.exe failed" }`.
 #              Options and $hostname are PowerShell variables. Windows roles and features install
 #              from files already on the machine, so no packages are baked into the template.
+#              An extra that needs a restart to finish exits with 3010 ("done, restart needed"), e.g.
+#              `if ((Install-WindowsFeature X).RestartNeeded -eq 'Yes') { exit 3010 }`: Windows
+#              restarts and the extras after it carry on (3 restarts at most, for all of them).
 
 - id: nginx
   name: nginx

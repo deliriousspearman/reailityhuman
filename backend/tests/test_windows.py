@@ -74,7 +74,7 @@ def test_userdata_is_a_powershell_script_carrying_values_encoded():
     assert "Get-LocalGroupMember -" not in script and "catch [Microsoft.PowerShell.Commands.MemberExistsException]" in script
     # As commands' arguments, encoded values must be in brackets, or PowerShell takes them as text.
     assert "ConvertTo-SecureString ([Text.Encoding]::UTF8.GetString(" in script
-    assert "Add-Content -Path $keys -Value ([Text.Encoding]::UTF8.GetString(" in script
+    assert "$key = ([Text.Encoding]::UTF8.GetString(" in script and "Add-Content -Path $keys -Value $key" in script
     assert "administrators_authorized_keys" in script
     assert "-500' -and $_.Name -ne $user } | Disable-LocalUser" in script  # the built-in Administrator
     assert "Start-Service -Name sshd" in script
@@ -331,3 +331,22 @@ def test_no_log_no_extra_detail(queued, windows, guest):
     deploy()
     run_queued(queued)
     assert job_detail() == "Setting up the machine failed: Access is denied."
+
+
+# Extras that need a restart ------------------------------------------------------------------------------
+
+
+def test_runner_carries_on_after_restarts():
+    runner = extras.WINDOWS_RUNNER
+    assert "if ($done -contains \"ok $id\") { continue }" in runner  # extras done before a restart are skipped
+    assert f"if ($code -eq 3010 -and $restarts -lt {extras.RESTARTS_MAX})" in runner
+    assert "exit 1003" in runner and runner.rstrip().endswith("exit 0")  # never a stray exit code
+
+
+def test_first_boot_script_passes_a_restart_on_and_is_safe_to_repeat():
+    script = cloudinit.windows_userdata("labadmin", "Pass-word1", "ssh-ed25519 AAAA test", [{"id": "iis", "options": {}}], "win01")
+    run = script.index("run.ps1' -Ids")
+    assert script.index("if ($LASTEXITCODE -eq 1003) { exit 1003 }") > run
+    # The key is only added if it isn't there (the script runs again after a restart).
+    assert "Select-String -Path $keys -SimpleMatch -Pattern $key -Quiet" in script
+    assert "Get-LocalUser -Name $user -ErrorAction SilentlyContinue" in script  # the user may exist already

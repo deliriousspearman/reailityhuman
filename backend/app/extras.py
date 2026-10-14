@@ -219,19 +219,47 @@ def cloud_config(chosen: list[dict], family: str, hostname: str) -> dict:
 # Windows: runs each extra's script in turn, logging each to logs\<id>.log, then writes the status
 # file in one go, in the same format as RUNNER's. With no extras, it writes an empty one: the panel
 # waits for it either way, as the sign that the machine has finished setting up.
-WINDOWS_RUNNER = rf"""# Written by the lab panel: applies the extras chosen for this machine (run once, on first boot).
+#
+# An extra that needs a restart to finish (e.g. a server role) exits with 3010, Windows' "done,
+# restart needed". The runner notes it in `progress` and exits with 1003, which the first-boot script
+# passes on: Cloudbase-Init restarts Windows and runs it all again, and the runner carries on after
+# the extras already done (one that asked is done). At most RESTARTS_MAX restarts in all, so a long
+# list of them can't keep the machine restarting for ever.
+RESTARTS_MAX = 3
+WINDOWS_RUNNER = rf"""# Written by the lab panel: applies the extras chosen for this machine (run on first boot, and
+# again after any restart an extra asks for).
 param([string[]]$Ids = @(), [string[]]$Warnings = @())
 # Not "Stop": an extra writing to stderr (redirected to its log) would then end this script.
 $ErrorActionPreference = 'Continue'
 $dir = '{WINDOWS_DIR}'
 New-Item -ItemType Directory -Force -Path "$dir\logs" | Out-Null
-$lines = foreach ($id in $Ids) {{
+# From before a restart: "ok <id>" for each extra done, and a "restart" line for each restart.
+$progress = "$dir\progress"
+$done = @()
+if (Test-Path $progress) {{ $done = @(Get-Content -Path $progress) }}
+$restarts = @($done | Where-Object {{ $_ -eq 'restart' }}).Count
+$lines = @($done | Where-Object {{ $_ -like 'ok *' }})
+foreach ($id in $Ids) {{
+    if ($done -contains "ok $id") {{ continue }}
     $log = "$dir\logs\$id.log"
     & powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$dir\extras\$id.ps1" *> $log
-    if ($LASTEXITCODE -eq 0) {{ "ok $id" }} else {{ "failed $id $(Get-Content -Path $log -Tail 1)" }}
+    $code = $LASTEXITCODE
+    if ($code -eq 3010 -and $restarts -lt {RESTARTS_MAX}) {{
+        Add-Content -Path $progress -Value @("ok $id", 'restart')
+        exit 1003
+    }}
+    if ($code -eq 3010) {{
+        $lines += "failed $id needs a restart, but the extras have had {RESTARTS_MAX} already"
+    }} elseif ($code -eq 0) {{
+        $lines += "ok $id"
+        Add-Content -Path $progress -Value "ok $id"
+    }} else {{
+        $lines += "failed $id $(Get-Content -Path $log -Tail 1)"
+    }}
 }}
 [IO.File]::WriteAllLines("$dir\extras.status.part", [string[]]@(@($Warnings) + @($lines)))
 Move-Item -Force -Path "$dir\extras.status.part" -Destination "$dir\extras.status"
+exit 0
 """.replace("\n", "\r\n")
 
 
@@ -251,6 +279,9 @@ def windows_setup(chosen: list[dict], hostname: str) -> str:
     ids = ", ".join(f"'{c['id']}'" for c in chosen)
     # $warnings: lines the first-boot script collected ("warn <what> <why>"), reported with the rest.
     lines.append(f"& '{WINDOWS_DIR}\\extras\\run.ps1' -Ids @({ids}) -Warnings $warnings")
+    # 1003: an extra needs a restart. Passed on, it has Cloudbase-Init restart Windows and run the
+    # first-boot script again, which carries on where the runner left off.
+    lines.append("if ($LASTEXITCODE -eq 1003) { exit 1003 }")
     return "\r\n".join(lines)
 
 

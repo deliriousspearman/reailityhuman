@@ -107,4 +107,6 @@ only say what they'd do.
 On clones, the panel's first-boot script (written by the backend, run by Cloudbase-Init) creates
 `labadmin`, disables the built-in Administrator, starts OpenSSH, and runs the Windows extras (IIS),
 logging each to `C:\ProgramData\lab-deploy\logs\<extra>.log`. Windows extras install their roles
-from files already on the machine, so unlike Linux there's nothing to bake into the template.
+from files already on the machine, so unlike Linux there's nothing to bake into the template. An
+extra that needs a restart (a server role, say) exits with 3010: Windows restarts, Cloudbase-Init
+runs the first-boot script again, and it carries on with the extras after it.
