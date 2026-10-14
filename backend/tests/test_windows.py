@@ -251,3 +251,14 @@ def test_first_boot_script_is_ascii(monkeypatch):
     script.encode("ascii")  # raises if not
     assert script.count("(New-Object Text.UTF8Encoding $true)") == 2  # the runner and IIS
     assert any("Café … ‘quoted’" in v for v in decoded(script))
+
+
+def test_reset_remembers_its_windows_even_after_templates_yaml_changes(queued, windows, guest, monkeypatch):
+    guest["status"] = ""
+    r = deploy()
+    run_queued(queued)
+    monkeypatch.delitem(catalogue.catalogue(), KEY)  # e.g. the entry renamed or commented out
+    guest["reads"].clear()
+    assert client.post(f"/api/machines/{r.json()['id']}/reset").status_code == 200
+    run_queued(queued)
+    assert guest["reads"] == [("labadmin", extras.WINDOWS_STATUS_FILE)]  # still waited for Windows setup

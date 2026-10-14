@@ -310,6 +310,7 @@ def deploy_machine(req: DeployRequest, db: Db) -> dict:
         name=req.name,
         template=tpl.template,
         version=tpl.version,
+        family=tpl.family,
         owner=owner,
         state="deploying",
         expires_at=None if req.hours is None else utcnow() + timedelta(hours=req.hours),

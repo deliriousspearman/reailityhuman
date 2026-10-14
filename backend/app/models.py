@@ -27,6 +27,9 @@ class Machine(Base):
     name: Mapped[str] = mapped_column(String(15), unique=True)
     template: Mapped[str] = mapped_column(String(64))
     version: Mapped[str] = mapped_column(String(32))
+    # Its template's OS family when it was deployed (debian, rhel or windows), so resetting it works
+    # the same even if templates.yaml has changed since.
+    family: Mapped[str] = mapped_column(String(16), default="debian")
     owner: Mapped[str] = mapped_column(String(64))
     state: Mapped[str] = mapped_column(String(16))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

@@ -171,8 +171,7 @@ def _await_setup(vc: VCenter, vm, m: Machine) -> None:
     """Waits for the machine to finish setting up on first boot, and fails the job if any part
     didn't. Linux machines are waited for only when they have extras; Windows machines always, as
     sysprep and a restart come first. Each extra's own log is on the machine (extras.log_file)."""
-    tpl = catalogue.find(m.template, m.version)
-    family = tpl.family if tpl else "debian"
+    family = m.family
     windows = family == "windows"
     chosen = m.extras or []
     if not chosen and not windows:
