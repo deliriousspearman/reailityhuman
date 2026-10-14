@@ -64,7 +64,8 @@ if (-not $tools -or $tools.Status -ne 'Running') {
     throw 'VMware Tools must be installed and running first: in vCenter, Guest OS > Install VMware Tools.'
 }
 # Cloudbase-Init reads the panel's data with this; without it, clones would quietly get nothing.
-$rpctool = Join-Path $env:ProgramFiles 'VMware\VMware Toolspctool.exe'
+$rpctool = Join-Path $env:ProgramFiles 'VMware\VMware Tools
+pctool.exe'
 if (-not (Test-Path $rpctool)) {
     throw "VMware Tools has no $rpctool, which Cloudbase-Init needs to read each clone's data. Reinstall VMware Tools (Typical)."
 }
@@ -161,7 +162,13 @@ if ($sshCapability) {
     Step 'Turning on OpenSSH Server'
     if ($sshCapability.State -ne 'Installed') {
         # Needs the Features on Demand source: Windows Update, or media on an offline network.
-        Add-WindowsCapability -Online -Name $sshCapability.Name | Out-Null
+        try {
+            Add-WindowsCapability -Online -Name $sshCapability.Name | Out-Null
+        } catch {
+            throw ("Couldn't install OpenSSH Server ($($_.Exception.Message)). Without internet access, Windows " +
+                'needs its Features on Demand media for that: add -Source <its folder> to Add-WindowsCapability ' +
+                "by hand, or re-run with -NoSsh and take ssh out of the template's access in templates.yaml.")
+        }
     }
     Set-Service -Name sshd -StartupType Automatic
     if (-not (Get-NetFirewallRule -Name 'OpenSSH-Server-In-TCP' -ErrorAction SilentlyContinue)) {
