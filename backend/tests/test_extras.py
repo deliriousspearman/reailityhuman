@@ -303,3 +303,19 @@ def test_links_and_notes_are_filled_in(monkeypatch):
         "notes": ["Admin: http://192.0.2.7/wordpress/wp-admin as ubuntu, for blog.lab.example on web01. Keep {braces}."],
     }
     assert extras.details(chosen, "", "ubuntu", "web01") == {"links": [], "notes": []}  # no address yet
+
+
+def test_extras_too_big_for_the_machine_are_refused(monkeypatch):
+    from app.extras import Extra
+
+    desktop = Extra("desktop", "Desktop", "", min_memory_gb=4)
+    monkeypatch.setattr(extras, "extras", lambda: {"desktop": desktop})
+    with pytest.raises(extras.ExtraError, match="needs at least 4 GB of memory, and this machine has 2 GB"):
+        extras.resolve(("desktop",), [{"id": "desktop"}], "web01", memory_gb=2)
+    assert extras.resolve(("desktop",), [{"id": "desktop"}], "web01", memory_gb=4)
+
+
+def test_config_sends_category_memory_and_ports(offered):
+    t = client.get("/api/config").json()["templates"][0]
+    https = next(x for x in t["extras"] if x["id"] == "apache-https")
+    assert https["category"] == "Web servers" and https["minMemoryGB"] == 0 and https["ports"] == [80, 443]

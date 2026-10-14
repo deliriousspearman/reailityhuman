@@ -4,6 +4,9 @@
 # without internet. On the machine's first boot, cloud-init runs each chosen extra's `script` for
 # the template's family.
 #
+#   category   the heading it's listed under on the deploy form, e.g. Web servers; extras of a
+#              category are listed in this file's order, and categories in order of first use
+#   minMemoryGB  optional: the least memory a machine needs for it (e.g. a desktop)
 #   ports      the ports it listens on. Extras that would share one can't be chosen together.
 #   provides   apache, for the extras that set Apache up; web apps can run inside them.
 #   uses       apache, for web apps that run inside Apache at their own path: they can be combined
@@ -33,6 +36,7 @@
 
 - id: nginx
   name: nginx
+  category: Web servers
   description: Web server on port 80, with a page showing the machine's name.
   ports: [80]
   links: ["http://{ip}/"]
@@ -50,6 +54,7 @@
 
 - id: apache
   name: Apache
+  category: Web servers
   description: Apache web server on port 80, with a page showing the machine's name.
   ports: [80]
   provides: apache
@@ -68,6 +73,7 @@
 
 - id: apache-https
   name: Apache + HTTPS
+  category: Web servers
   description: Apache on ports 80 and 443, with a self-signed certificate made for this machine.
   ports: [80, 443]
   provides: apache
@@ -101,6 +107,7 @@
 
 - id: iis
   name: IIS
+  category: Web servers
   description: Microsoft's web server on port 80, with a page showing the machine's name.
   ports: [80]
   links: ["http://{ip}/"]

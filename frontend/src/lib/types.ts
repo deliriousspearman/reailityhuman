@@ -216,6 +216,12 @@ export interface Extra {
 	description: string;
 	/** Extras that can't be chosen with this one (they use the same port). */
 	conflicts: string[];
+	/** Heading it's listed under, e.g. "Web servers". */
+	category: string;
+	/** Least memory a machine needs for it; 0: any. */
+	minMemoryGB: number;
+	/** Ports it means the machine listens on. */
+	ports: number[];
 	options: ExtraOption[];
 }
 

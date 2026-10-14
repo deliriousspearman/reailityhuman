@@ -142,6 +142,10 @@ class Extra:
     id: str
     name: str
     description: str
+    # Heading it's listed under on the deploy form, e.g. "Web servers".
+    category: str = "Other"
+    # Least memory (GB) a machine needs for it, if more than any template's.
+    min_memory_gb: int = 0
     # Ports it listens on itself, e.g. (80,) for a web server; which ones clash is worked out from these.
     ports: tuple[int, ...] = ()
     # A service from SERVICES it runs inside (web apps), or that it is (the Apache extras).
@@ -197,6 +201,8 @@ def extras() -> dict[str, Extra]:
             id=e["id"],
             name=e["name"],
             description=e["description"],
+            category=e.get("category", "Other"),
+            min_memory_gb=int(e.get("minMemoryGB", 0)),
             ports=tuple(int(p) for p in e.get("ports", [])),
             uses=e.get("uses"),
             provides=e.get("provides"),
@@ -206,6 +212,11 @@ def extras() -> dict[str, Extra]:
             families={f: (tuple(e[f].get("packages", [])), e[f]["script"]) for f in FAMILIES if f in e},
         )
     return {i: replace(x, conflicts=tuple(y.id for y in out.values() if clashes(x, y))) for i, x in out.items()}
+
+
+def claimed_ports(x: Extra) -> list[int]:
+    """The ports an extra means a machine listens on, its service's included."""
+    return sorted(_claimed(x) | set(x.ports))
 
 
 def _claimed(x: Extra) -> set[int]:
@@ -260,7 +271,7 @@ def _check_value(x: Extra, o: Option, value: str) -> str:
     return value
 
 
-def resolve(offered: tuple[str, ...], chosen: list[dict], hostname: str) -> list[dict]:
+def resolve(offered: tuple[str, ...], chosen: list[dict], hostname: str, memory_gb: int | None = None) -> list[dict]:
     """Checks what was chosen against what this template offers, and fills in each option's default.
 
     `chosen` is [{"id": ..., "options": {...}}]. Returns the same shape with every option set, which
@@ -278,6 +289,8 @@ def resolve(offered: tuple[str, ...], chosen: list[dict], hostname: str) -> list
         x = find(c["id"])
         if x is None or x.id not in offered:
             raise ExtraError(f"'{c['id']}' isn't an extra this template offers.")
+        if memory_gb is not None and x.min_memory_gb > memory_gb:
+            raise ExtraError(f"{x.name} needs at least {x.min_memory_gb} GB of memory, and this machine has {memory_gb} GB.")
         if clash := [find(i).name for i in ids if i in x.conflicts]:
             raise ExtraError(f"{x.name} can't be combined with {', '.join(clash)}: they'd use the same port.")
         given = c.get("options") or {}

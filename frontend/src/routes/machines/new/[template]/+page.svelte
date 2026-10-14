@@ -111,6 +111,28 @@
 		});
 	});
 	const chosen = $derived(offered.filter((x) => x.id in picked));
+	/** Ports the chosen extras use, for the summary. */
+	const chosenPorts = $derived([...new Set(chosen.flatMap((x) => x.ports))].sort((a, b) => a - b));
+
+	/** Why this machine is too small for an extra, or null. */
+	function tooSmall(x: Extra): string | null {
+		const memory = deployed?.resources.memoryGB ?? 0;
+		return x.minMemoryGB > memory ? `Needs ${x.minMemoryGB} GB of memory; this machine has ${memory} GB.` : null;
+	}
+
+	// Grouped under their categories, in the catalogue's order. Past FOLD_OVER extras, groups start
+	// folded, except those with a ticked extra, so a long list stays easy to scan.
+	const FOLD_OVER = 8;
+	const groups = $derived.by(() => {
+		const out: { category: string; items: Extra[] }[] = [];
+		for (const x of offered) {
+			let group = out.find((g) => g.category === x.category);
+			if (!group) out.push((group = { category: x.category, items: [] }));
+			group.items.push(x);
+		}
+		return out;
+	});
+	const folded = $derived(offered.length > FOLD_OVER);
 
 	/** Ticking an extra that clashes with ticked ones (they use the same port) replaces them. */
 	function toggle(x: Extra, on: boolean) {
@@ -207,65 +229,75 @@
 			{#if offered.length}
 				<fieldset>
 					<legend>Extras <span class="optional">optional</span></legend>
-					<ul class="extras">
-						{#each offered as x (x.id)}
-							{@const clash = clashWith(x)}
-							{@const on = x.id in picked}
-							<li class="extra" class:on>
-								<label class="extra-head">
-									<input type="checkbox" checked={on} onchange={(e) => toggle(x, e.currentTarget.checked)} />
-									<span class="extra-name">{x.name}</span>
-								</label>
-								<p class="extra-desc">
-									{x.description}{#if clash && !on}<span class="replaces"> Replaces {clash.name}: they use the same port.</span>{/if}
-								</p>
-								{#if on}
-									{#each x.options as o (o.id)}
-										{@const problem = optionProblem(o, picked[x.id][o.id] ?? '')}
-										{@const fallback = store.optionDefault(o.default, name || 'name')}
-										{#if o.type === 'boolean'}
-											<label class="extra-flag">
-												<input
-													type="checkbox"
-													checked={picked[x.id][o.id] === 'yes'}
-													onchange={(e) => (picked[x.id][o.id] = e.currentTarget.checked ? 'yes' : 'no')}
-												/>
-												<span>{o.label}</span>
-												{#if o.help}<span class="hint">{o.help}</span>{/if}
-											</label>
-										{:else}
-											<div class="field extra-option">
-												<label for="opt-{x.id}-{o.id}">
-													{o.label}{#if !o.required && o.type !== 'choice'}<span class="optional">optional</span>{/if}
-												</label>
-												{#if o.type === 'choice'}
-													<select id="opt-{x.id}-{o.id}" class="input" bind:value={picked[x.id][o.id]} aria-describedby="opt-{x.id}-{o.id}-hint">
-														{#each o.choices ?? [] as c (c.value)}
-															<option value={c.value}>{c.label}</option>
-														{/each}
-													</select>
+					{#each groups as group (group.category)}
+						{@const ticked = group.items.filter((x) => x.id in picked).length}
+						<details class="extra-group" open={!folded || ticked > 0}>
+							<summary>
+								{group.category}
+								<span class="group-count">{ticked ? `${ticked} of ${group.items.length} ticked` : group.items.length}</span>
+							</summary>
+							<ul class="extras">
+								{#each group.items as x (x.id)}
+									{@const clash = clashWith(x)}
+									{@const on = x.id in picked}
+									{@const small = tooSmall(x)}
+									<li class="extra" class:on class:disabled={!!small && !on}>
+										<label class="extra-head">
+											<input type="checkbox" checked={on} disabled={!!small && !on} onchange={(e) => toggle(x, e.currentTarget.checked)} />
+											<span class="extra-name">{x.name}</span>
+										</label>
+										<p class="extra-desc">
+											{x.description}{#if small && !on}<span class="replaces"> {small}</span>{:else if clash && !on}<span class="replaces"> Replaces {clash.name}: they use the same port.</span>{/if}
+										</p>
+										{#if on}
+											{#each x.options as o (o.id)}
+												{@const problem = optionProblem(o, picked[x.id][o.id] ?? '')}
+												{@const fallback = store.optionDefault(o.default, name || 'name')}
+												{#if o.type === 'boolean'}
+													<label class="extra-flag">
+														<input
+															type="checkbox"
+															checked={picked[x.id][o.id] === 'yes'}
+															onchange={(e) => (picked[x.id][o.id] = e.currentTarget.checked ? 'yes' : 'no')}
+														/>
+														<span>{o.label}</span>
+														{#if o.help}<span class="hint">{o.help}</span>{/if}
+													</label>
 												{:else}
-													<input
-														id="opt-{x.id}-{o.id}"
-														class="input mono-input"
-														bind:value={picked[x.id][o.id]}
-														placeholder={fallback}
-														autocomplete="off"
-														spellcheck="false"
-														aria-invalid={!!problem}
-														aria-describedby="opt-{x.id}-{o.id}-hint"
-													/>
+													<div class="field extra-option">
+														<label for="opt-{x.id}-{o.id}">
+															{o.label}{#if !o.required && o.type !== 'choice'}<span class="optional">optional</span>{/if}
+														</label>
+														{#if o.type === 'choice'}
+															<select id="opt-{x.id}-{o.id}" class="input" bind:value={picked[x.id][o.id]} aria-describedby="opt-{x.id}-{o.id}-hint">
+																{#each o.choices ?? [] as c (c.value)}
+																	<option value={c.value}>{c.label}</option>
+																{/each}
+															</select>
+														{:else}
+															<input
+																id="opt-{x.id}-{o.id}"
+																class="input mono-input"
+																bind:value={picked[x.id][o.id]}
+																placeholder={fallback}
+																autocomplete="off"
+																spellcheck="false"
+																aria-invalid={!!problem}
+																aria-describedby="opt-{x.id}-{o.id}-hint"
+															/>
+														{/if}
+														<p id="opt-{x.id}-{o.id}-hint" class="hint" class:problem>
+															{#if problem}{problem}{:else}{o.help}{#if fallback && o.type !== 'choice'} Left blank: <code>{fallback}</code>.{/if}{/if}
+														</p>
+													</div>
 												{/if}
-												<p id="opt-{x.id}-{o.id}-hint" class="hint" class:problem>
-													{#if problem}{problem}{:else}{o.help}{#if fallback && o.type !== 'choice'} Left blank: <code>{fallback}</code>.{/if}{/if}
-												</p>
-											</div>
+											{/each}
 										{/if}
-									{/each}
-								{/if}
-							</li>
-						{/each}
-					</ul>
+									</li>
+								{/each}
+							</ul>
+						</details>
+					{/each}
 					<p class="hint">Set up and started on its first boot, without downloading anything. Deploying takes a little longer.</p>
 				</fieldset>
 			{/if}
@@ -376,6 +408,9 @@
 				<div><dt>Sign in with</dt><dd>{(deployed ?? template).access.map((a) => accessNames[a]).join(', ')}</dd></div>
 				{#if chosen.length}
 					<div><dt>Extras</dt><dd>{chosen.map((x) => x.name).join(', ')}</dd></div>
+					{#if chosenPorts.length}
+						<div><dt>Ports</dt><dd>{chosenPorts.join(', ')}</dd></div>
+					{/if}
 				{/if}
 				{#if username}
 					<div>
@@ -544,6 +579,32 @@
 		border: var(--lms-border-width) solid var(--lms-gray-5);
 		border-radius: var(--lms-radius-sm);
 		background: var(--lms-panel);
+	}
+	.extra.disabled {
+		opacity: 0.55;
+	}
+	.extra.disabled .extra-head {
+		cursor: not-allowed;
+	}
+	.extra-group + .extra-group {
+		margin-top: 0.75rem;
+	}
+	.extra-group summary {
+		display: flex;
+		align-items: baseline;
+		gap: 0.6rem;
+		margin-bottom: 0.5rem;
+		font: 600 0.8rem var(--lms-font);
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
+		color: var(--lms-gray-2);
+		cursor: pointer;
+	}
+	.group-count {
+		font-weight: 400;
+		letter-spacing: 0;
+		text-transform: none;
+		color: var(--lms-gray-3);
 	}
 	.extra.on {
 		border-color: var(--lms-lime);

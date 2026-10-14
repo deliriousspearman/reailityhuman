@@ -139,6 +139,9 @@ def extra_out(x: extras.Extra) -> dict:
         "name": x.name,
         "description": x.description,
         "conflicts": list(x.conflicts),
+        "category": x.category,
+        "minMemoryGB": x.min_memory_gb,
+        "ports": extras.claimed_ports(x),
         "options": [
             {
                 "id": o.id,
@@ -298,7 +301,7 @@ def deploy_machine(req: DeployRequest, db: Db) -> dict:
     if password is not None and tpl.family == "windows" and (problem := cloudinit.windows_password_problem(password, tpl.username)):
         raise HTTPException(422, problem)
     try:
-        chosen = extras.resolve(tpl.extras, [c.model_dump() for c in req.extras], req.name)
+        chosen = extras.resolve(tpl.extras, [c.model_dump() for c in req.extras], req.name, tpl.memory_gb)
     except extras.ExtraError as e:
         raise HTTPException(422, str(e)) from e
     if db.scalar(select(Machine).where(Machine.name == req.name)):
