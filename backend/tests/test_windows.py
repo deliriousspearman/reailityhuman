@@ -201,3 +201,26 @@ def test_timeout_says_when_the_user_cant_sign_in(queued, windows, guest, monkeyp
     run_queued(queued)
     text = client.get(f"/api/machines/{r.json()['id']}").json()["log"][-1]["text"]
     assert "labadmin can't sign in, so creating the user probably failed" in text
+
+
+def test_no_ssh_where_the_template_doesnt_offer_it():
+    script = cloudinit.windows_userdata("labadmin", "Pass-word1", "ssh-ed25519 AAAA test", [], "win01", ssh=False)
+    assert "sshd" not in script and "administrators_authorized_keys" not in script
+    assert "Start-Service -Name sshd" in cloudinit.windows_userdata("labadmin", "Pass-word1", None, [], "win01")
+
+
+def test_deploy_follows_the_templates_access(queued, windows, guest, monkeypatch):
+    seen = {}
+    real = cloudinit.windows_guestinfo
+
+    def spy(*args):
+        seen["ssh"] = args[-1]
+        return real(*args)
+
+    monkeypatch.setattr(cloudinit, "windows_guestinfo", spy)
+    tpl = catalogue.catalogue()[KEY]
+    monkeypatch.setitem(catalogue.catalogue(), KEY, replace(tpl, access=("rdp", "console")))
+    guest["status"] = ""
+    deploy()
+    run_queued(queued)
+    assert seen["ssh"] is False

@@ -145,13 +145,15 @@ def windows_metadata(instance_id: str, hostname: str) -> str:
     return yaml.safe_dump({"instance-id": instance_id, "local-hostname": hostname}, sort_keys=False)
 
 
-def windows_userdata(username: str, password: str, ssh_key: str | None, chosen: list[dict], hostname: str) -> str:
+def windows_userdata(
+    username: str, password: str, ssh_key: str | None, chosen: list[dict], hostname: str, ssh: bool = True
+) -> str:
     """A PowerShell script Cloudbase-Init runs once, as SYSTEM, after it has set the computer name:
-    it creates the user (an administrator), adds the SSH key, and applies the chosen extras. It
-    always ends by writing the status file, which the panel waits for; if setting up fails, that
-    says "failed setup <why>"."""
+    it creates the user (an administrator), sets up OpenSSH if `ssh` (with the key), and applies the
+    chosen extras. It always ends by writing the status file, which the panel waits for; if setting
+    up fails, that says "failed setup <why>"."""
     status = extras.WINDOWS_STATUS_FILE
-    key = (ssh_key or "").strip()
+    key = (ssh_key or "").strip() if ssh else ""
     lines = [
         "#ps1_sysnative",
         "# First-boot setup for a lab machine, written by the lab panel.",
@@ -183,13 +185,14 @@ def windows_userdata(username: str, password: str, ssh_key: str | None, chosen: 
             f"    Add-Content -Path $keys -Value {extras.ps_string(key)} -Encoding ascii",
             "    icacls.exe $keys /inheritance:r /grant '*S-1-5-32-544:F' /grant '*S-1-5-18:F' | Out-Null",
         ]
-    lines += [
-        "    # OpenSSH Server, if the template has it: its first start makes this machine's own host keys.",
-        "    if (Get-Service -Name sshd -ErrorAction SilentlyContinue) {",
-        "        Set-Service -Name sshd -StartupType Automatic",
-        "        Start-Service -Name sshd",
-        "    }",
-    ]
+    if ssh:
+        lines += [
+            "    # OpenSSH Server, if the template has it: its first start makes this machine's own host keys.",
+            "    if (Get-Service -Name sshd -ErrorAction SilentlyContinue) {",
+            "        Set-Service -Name sshd -StartupType Automatic",
+            "        Start-Service -Name sshd",
+            "    }",
+        ]
     lines += ["    " + line for line in extras.windows_setup(chosen, hostname).split("\r\n")]
     lines += [
         "} catch {",
@@ -213,11 +216,12 @@ def _encode(metadata_text: str, userdata_text: str) -> dict[str, str]:
 
 
 def windows_guestinfo(
-    instance_id: str, hostname: str, username: str, password: str, ssh_key: str | None, chosen: list[dict]
+    instance_id: str, hostname: str, username: str, password: str, ssh_key: str | None, chosen: list[dict], ssh: bool = True
 ) -> dict[str, str]:
     """extraConfig keys for a Windows VM. The password is in the script as it is (Windows can't take
     a hash), so the worker clears guestinfo.userdata once the machine is set up."""
-    return _encode(windows_metadata(instance_id, hostname), windows_userdata(username, password, ssh_key, chosen, hostname))
+    userdata_text = windows_userdata(username, password, ssh_key, chosen, hostname, ssh)
+    return _encode(windows_metadata(instance_id, hostname), userdata_text)
 
 
 def guestinfo(
