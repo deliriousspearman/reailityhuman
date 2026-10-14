@@ -144,6 +144,14 @@ def _wait_for_status(vc: VCenter, vm, m: Machine, family: str, timeout: float) -
     deadline = time.monotonic() + timeout
     while (text := vc.read_guest_file(vm, m.username, m.password, extras.status_file(family))) is None:
         if time.monotonic() >= deadline:
+            if windows and vc.guest_login_ok(vm, m.username, m.password) is False:
+                # The first-boot script creates the user first; the status file can only be read
+                # as that user, so a failure there can't report itself.
+                raise VSphereError(
+                    f"{m.username} can't sign in, so creating the user probably failed: e.g. the template has a "
+                    "stricter password policy than Windows' default. On the machine's console, "
+                    r"C:\Program Files\Cloudbase Solutions\Cloudbase-Init\log\cloudbase-init.log says why."
+                )
             where = (
                 r"C:\Program Files\Cloudbase Solutions\Cloudbase-Init\log\cloudbase-init.log"
                 if windows

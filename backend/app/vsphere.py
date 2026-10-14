@@ -358,6 +358,18 @@ class VCenter:
                 return None
             time.sleep(3)
 
+    def guest_login_ok(self, vm: vim.VirtualMachine, username: str, password: str) -> bool | None:
+        """Whether this account can sign in to the guest through VMware Tools: False if the guest
+        refuses it (no such user, or the wrong password), None if that can't be told right now."""
+        auth = vim.vm.guest.NamePasswordAuthentication(username=username, password=password)
+        try:
+            self.content.guestOperationsManager.authManager.ValidateCredentialsInGuest(vm=vm, auth=auth)
+        except (vim.fault.InvalidGuestLogin, vim.fault.GuestAuthenticationChallenge):
+            return False
+        except Exception:  # noqa: BLE001: only a hint for an error message; anything else means "can't tell"
+            return None
+        return True
+
     def read_guest_file(self, vm: vim.VirtualMachine, username: str, password: str, path: str) -> str | None:
         """A text file inside the guest, read through VMware Tools signed in as `username`, or None
         if it can't be read yet: no such file, the account doesn't exist yet (cloud-init creates it

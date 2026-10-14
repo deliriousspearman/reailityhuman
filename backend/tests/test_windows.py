@@ -190,3 +190,14 @@ def test_failed_windows_extra_names_its_log(queued, windows, guest):
     run_queued(queued)
     text = client.get(f"/api/machines/{r.json()['id']}").json()["log"][-1]["text"]
     assert "iis didn't install" in text and r"C:\ProgramData\lab-deploy\logs\iis.log" in text
+
+
+def test_timeout_says_when_the_user_cant_sign_in(queued, windows, guest, monkeypatch):
+    from app.config import settings
+
+    monkeypatch.setattr(settings(), "windows_setup_timeout_seconds", 0)
+    monkeypatch.setattr(VCenter, "guest_login_ok", lambda self, vm, user, password: False)
+    r = deploy()
+    run_queued(queued)
+    text = client.get(f"/api/machines/{r.json()['id']}").json()["log"][-1]["text"]
+    assert "labadmin can't sign in, so creating the user probably failed" in text
