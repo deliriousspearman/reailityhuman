@@ -28,7 +28,8 @@
   diskGB: 25
   username: ubuntu
   family: debian
-  # Built before extras existed. Once rebuilt with today's prepare.sh: extras: [nginx, apache, apache-https]
+  # Rebuilt 2026-10-14 with prepare.sh's extras' packages.
+  extras: [nginx, apache, apache-https]
 
 # Windows Server 2025, with Desktop Experience and as Server Core. Uncomment each once its template
 # is built (docs/setup-vsphere.md, "Windows Server templates"). Windows needs more memory: Core runs

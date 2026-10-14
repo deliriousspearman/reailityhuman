@@ -159,8 +159,8 @@ def test_deploy_rejects_bad_extras(offered):
 
 
 def test_extras_offered_only_by_templates_listing_them():
-    # The real templates.yaml's Ubuntu template predates extras, so it offers none.
-    assert deploy(chosen=[{"id": "nginx"}]).status_code == 422
+    # The real templates.yaml's Ubuntu template offers the Linux web servers, not Windows' IIS.
+    assert deploy(chosen=[{"id": "iis"}]).status_code == 422
 
 
 def test_deploy_waits_for_extras(queued, offered, guest):

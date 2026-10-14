@@ -51,7 +51,7 @@ in `/var/log/lab-deploy/<extra>.log`.
 
 | OS | Versions | `templates.yaml` | Status |
 |---|---|---|---|
-| Ubuntu Server | 22.04+ | `family: debian` | 26.04 built (before extras) |
+| Ubuntu Server | 22.04+ | `family: debian` | 26.04 built, with extras |
 | Debian | 12+ | `family: debian` | Written, not tested yet |
 | CentOS Stream | 9+ | `family: rhel` | Written, not tested yet |
 | Rocky Linux, AlmaLinux | 9+ | `family: rhel` | Written, not tested yet |
