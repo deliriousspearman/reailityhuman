@@ -157,6 +157,12 @@ def test_windows_waits_even_without_extras(queued, windows, guest):
     assert len(guest["reads"]) == 1
 
 
+def userdata_in_vcenter(vm_name: str) -> str:
+    with connect() as vc:
+        config = vc.props(vc.require_vm(vm_name), "config.extraConfig")["config.extraConfig"]
+    return {o.key: o.value for o in config}.get("guestinfo.userdata", "")
+
+
 def test_failed_setup_fails_the_deploy(queued, windows, guest):
     guest["status"] = "failed setup The password does not meet the password policy requirements.\n"
     r = deploy()
@@ -164,6 +170,18 @@ def test_failed_setup_fails_the_deploy(queued, windows, guest):
     m = client.get(f"/api/machines/{r.json()['id']}").json()
     assert m["state"] == "error"
     assert "Setting up the machine failed: The password does not meet" in m["log"][-1]["text"]
+    assert userdata_in_vcenter(m["vmName"]) == ""  # the password is cleared all the same
+
+
+def test_timed_out_setup_still_clears_the_password(queued, windows, guest, monkeypatch):
+    from app.config import settings
+
+    monkeypatch.setattr(settings(), "windows_setup_timeout_seconds", 0)
+    r = deploy()
+    run_queued(queued)
+    m = client.get(f"/api/machines/{r.json()['id']}").json()
+    assert m["state"] == "error" and "didn't finish setting up" in m["log"][-1]["text"]
+    assert userdata_in_vcenter(m["vmName"]) == ""
 
 
 def test_failed_windows_extra_names_its_log(queued, windows, guest):

@@ -138,6 +138,25 @@ def _record_ip(vc: VCenter, vm, machine_id: str, timeout: float) -> None:
         add_log(machine_id, "No address yet. VMware Tools hasn't reported one; check the DHCP server.", "warn")
 
 
+def _wait_for_status(vc: VCenter, vm, m: Machine, family: str, timeout: float) -> str:
+    """The machine's status file, once it has written it."""
+    windows = family == "windows"
+    deadline = time.monotonic() + timeout
+    while (text := vc.read_guest_file(vm, m.username, m.password, extras.status_file(family))) is None:
+        if time.monotonic() >= deadline:
+            where = (
+                r"C:\Program Files\Cloudbase Solutions\Cloudbase-Init\log\cloudbase-init.log"
+                if windows
+                else "/var/log/cloud-init-output.log"
+            )
+            raise VSphereError(
+                f"{'It' if windows else 'The extras'} didn't finish setting up within {timeout // 60} minutes. "
+                f"On the machine, {where} shows how far it got."
+            )
+        time.sleep(5)
+    return text
+
+
 def _await_setup(vc: VCenter, vm, m: Machine) -> None:
     """Waits for the machine to finish setting up on first boot, and fails the job if any part
     didn't. Linux machines are waited for only when they have extras; Windows machines always, as
@@ -155,22 +174,13 @@ def _await_setup(vc: VCenter, vm, m: Machine) -> None:
     else:
         add_log(m.id, f"Installing extras: {names}…", "muted")
         timeout = settings().extras_timeout_seconds
-    deadline = time.monotonic() + timeout
-    while (text := vc.read_guest_file(vm, m.username, m.password, extras.status_file(family))) is None:
-        if time.monotonic() >= deadline:
-            where = (
-                r"C:\Program Files\Cloudbase Solutions\Cloudbase-Init\log\cloudbase-init.log"
-                if windows
-                else "/var/log/cloud-init-output.log"
-            )
-            raise VSphereError(
-                f"{'It' if windows else 'The extras'} didn't finish setting up within {timeout // 60} minutes. "
-                f"On the machine, {where} shows how far it got."
-            )
-        time.sleep(5)
-    if windows:
-        # The first-boot script holds the password as it is; it's done with it now.
-        vc.clear_guestinfo(vm, "guestinfo.userdata")
+    try:
+        text = _wait_for_status(vc, vm, m, family, timeout)
+    finally:
+        if windows:
+            # The first-boot script holds the password as it is. Whether it worked or not, it's done
+            # with it (a reset puts it back from the snapshot).
+            vc.clear_guestinfo(vm, "guestinfo.userdata")
     results = extras.parse_status(text)
     for extra_id, ok, detail in results:
         if extra_id == "setup" and not ok:
