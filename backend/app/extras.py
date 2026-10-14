@@ -39,7 +39,9 @@ def log_file(family: str, extra_id: str) -> str:
 # A DNS name: labels of letters, digits and hyphens (not at either end), optionally "*."-prefixed.
 _LABEL = r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?"
 HOSTNAME_RULE = re.compile(rf"^(?:\*\.)?{_LABEL}(?:\.{_LABEL})*$")
-OPTION_TYPES = ("hostname", "text")
+OPTION_TYPES = ("hostname", "text", "choice", "boolean")
+# What a boolean option's value can be given as; it reaches scripts as "yes" or "no".
+_YES, _NO = {"yes", "true", "on", "1"}, {"no", "false", "off", "0"}
 
 # Runs each extra's script in turn, logging each to LOG_DIR/<id>.log, then writes STATUS_FILE in
 # one go: a line per extra, "ok <id>" or "failed <id> <last line of its log>".
@@ -126,6 +128,8 @@ class Option:
     default: str = ""
     required: bool = False
     pattern: str | None = None
+    # For type "choice": (value, label) pairs; the default must be one of the values.
+    choices: tuple[tuple[str, str], ...] = ()
 
 
 # Services a web app can run inside, and the ports they own. A web app (`uses: apache`) can be
@@ -170,12 +174,17 @@ def extras() -> dict[str, Extra]:
                 default=str(o.get("default", "")),
                 required=bool(o.get("required", False)),
                 pattern=o.get("pattern"),
+                choices=tuple((str(c["value"]), c["label"]) for c in o.get("choices", [])),
             )
             for o in e.get("options", [])
         )
         for o in options:
             if o.type not in OPTION_TYPES:
                 raise ValueError(f"extras.yaml: {e['id']}.{o.id} has unknown type '{o.type}'")
+            if o.type == "choice" and o.default not in {v for v, _ in o.choices}:
+                raise ValueError(f"extras.yaml: {e['id']}.{o.id}: a choice needs choices, and a default that's one of them")
+            if o.type == "boolean" and o.default.lower() not in _YES | _NO | {""}:
+                raise ValueError(f"extras.yaml: {e['id']}.{o.id}: a boolean's default is yes or no")
             if not re.fullmatch(r"[a-z][a-z0-9_]*", o.id) or o.id == "hostname":
                 raise ValueError(f"extras.yaml: {e['id']}: option id '{o.id}' must be a lowercase shell name other than 'hostname'")
         for key in ("uses", "provides"):
@@ -237,6 +246,13 @@ def _check_value(x: Extra, o: Option, value: str) -> str:
     elif o.type == "text":
         if len(value) > 200 or (o.pattern and not re.fullmatch(o.pattern, value)):
             raise ExtraError(f"{x.name}: '{value}' isn't a valid {o.label.lower()}.")
+    elif o.type == "choice":
+        if value not in {v for v, _ in o.choices}:
+            raise ExtraError(f"{x.name}: '{value}' isn't one of the choices for {o.label.lower()}.")
+    elif o.type == "boolean":
+        if value.lower() not in _YES | _NO:
+            raise ExtraError(f"{x.name}: {o.label.lower()} is yes or no.")
+        value = "yes" if value.lower() in _YES else "no"
     return value
 
 
@@ -269,7 +285,7 @@ def resolve(offered: tuple[str, ...], chosen: list[dict], hostname: str) -> list
             if not value:
                 if o.required:
                     raise ExtraError(f"{x.name}: fill in {o.label.lower()}.")
-                value = fill_default(o.default, hostname)
+                value = fill_default(o.default, hostname) if o.type in ("hostname", "text") else o.default or "no"
             values[o.id] = _check_value(x, o, value) if value else ""
         out.append({"id": x.id, "options": values})
     return out

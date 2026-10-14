@@ -144,6 +144,7 @@ def extra_out(x: extras.Extra) -> dict:
                 "required": o.required,
                 "default": o.default,
                 **({"pattern": o.pattern} if o.pattern else {}),
+                **({"choices": [{"value": v, "label": label} for v, label in o.choices]} if o.choices else {}),
             }
             for o in x.options
         ],

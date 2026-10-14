@@ -194,13 +194,18 @@ export interface ExtraOption {
 	id: string;
 	label: string;
 	help: string;
-	/** `hostname`: a DNS name, optionally "*."-prefixed. `text`: checked by the API. */
-	type: 'hostname' | 'text';
+	/**
+	 * `hostname`: a DNS name, optionally "*."-prefixed. `text`: checked by the API. `choice`: one of
+	 * `choices`. `boolean`: "yes" or "no".
+	 */
+	type: 'hostname' | 'text' | 'choice' | 'boolean';
 	required: boolean;
 	/** Used when left blank. {hostname} is the machine's name; {fqdn} adds PanelConfig.machineDomain. */
 	default: string;
 	/** For `text`: what the whole value must match. */
 	pattern?: string;
+	/** For `choice`. */
+	choices?: { value: string; label: string }[];
 }
 
 /** An optional service set up on a machine's first boot (backend/extras.yaml). */

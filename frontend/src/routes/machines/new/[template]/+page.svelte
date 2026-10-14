@@ -53,6 +53,7 @@
 							const options = Object.fromEntries(
 								extra.options.map((o) => {
 									const v = x.options[o.id] ?? '';
+									if (o.type === 'choice' || o.type === 'boolean') return [o.id, v || pickedDefault(o)];
 									return [o.id, v === store.optionDefault(o.default, from.name) ? '' : v];
 								}),
 							);
@@ -115,7 +116,7 @@
 	function toggle(x: Extra, on: boolean) {
 		if (on) {
 			for (const y of chosen) if (clashes(x, y)) delete picked[y.id];
-			picked[x.id] = Object.fromEntries(x.options.map((o) => [o.id, '']));
+			picked[x.id] = Object.fromEntries(x.options.map((o) => [o.id, pickedDefault(o)]));
 		} else delete picked[x.id];
 	}
 
@@ -124,12 +125,19 @@
 		return y.id !== x.id && (x.conflicts.includes(y.id) || y.conflicts.includes(x.id));
 	}
 
+	/** What an option starts as when its extra is ticked: blank for text (its default shows as a
+	 * placeholder), the default for a choice or a tick box. */
+	function pickedDefault(o: ExtraOption): string {
+		return o.type === 'choice' || o.type === 'boolean' ? o.default || (o.type === 'boolean' ? 'no' : '') : '';
+	}
+
 	/** A ticked extra that ticking this one would replace. */
 	function clashWith(x: Extra): Extra | undefined {
 		return chosen.find((y) => clashes(x, y));
 	}
 
 	function optionProblem(o: ExtraOption, value: string): string | null {
+		if (o.type === 'choice' || o.type === 'boolean') return null; // can only be one of its values
 		const v = value.trim().toLowerCase().replace(/\.$/, '');
 		if (!v) return o.required ? `Fill in ${o.label.toLowerCase()}.` : null;
 		if (o.type === 'hostname' && (v.length > 253 || !store.matches(store.config?.rules.hostname, v))) {
@@ -215,24 +223,44 @@
 									{#each x.options as o (o.id)}
 										{@const problem = optionProblem(o, picked[x.id][o.id] ?? '')}
 										{@const fallback = store.optionDefault(o.default, name || 'name')}
-										<div class="field extra-option">
-											<label for="opt-{x.id}-{o.id}">
-												{o.label}{#if !o.required}<span class="optional">optional</span>{/if}
+										{#if o.type === 'boolean'}
+											<label class="extra-flag">
+												<input
+													type="checkbox"
+													checked={picked[x.id][o.id] === 'yes'}
+													onchange={(e) => (picked[x.id][o.id] = e.currentTarget.checked ? 'yes' : 'no')}
+												/>
+												<span>{o.label}</span>
+												{#if o.help}<span class="hint">{o.help}</span>{/if}
 											</label>
-											<input
-												id="opt-{x.id}-{o.id}"
-												class="input mono-input"
-												bind:value={picked[x.id][o.id]}
-												placeholder={fallback}
-												autocomplete="off"
-												spellcheck="false"
-												aria-invalid={!!problem}
-												aria-describedby="opt-{x.id}-{o.id}-hint"
-											/>
-											<p id="opt-{x.id}-{o.id}-hint" class="hint" class:problem>
-												{#if problem}{problem}{:else}{o.help}{#if fallback} Left blank: <code>{fallback}</code>.{/if}{/if}
-											</p>
-										</div>
+										{:else}
+											<div class="field extra-option">
+												<label for="opt-{x.id}-{o.id}">
+													{o.label}{#if !o.required && o.type !== 'choice'}<span class="optional">optional</span>{/if}
+												</label>
+												{#if o.type === 'choice'}
+													<select id="opt-{x.id}-{o.id}" class="input" bind:value={picked[x.id][o.id]} aria-describedby="opt-{x.id}-{o.id}-hint">
+														{#each o.choices ?? [] as c (c.value)}
+															<option value={c.value}>{c.label}</option>
+														{/each}
+													</select>
+												{:else}
+													<input
+														id="opt-{x.id}-{o.id}"
+														class="input mono-input"
+														bind:value={picked[x.id][o.id]}
+														placeholder={fallback}
+														autocomplete="off"
+														spellcheck="false"
+														aria-invalid={!!problem}
+														aria-describedby="opt-{x.id}-{o.id}-hint"
+													/>
+												{/if}
+												<p id="opt-{x.id}-{o.id}-hint" class="hint" class:problem>
+													{#if problem}{problem}{:else}{o.help}{#if fallback && o.type !== 'choice'} Left blank: <code>{fallback}</code>.{/if}{/if}
+												</p>
+											</div>
+										{/if}
 									{/each}
 								{/if}
 							</li>
@@ -540,6 +568,21 @@
 		margin: 0.25rem 0 0 1.6rem;
 		font-size: 0.85rem;
 		color: var(--lms-gray-2);
+	}
+	.extra-flag {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.25rem 0.6rem;
+		margin: 0.6rem 0 0 1.6rem;
+		font-size: 0.9rem;
+		cursor: pointer;
+	}
+	.extra-flag input {
+		accent-color: var(--lms-lime);
+	}
+	.extra-flag .hint {
+		flex-basis: 100%;
 	}
 	.replaces {
 		color: var(--lms-gray-3);

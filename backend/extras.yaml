@@ -12,7 +12,8 @@
 #   links      shown on the machine's page; {ip} is its address
 #   options    fields shown when the extra is ticked. Each value reaches the script as a shell
 #              variable of the same name, already validated and quoted; scripts never get raw input.
-#                type      hostname: a DNS name, optionally "*."-prefixed; text: matched by `pattern`
+#                type      hostname: a DNS name, optionally "*."-prefixed; text: matched by `pattern`;
+#                          choice: one of `choices` ([{value, label}]); boolean: "yes" or "no"
 #                default   used when it's left blank. {hostname} is the machine's name, {fqdn} the
 #                          name plus MACHINE_DOMAIN (just the name when that's empty)
 #   <family>   debian or rhel: `packages` (must be in prepare.sh's EXTRA_PACKAGES_<FAMILY>, which a

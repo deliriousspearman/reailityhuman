@@ -245,3 +245,42 @@ def test_no_extras_no_waiting(queued, guest):
     run_queued(queued)
     assert client.get(f"/api/machines/{r.json()['id']}").json()["state"] == "running"
     assert guest["reads"] == []
+
+
+def test_choice_and_boolean_options(monkeypatch):
+    from app.extras import Extra, Option
+
+    desktop = Extra(
+        "desktop", "Desktop", "",
+        options=(
+            Option("protocol", "Connect with", "choice", default="rdp", choices=(("rdp", "RDP"), ("vnc", "VNC"), ("both", "Both"))),
+            Option("tls", "Use TLS", "boolean", default="no"),
+        ),
+    )  # fmt: skip
+    monkeypatch.setattr(extras, "extras", lambda: {"desktop": desktop})
+
+    def resolve(options):
+        return extras.resolve(("desktop",), [{"id": "desktop", "options": options}], "web01")[0]["options"]
+
+    assert resolve({}) == {"protocol": "rdp", "tls": "no"}  # the defaults
+    assert resolve({"protocol": "vnc", "tls": "on"}) == {"protocol": "vnc", "tls": "yes"}
+    assert resolve({"tls": "False"})["tls"] == "no"
+    with pytest.raises(extras.ExtraError, match="isn't one of the choices"):
+        resolve({"protocol": "telnet"})
+    with pytest.raises(extras.ExtraError, match="is yes or no"):
+        resolve({"tls": "maybe"})
+
+
+def test_choice_needs_a_valid_default(tmp_path, monkeypatch):
+    (tmp_path / "extras.yaml").write_text(
+        "- id: x\n  name: X\n  description: ''\n  options:\n"
+        "    - {id: mode, label: Mode, type: choice, default: c, choices: [{value: a, label: A}, {value: b, label: B}]}\n"
+    )
+    monkeypatch.setattr(extras, "_path", lambda: tmp_path / "extras.yaml")
+    extras.extras.cache_clear()
+    try:
+        with pytest.raises(ValueError, match="a choice needs choices"):
+            extras.extras()
+    finally:
+        monkeypatch.undo()
+        extras.extras.cache_clear()
