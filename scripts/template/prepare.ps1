@@ -63,6 +63,11 @@ $tools = Get-Service -Name VMTools -ErrorAction SilentlyContinue
 if (-not $tools -or $tools.Status -ne 'Running') {
     throw 'VMware Tools must be installed and running first: in vCenter, Guest OS > Install VMware Tools.'
 }
+# Cloudbase-Init reads the panel's data with this; without it, clones would quietly get nothing.
+$rpctool = Join-Path $env:ProgramFiles 'VMware\VMware Toolspctool.exe'
+if (-not (Test-Path $rpctool)) {
+    throw "VMware Tools has no $rpctool, which Cloudbase-Init needs to read each clone's data. Reinstall VMware Tools (Typical)."
+}
 $installed = Test-Path (Join-Path $CloudbaseDir 'Python\Scripts\cloudbase-init.exe')
 if (-not $installed -and -not $Msi) {
     throw 'Cloudbase-Init is not installed: copy its MSI onto the VM and pass it with -Msi.'
