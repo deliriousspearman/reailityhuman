@@ -66,10 +66,14 @@ def machine_out(m: Machine, log: bool = True) -> dict:
         "username": m.username,
         "password": m.password,
         "extras": [
-            {"id": c["id"], "name": x.name if (x := extras.find(c["id"])) else c["id"], "options": c["options"]}
+            {
+                "id": c["id"],
+                "name": x.name if (x := extras.find(c["id"])) else c["id"],
+                "options": c["options"],
+                **extras.details(c, m.ip or "", m.username, m.name),
+            }
             for c in m.extras or []
         ],
-        "links": extras.links(m.extras or [], m.ip or ""),
         **(
             {"log": [{"at": ms(line.at), "text": line.text, **({"tone": line.tone} if line.tone else {})} for line in m.log]}
             if log

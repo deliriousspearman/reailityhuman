@@ -149,7 +149,10 @@ class Extra:
     provides: str | None = None
     # Worked out from the above at load: the extras it can't be chosen with.
     conflicts: tuple[str, ...] = ()
+    # Shown on the machine page once it has an address. {ip}, {username}, {hostname} and the extra's
+    # options ({domain}...) are filled in.
     links: tuple[str, ...] = ()
+    notes: tuple[str, ...] = ()
     options: tuple[Option, ...] = ()
     # family -> (packages, script)
     families: dict[str, tuple[tuple[str, ...], str]] = field(default_factory=dict)
@@ -198,6 +201,7 @@ def extras() -> dict[str, Extra]:
             uses=e.get("uses"),
             provides=e.get("provides"),
             links=tuple(e.get("links", [])),
+            notes=tuple(e.get("notes", [])),
             options=options,
             families={f: (tuple(e[f].get("packages", [])), e[f]["script"]) for f in FAMILIES if f in e},
         )
@@ -410,11 +414,14 @@ def parse_status(text: str) -> list[tuple[str, str, str]]:
     return out
 
 
-def links(chosen: list[dict], ip: str) -> list[str]:
-    if not ip:
-        return []
-    out = []
-    for c in chosen:
-        if x := find(c["id"]):
-            out += [link.replace("{ip}", ip) for link in x.links if link.replace("{ip}", ip) not in out]
-    return out
+def details(chosen: dict, ip: str, username: str, hostname: str) -> dict:
+    """A chosen extra's links and notes for the machine page, filled in; none until it has an address."""
+    x = find(chosen["id"])
+    if x is None or not ip:
+        return {"links": [], "notes": []}
+    values = {"ip": ip, "username": username, "hostname": hostname, **chosen.get("options", {})}
+
+    def fill(text: str) -> str:
+        return re.sub(r"\{(\w+)\}", lambda m: values.get(m.group(1), m.group(0)), text)
+
+    return {"links": [fill(link) for link in x.links], "notes": [fill(note) for note in x.notes]}

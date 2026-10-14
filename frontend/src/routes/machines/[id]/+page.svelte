@@ -251,11 +251,20 @@
 				<a class="cmd" href={webUrl} target="_blank" rel="noreferrer">{webUrl}</a>
 			</li>
 		{/if}
-		{#each m.links as url (url)}
-			<li>
-				<span class="way">{url.startsWith('https') ? 'HTTPS' : 'Web'}</span>
-				<a class="cmd" href={url} target="_blank" rel="noreferrer">{url}</a>
-				{#if url.startsWith('https')}<span class="cmd muted">Self-signed: your browser will warn first</span>{/if}
+		{#each m.extras.filter((x) => x.links.length || x.notes.length) as x (x.id)}
+			<li class="extra-way">
+				<span class="way">{x.name}</span>
+				<div class="extra-details">
+					{#each x.links as url (url)}
+						<a class="cmd" href={url} target="_blank" rel="noreferrer">{url}</a>
+					{/each}
+					{#if x.links.some((url) => url.startsWith('https'))}
+						<span class="cmd muted">Self-signed certificate: your browser will warn first</span>
+					{/if}
+					{#each x.notes as note (note)}
+						<span class="note">{note}</span>
+					{/each}
+				</div>
 			</li>
 		{/each}
 		{#if t.access.includes('ssh') && m.ip}
@@ -479,6 +488,19 @@
 	.cmd.muted {
 		font-family: var(--lms-font);
 		color: var(--lms-gray-3);
+	}
+	.extra-way {
+		align-items: flex-start;
+	}
+	.extra-details {
+		display: grid;
+		gap: 0.3rem;
+		flex: 1 1 12rem;
+		min-width: 0;
+	}
+	.extra-details .note {
+		font-size: 0.85rem;
+		color: var(--lms-gray-2);
 	}
 	.flag-notes {
 		display: grid;

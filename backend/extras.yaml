@@ -9,7 +9,9 @@
 #   uses       apache, for web apps that run inside Apache at their own path: they can be combined
 #              with each other and with an extra that provides Apache, but not with other servers
 #              on Apache's ports (80, 443).
-#   links      shown on the machine's page; {ip} is its address
+#   links      shown on the machine's page, once it has an address; and
+#   notes      sentences shown with them, e.g. how to sign in. In both, {ip} is its address,
+#              {username} its user, {hostname} its name, and {<option id>} that option's value.
 #   options    fields shown when the extra is ticked. Each value reaches the script as a shell
 #              variable of the same name, already validated and quoted; scripts never get raw input.
 #                type      hostname: a DNS name, optionally "*."-prefixed; text: matched by `pattern`;

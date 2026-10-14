@@ -181,10 +181,11 @@ export interface SingleMachine {
 	/** Account made on first boot, and its generated password. */
 	username: string;
 	password: string;
-	/** Extras chosen at deploy, with every option as applied (defaults filled in). */
-	extras: { id: string; name: string; options: Record<string, string> }[];
-	/** Addresses the extras serve, e.g. http://<ip>/; empty until the machine has an address. */
-	links: string[];
+	/**
+	 * Extras chosen at deploy, with every option as applied (defaults filled in), and the addresses
+	 * they serve and notes on them (e.g. how to sign in); those are empty until it has an address.
+	 */
+	extras: { id: string; name: string; options: Record<string, string>; links: string[]; notes: string[] }[];
 	/** Only from GET /machines/{id}: the list leaves it out. */
 	log?: LogLine[];
 }

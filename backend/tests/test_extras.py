@@ -211,7 +211,9 @@ def test_deploy_waits_for_extras(queued, offered, guest):
     guest["status"] = "ok apache-https\n"
     r = deploy(chosen=[{"id": "apache-https", "options": {"domain": "intranet.lab.example"}}])
     assert r.status_code == 201, r.text
-    assert r.json()["extras"] == [{"id": "apache-https", "name": "Apache + HTTPS", "options": {"domain": "intranet.lab.example"}}]
+    assert r.json()["extras"] == [
+        {"id": "apache-https", "name": "Apache + HTTPS", "options": {"domain": "intranet.lab.example"}, "links": [], "notes": []}
+    ]  # links once it has an address
     run_queued(queued)
     m = client.get(f"/api/machines/{r.json()['id']}").json()
     assert m["state"] == "running"
@@ -284,3 +286,20 @@ def test_choice_needs_a_valid_default(tmp_path, monkeypatch):
     finally:
         monkeypatch.undo()
         extras.extras.cache_clear()
+
+
+def test_links_and_notes_are_filled_in(monkeypatch):
+    from app.extras import Extra
+
+    wp = Extra(
+        "wordpress", "WordPress", "",
+        links=("http://{ip}/wordpress/",),
+        notes=("Admin: http://{ip}/wordpress/wp-admin as {username}, for {domain} on {hostname}. Keep {braces}.",),
+    )  # fmt: skip
+    monkeypatch.setattr(extras, "find", lambda i: wp)
+    chosen = {"id": "wordpress", "options": {"domain": "blog.lab.example"}}
+    assert extras.details(chosen, "192.0.2.7", "ubuntu", "web01") == {
+        "links": ["http://192.0.2.7/wordpress/"],
+        "notes": ["Admin: http://192.0.2.7/wordpress/wp-admin as ubuntu, for blog.lab.example on web01. Keep {braces}."],
+    }
+    assert extras.details(chosen, "", "ubuntu", "web01") == {"links": [], "notes": []}  # no address yet
