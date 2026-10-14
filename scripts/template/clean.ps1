@@ -6,7 +6,8 @@ Removes a prepared Windows VM's identity and generalizes it with sysprep, then s
 The Windows counterpart of clean.sh. Run it on the VM after prepare.ps1, in an elevated Windows
 PowerShell. It:
   - clears what Cloudbase-Init recorded on this VM, so it runs afresh on each clone;
-  - deletes the OpenSSH host keys (each clone makes its own) and the panel's folder, if left from a test;
+  - deletes the OpenSSH host keys (each clone makes its own), administrators' authorized keys (so a
+    key used while building doesn't open every clone), and the panel's folder, if left from a test;
   - runs sysprep with Cloudbase-Init's Unattend.xml (generalize, then OOBE on next boot) and shuts
     the VM down.
 Each clone then gets a new SID, its own name from the panel, and the panel's first-boot script.
@@ -47,7 +48,7 @@ if (-not (Test-Path $Unattend)) {
 
 $plan = @(
     "Clear Cloudbase-Init's records and logs",
-    'Delete the OpenSSH host keys and C:\ProgramData\lab-deploy',
+    "Delete the OpenSSH host keys, administrators' authorized keys and C:\ProgramData\lab-deploy",
     "Run sysprep /generalize /oobe /shutdown with $Unattend"
 )
 if (-not $Yes) {
@@ -66,9 +67,12 @@ if (Test-Path $records) {
 }
 Get-ChildItem -Path (Join-Path $CloudbaseDir 'log') -File -ErrorAction SilentlyContinue | Remove-Item -Force
 
-Step 'Deleting OpenSSH host keys and the panel folder'
+Step "Deleting OpenSSH host keys, administrators' authorized keys and the panel folder"
 Stop-Service -Name sshd -ErrorAction SilentlyContinue
 Get-ChildItem -Path (Join-Path $env:ProgramData 'ssh') -Filter 'ssh_host_*' -ErrorAction SilentlyContinue | Remove-Item -Force
+# Keys any administrator could sign in with, e.g. one added while building. Each clone gets only the
+# key given when it's deployed.
+Remove-Item -Path (Join-Path $env:ProgramData 'ssh\administrators_authorized_keys') -Force -ErrorAction SilentlyContinue
 Remove-Item -Path (Join-Path $env:ProgramData 'lab-deploy') -Recurse -Force -ErrorAction SilentlyContinue
 
 Step 'Running sysprep: the VM shuts down when it has finished'

@@ -93,7 +93,7 @@ Every OS:
 | Script | What it does | Can be undone? |
 |---|---|---|
 | [`prepare.ps1`](prepare.ps1) | Checks VMware Tools, installs Cloudbase-Init and configures it to read the panel's data from vCenter, turns on Remote Desktop and OpenSSH Server, and stops Server Manager opening at sign-in. | Yes. It's safe to re-run. |
-| [`clean.ps1`](clean.ps1) | Clears Cloudbase-Init's records and the OpenSSH host keys, then runs sysprep (generalize) with Cloudbase-Init's Unattend.xml and shuts down. | No: sysprep can't be undone. |
+| [`clean.ps1`](clean.ps1) | Clears Cloudbase-Init's records, the OpenSSH host keys and administrators' authorized keys, then runs sysprep (generalize) with Cloudbase-Init's Unattend.xml and shuts down. | No: sysprep can't be undone. |
 
 Run both in an elevated Windows PowerShell on the VM, from a CD image (part 5 shows how to make one
 with the scripts and the Cloudbase-Init MSI). `-DryRun` (prepare) and leaving out `-Yes` (clean)
