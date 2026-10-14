@@ -202,6 +202,16 @@ class PanelStore {
 		return rule && !this.matches(rule.pattern, owner) ? rule.problem : null;
 	}
 
+	/** What Windows' default password policy would refuse in this password, by the API's rule, or null. */
+	windowsPasswordProblem(password: string, username: string): string | null {
+		const rule = this.config?.rules.windowsPassword;
+		if (!rule) return null;
+		const kinds = [/\p{Lu}/u, /\p{Ll}/u, /\p{Nd}/u, /[^\p{L}\p{N}]/u].filter((re) => re.test(password)).length;
+		if (kinds < rule.kinds) return rule.kindsProblem;
+		if (username.length >= 3 && password.toLowerCase().includes(username.toLowerCase())) return rule.userProblem;
+		return null;
+	}
+
 	/** Why this template can't be deployed right now, or null if it can. */
 	machineBlocker(template: MachineTemplate): string | null {
 		if (!this.config) return 'Loading…';

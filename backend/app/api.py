@@ -180,6 +180,13 @@ def config() -> dict:
             "owner": {"pattern": OWNER_RULE.pattern, "problem": OWNER_PROBLEM},
             "passwordMin": PASSWORD_MIN,
             "hostname": extras.HOSTNAME_RULE.pattern,
+            # For templates of family "windows": kinds of character needed (capitals, small letters,
+            # digits, others), and not the user name (when it's 3+ letters).
+            "windowsPassword": {
+                "kinds": cloudinit.WINDOWS_PASSWORD_KINDS,
+                "kindsProblem": cloudinit.WINDOWS_PASSWORD_KINDS_PROBLEM,
+                "userProblem": cloudinit.WINDOWS_PASSWORD_USER_PROBLEM,
+            },
         },
     }
 

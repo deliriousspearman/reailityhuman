@@ -26,9 +26,15 @@ def generate_password(length: int) -> str:
             return password
 
 
+# Windows' default password policy: three of the four kinds of character, and not the user name.
+WINDOWS_PASSWORD_KINDS = 3
+WINDOWS_PASSWORD_KINDS_PROBLEM = "For Windows, use at least three of: capital letters, small letters, digits, and symbols."
+WINDOWS_PASSWORD_USER_PROBLEM = "For Windows, the password can't contain the user name."
+
+
 def windows_password_problem(password: str, username: str) -> str | None:
     """Why Windows' default password policy would refuse this password, or None. It needs three of:
-    capitals, small letters, digits, and other characters; and not the user name."""
+    capitals, small letters, digits, and other characters; and not the user name (if 3+ letters)."""
     kinds = sum(
         [
             any(c.isupper() for c in password),
@@ -37,10 +43,10 @@ def windows_password_problem(password: str, username: str) -> str | None:
             any(not c.isalnum() for c in password),
         ]
     )
-    if kinds < 3:
-        return "For Windows, use at least three of: capital letters, small letters, digits, and symbols."
+    if kinds < WINDOWS_PASSWORD_KINDS:
+        return WINDOWS_PASSWORD_KINDS_PROBLEM
     if len(username) >= 3 and username.lower() in password.lower():
-        return "For Windows, the password can't contain the user name."
+        return WINDOWS_PASSWORD_USER_PROBLEM
     return None
 
 

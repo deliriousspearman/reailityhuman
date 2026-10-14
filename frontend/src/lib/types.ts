@@ -248,6 +248,8 @@ export interface PanelConfig {
 		passwordMin: number;
 		/** A DNS name, for `hostname` extra options. */
 		hostname: string;
+		/** Windows' default password policy (backend/app/cloudinit.py, windows_password_problem). */
+		windowsPassword: { kinds: number; kindsProblem: string; userProblem: string };
 	};
 }
 

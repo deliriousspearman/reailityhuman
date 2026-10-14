@@ -275,3 +275,12 @@ def test_address_read_again_after_setup(queued, windows, guest, monkeypatch):
     m = client.get(f"/api/machines/{r.json()['id']}").json()
     assert m["ip"] == "192.0.2.50"
     assert "Address on the LAN: 192.0.2.50" in [line["text"] for line in m["log"]]
+
+
+def test_config_sends_the_windows_password_rule():
+    rule = client.get("/api/config").json()["rules"]["windowsPassword"]
+    assert rule == {
+        "kinds": 3,
+        "kindsProblem": cloudinit.WINDOWS_PASSWORD_KINDS_PROBLEM,
+        "userProblem": cloudinit.WINDOWS_PASSWORD_USER_PROBLEM,
+    }

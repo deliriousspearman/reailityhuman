@@ -77,6 +77,9 @@
 	const ownerProblem = $derived(
 		!owner.trim() ? 'Add your name, so people can tell whose machine it is.' : store.ownerProblem(owner.trim().toLowerCase()),
 	);
+	const live = $derived(store.config?.templates.find((t) => t.template === template?.id && t.version === version));
+	const username = $derived(live?.username);
+	const windows = $derived(live?.family === 'windows');
 	const passwordMin = $derived(store.config?.rules.passwordMin ?? 8);
 	const passwordProblem = $derived(
 		!password
@@ -85,7 +88,9 @@
 				? `At least ${passwordMin} characters.`
 				: /[\t\n\r]/.test(password)
 					? 'No line breaks or tabs.'
-					: null,
+					: windows
+						? store.windowsPasswordProblem(password, username ?? '')
+						: null,
 	);
 	const vmName = $derived(`${owner.trim().toLowerCase() || 'you'}-${name || 'name'}-…`);
 	const canKeep = $derived(store.permanentCount < store.permanentQuota);
@@ -94,9 +99,6 @@
 	);
 	const deployed = $derived(template && store.asDeployed(template, version));
 	const eol = $derived(template?.versions.find((v) => v.version === version)?.eol);
-	const live = $derived(store.config?.templates.find((t) => t.template === template?.id && t.version === version));
-	const username = $derived(live?.username);
-	const windows = $derived(live?.family === 'windows');
 
 	// Extras --------------------------------------------------------------------------------------------
 	const offered = $derived(template ? store.extrasFor(template.id, version) : []);
