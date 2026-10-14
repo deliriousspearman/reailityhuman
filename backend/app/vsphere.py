@@ -25,6 +25,24 @@ class VSphereError(Exception):
     """Something in vCenter is missing or failed; the message is shown to people as it is."""
 
 
+class SetupError(VSphereError):
+    """A machine didn't set itself up. `log_tail`: the end of the log that says why, read from the
+    machine, for the job's details (the message alone goes in the machine's activity log)."""
+
+    def __init__(self, message: str, log_tail: str | None = None):
+        super().__init__(message)
+        self.log_tail = log_tail
+
+
+def decode_text(data: bytes) -> str:
+    """A text file from a guest, by its byte-order mark: Windows PowerShell writes UTF-16 logs."""
+    if data.startswith(b"\xff\xfe"):
+        return data[2:].decode("utf-16-le", errors="replace")
+    if data.startswith(b"\xfe\xff"):
+        return data[2:].decode("utf-16-be", errors="replace")
+    return data.decode("utf-8-sig", errors="replace")
+
+
 @dataclass
 class Capacity:
     cpu: int
@@ -406,7 +424,7 @@ class VCenter:
         context = ssl._create_unverified_context() if self.cfg.vcenter_insecure else ssl.create_default_context()
         try:
             with urllib.request.urlopen(url, context=context, timeout=30) as res:
-                return res.read().decode(errors="replace")
+                return decode_text(res.read())
         except OSError as e:
             raise VSphereError(f"Couldn't fetch {path} from the ESXi host running the machine: {e}") from e
 

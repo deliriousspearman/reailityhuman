@@ -33,11 +33,13 @@ def windows(monkeypatch):
 @pytest.fixture
 def guest(monkeypatch):
     """What the machine's status file says; None: not written yet."""
-    state = {"status": None, "reads": []}
+    state = {"status": None, "reads": [], "files": {}}
 
     def read(self, vm, username, password, path):
         state["reads"].append((username, path))
-        return state["status"]
+        if path in state["files"]:
+            return state["files"][path]
+        return state["status"] if path == extras.WINDOWS_STATUS_FILE else None
 
     monkeypatch.setattr(VCenter, "read_guest_file", read)
     return state
@@ -284,3 +286,48 @@ def test_config_sends_the_windows_password_rule():
         "kindsProblem": cloudinit.WINDOWS_PASSWORD_KINDS_PROBLEM,
         "userProblem": cloudinit.WINDOWS_PASSWORD_USER_PROBLEM,
     }
+
+
+# Explaining failures ------------------------------------------------------------------------------------
+
+
+def test_decode_text_by_byte_order_mark():
+    from app.vsphere import decode_text
+
+    assert decode_text(b"\xff\xfe" + "é line".encode("utf-16-le")) == "é line"  # Windows PowerShell's logs
+    assert decode_text(b"\xef\xbb\xbfcaf\xc3\xa9") == "café"
+    assert decode_text("plain é".encode()) == "plain é"
+
+
+def job_detail():
+    return client.get("/api/jobs").json()[0]["detail"]
+
+
+def test_failed_setup_job_has_the_end_of_the_cloudbase_log(queued, windows, guest):
+    from app.actions import CLOUDBASE_LOG
+
+    guest["status"] = "failed setup Access is denied.\n"
+    guest["files"][CLOUDBASE_LOG] = "\n".join(f"line {i}" for i in range(1, 31)) + "\n"
+    r = deploy()
+    run_queued(queued)
+    detail = job_detail()
+    assert detail.startswith("Setting up the machine failed: Access is denied.\n\nThe end of the machine's log:\n")
+    assert "line 30" in detail and "line 11" in detail and "line 10\n" not in detail  # the last 20
+    # The activity log keeps just the one line.
+    last = client.get(f"/api/machines/{r.json()['id']}").json()["log"][-1]["text"]
+    assert "line 30" not in last
+
+
+def test_failed_extra_job_has_the_end_of_its_log(queued, windows, guest):
+    guest["status"] = "failed iis The request to add or remove features failed.\n"
+    guest["files"][extras.log_file("windows", "iis")] = "Install-WindowsFeature : The request failed.\n0x800f0922\n"
+    deploy(extras=[{"id": "iis"}])
+    run_queued(queued)
+    assert job_detail().endswith("The end of the machine's log:\nInstall-WindowsFeature : The request failed.\n0x800f0922")
+
+
+def test_no_log_no_extra_detail(queued, windows, guest):
+    guest["status"] = "failed setup Access is denied.\n"
+    deploy()
+    run_queued(queued)
+    assert job_detail() == "Setting up the machine failed: Access is denied."

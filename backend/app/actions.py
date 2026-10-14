@@ -17,7 +17,7 @@ from .db import session
 from .models import STABLE_STATES, Job, LogLine, Machine, utcnow
 from pyVmomi import vmodl
 
-from .vsphere import VCenter, VSphereError, connect, describe
+from .vsphere import SetupError, VCenter, VSphereError, connect, describe
 
 log = logging.getLogger(__name__)
 
@@ -142,6 +142,22 @@ def _record_ip(vc: VCenter, vm, machine_id: str, timeout: float) -> None:
         add_log(machine_id, "No address yet. VMware Tools hasn't reported one; check the DHCP server.", "warn")
 
 
+CLOUDBASE_LOG = r"C:\Program Files\Cloudbase Solutions\Cloudbase-Init\log\cloudbase-init.log"
+LOG_TAIL_LINES = 20
+
+
+def _log_tail(vc: VCenter, vm, m: Machine, path: str) -> str | None:
+    """The last lines of a log on the machine, read as its user; None if it can't be read. Only for
+    explaining a failure, so it never fails itself."""
+    try:
+        text = vc.read_guest_file(vm, m.username, m.password, path)
+    except Exception:  # noqa: BLE001
+        return None
+    if not text or not text.strip():
+        return None
+    return "\n".join(text.rstrip().splitlines()[-LOG_TAIL_LINES:])
+
+
 def _recheck_ip(vc: VCenter, vm, m: Machine) -> None:
     """Windows restarts while setting up, and can be slow to report an address first time round:
     read it again now it's done."""
@@ -165,16 +181,13 @@ def _wait_for_status(vc: VCenter, vm, m: Machine, family: str, timeout: float) -
                 raise VSphereError(
                     f"{m.username} can't sign in, so creating the user probably failed: e.g. the template has a "
                     "stricter password policy than Windows' default. On the machine's console, "
-                    r"C:\Program Files\Cloudbase Solutions\Cloudbase-Init\log\cloudbase-init.log says why."
+                    f"{CLOUDBASE_LOG} says why."
                 )
-            where = (
-                r"C:\Program Files\Cloudbase Solutions\Cloudbase-Init\log\cloudbase-init.log"
-                if windows
-                else "/var/log/cloud-init-output.log"
-            )
-            raise VSphereError(
+            where = CLOUDBASE_LOG if windows else "/var/log/cloud-init-output.log"
+            raise SetupError(
                 f"{'It' if windows else 'The extras'} didn't finish setting up within {timeout // 60} minutes. "
-                f"On the machine, {where} shows how far it got."
+                f"On the machine, {where} shows how far it got.",
+                _log_tail(vc, vm, m, CLOUDBASE_LOG) if windows else None,
             )
         time.sleep(5)
     return text
@@ -206,7 +219,7 @@ def _await_setup(vc: VCenter, vm, m: Machine) -> None:
     results = extras.parse_status(text)
     for outcome, what, detail in results:
         if outcome == "failed" and what == "setup":
-            raise VSphereError(f"Setting up the machine failed: {detail or 'no output'}")
+            raise SetupError(f"Setting up the machine failed: {detail or 'no output'}", _log_tail(vc, vm, m, CLOUDBASE_LOG))
     for outcome, what, detail in results:
         if outcome == "warn":
             label = {"ssh": "SSH"}.get(what, what)
@@ -218,8 +231,10 @@ def _await_setup(vc: VCenter, vm, m: Machine) -> None:
             x = extras.find(what)
             add_log(m.id, f"{x.name if x else what} is ready")
     if failed:
-        raise VSphereError(
-            "; ".join(f"{i} didn't install: {detail or 'no output'} (log: {extras.log_file(family, i)})" for i, detail in failed)
+        first = failed[0][0]
+        raise SetupError(
+            "; ".join(f"{i} didn't install: {detail or 'no output'} (log: {extras.log_file(family, i)})" for i, detail in failed),
+            _log_tail(vc, vm, m, extras.log_file(family, first)),
         )
 
 
@@ -254,9 +269,12 @@ def run(job_id: int, machine_id: str, action: str) -> None:
             message = f"Unexpected error: {e}"
         if not isinstance(e, (VSphereError, vmodl.MethodFault)):
             log.exception("Job %s (%s %s) failed", job_id, action, machine_id)
+        detail = message
+        if isinstance(e, SetupError) and e.log_tail:
+            detail += f"\n\nThe end of the machine's log:\n{e.log_tail}"
         with session() as s:
             job = s.get(Job, job_id)
-            job.state, job.finished_at, job.detail = "failed", utcnow(), message
+            job.state, job.finished_at, job.detail = "failed", utcnow(), detail
             if m := s.get(Machine, machine_id):
                 m.state = "error"
                 s.add(LogLine(machine_id=machine_id, text=f"{action.capitalize()} failed: {message}", tone="error"))
