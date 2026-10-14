@@ -158,7 +158,8 @@ class Extra:
     # Shown on the machine page once it has an address. {ip}, {username}, {hostname} and the extra's
     # options ({domain}...) are filled in.
     links: tuple[str, ...] = ()
-    notes: tuple[str, ...] = ()
+    # (text, when): `when` maps option ids to the values the note is for; empty, always.
+    notes: tuple[tuple[str, dict[str, tuple[str, ...]]], ...] = ()
     # Whether its script gets the machine's password as it is (as $password), e.g. to make a web
     # app's admin account. The worker then clears it from vCenter once the machine is set up.
     password: bool = False
@@ -212,7 +213,7 @@ def extras() -> dict[str, Extra]:
             uses=e.get("uses"),
             provides=e.get("provides"),
             links=tuple(e.get("links", [])),
-            notes=tuple(e.get("notes", [])),
+            notes=tuple(_note(n) for n in e.get("notes", [])),
             password=bool(e.get("password", False)),
             options=options,
             families={f: (tuple(e[f].get("packages", [])), e[f]["script"]) for f in FAMILIES if f in e},
@@ -223,6 +224,13 @@ def extras() -> dict[str, Extra]:
 def claimed_ports(x: Extra) -> list[int]:
     """The ports an extra means a machine listens on, its service's included."""
     return sorted(_claimed(x) | set(x.ports))
+
+
+def _note(entry) -> tuple[str, dict[str, tuple[str, ...]]]:
+    """A note from extras.yaml: a string, or {text, when: {option: [values...]}}."""
+    if isinstance(entry, str):
+        return entry, {}
+    return entry["text"], {k: tuple(str(v) for v in vs) for k, vs in entry.get("when", {}).items()}
 
 
 def _claimed(x: Extra) -> set[int]:
@@ -451,4 +459,6 @@ def details(chosen: dict, ip: str, username: str, hostname: str) -> dict:
     def fill(text: str) -> str:
         return re.sub(r"\{(\w+)\}", lambda m: values.get(m.group(1), m.group(0)), text)
 
-    return {"links": [fill(link) for link in x.links], "notes": [fill(note) for note in x.notes]}
+    options = chosen.get("options", {})
+    notes = [fill(text) for text, when in x.notes if all(options.get(k) in vs for k, vs in when.items())]
+    return {"links": [fill(link) for link in x.links], "notes": notes}

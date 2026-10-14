@@ -34,15 +34,21 @@ set -euo pipefail
 declare -A MIN_VERSION=([ubuntu]=22.04 [debian]=12 [centos]=9 [rocky]=9 [almalinux]=9)
 MIN_CLOUD_INIT=21.3
 
-# The panel's extras: the packages each needs, per family. Keep these in step with
-# backend/extras.yaml: a backend test fails if an extra's packages are missing here. An extra that
-# needs more than packages (an archive to download, an installer's questions) also has a bake_<id>
-# function (with - as _) in step 5.
+# >>> extras: everything the panel's extras need in a template. Keep this in step with
+# backend/extras.yaml: a backend test fails if an extra's packages are missing here.
+
+# The packages each extra needs, per family.
 # shellcheck disable=SC2034 # used through EXTRA_PACKAGES, a reference to the family's list
 declare -A EXTRA_PACKAGES_DEBIAN=(
 	[nginx]="nginx"
 	[apache]="apache2"
 	[apache-https]="apache2 openssl"
+	[wordpress]="apache2 libapache2-mod-php php-mysql php-gd php-curl php-xml php-mbstring php-zip php-intl mariadb-server openssl"
+	[nextcloud]="apache2 libapache2-mod-php php-mysql php-gd php-curl php-xml php-mbstring php-zip php-intl php-gmp php-bcmath mariadb-server bzip2 openssl"
+	[nextcloud-snap]="snapd"
+	[mail]="postfix dovecot-imapd dovecot-pop3d roundcube roundcube-sqlite3 apache2 libapache2-mod-php openssl"
+	[ftp]="vsftpd openssl"
+	[desktop]="xfce4-session xfwm4 xfce4-panel xfdesktop4 xfce4-terminal thunar xfce4-settings xfce4-notifyd dbus-x11 xrdp xorgxrdp tigervnc-standalone-server tigervnc-tools ssl-cert fonts-dejavu-core adwaita-icon-theme"
 )
 # shellcheck disable=SC2034 # used through EXTRA_PACKAGES, a reference to the family's list
 declare -A EXTRA_PACKAGES_RHEL=(
@@ -50,13 +56,75 @@ declare -A EXTRA_PACKAGES_RHEL=(
 	[apache]="httpd"
 	[apache-https]="httpd mod_ssl openssl"
 )
+# Extras whose packages go in without their "recommended" ones: the desktop's would bring a login
+# screen and a full X server.
+EXTRA_NO_RECOMMENDS=(desktop)
 # The services those packages bring, either family's name: switched off here, and started by the
 # extra on a machine deployed with it.
 declare -A EXTRA_SERVICES=(
 	[nginx]="nginx"
 	[apache]="apache2 httpd"
 	[apache-https]="apache2 httpd"
+	[wordpress]="apache2 mariadb"
+	[nextcloud]="apache2 mariadb"
+	[mail]="postfix dovecot apache2"
+	[ftp]="vsftpd"
+	[desktop]="xrdp xrdp-sesman"
 )
+# Where web apps come from, to bake into the template; point these at a mirror if you have one.
+WORDPRESS_URL=${WORDPRESS_URL:-https://wordpress.org/latest.tar.gz}
+WP_CLI_URL=${WP_CLI_URL:-https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar}
+NEXTCLOUD_URL=${NEXTCLOUD_URL:-https://download.nextcloud.com/server/releases/latest.tar.bz2}
+
+# preseed_<id>: answers to the packages' installer questions, before they're installed.
+# bake_<id>: steps after, for what isn't a package. (With "-" in the id as "_".)
+
+preseed_mail() {
+	# Postfix: configured on each machine by the extra; Roundcube: its database in SQLite.
+	debconf-set-selections <<-EOF
+		postfix postfix/main_mailer_type select Internet Site
+		postfix postfix/mailname string localhost
+		roundcube-core roundcube/dbconfig-install boolean true
+		roundcube-core roundcube/database-type select sqlite3
+	EOF
+}
+
+# fetch <url> <file> <checksum url> <sha1|sha256|sha512>: downloads a file and checks it. The
+# checksum file is a bare hash, or "<hash>  <name>" lines, of which the one for this file counts.
+fetch() {
+	local sum
+	curl -fsSL -o "$2" "$1"
+	sum=$(curl -fsSL "$3" | awk -v f="${1##*/}" 'NR == 1 { first = $1 } $2 == f { print $1; found = 1; exit } END { if (!found) print first }')
+	echo "$sum  $2" | "${4}sum" -c --quiet
+}
+
+bake_wordpress() {
+	mkdir -p /opt/lab-deploy
+	fetch "$WORDPRESS_URL" /opt/lab-deploy/wordpress.tar.gz "$WORDPRESS_URL.sha1" sha1
+	fetch "$WP_CLI_URL" /usr/local/bin/wp "$WP_CLI_URL.sha512" sha512
+	chmod 755 /usr/local/bin/wp
+}
+
+bake_nextcloud() {
+	mkdir -p /opt/lab-deploy
+	fetch "$NEXTCLOUD_URL" /opt/lab-deploy/nextcloud.tar.bz2 "$NEXTCLOUD_URL.sha256" sha256
+}
+
+bake_nextcloud_snap() {
+	# Where snapd was only just installed, it hasn't been started (see policy-rc.d below).
+	systemctl enable --now snapd.socket snapd.service
+	snap wait system seed.loaded
+	snap install nextcloud
+	# Off until a machine is deployed with it, and not updated behind the template's back.
+	snap stop --disable nextcloud
+	snap refresh --hold=forever nextcloud
+}
+
+bake_desktop() {
+	# Its packages mustn't make the machine boot to a login screen.
+	systemctl set-default multi-user.target
+}
+# <<< extras
 
 DRY_RUN=0
 WANT_EXTRAS=all
@@ -239,10 +307,12 @@ done
 
 # --- 5. Extras -------------------------------------------------------------------------------------
 
-# Steps for extras that need more than their packages go here, as bake_<id> functions.
-
 if ((${#CHOSEN[@]})); then
 	echo "==> Extras (switched off until a machine is deployed with them): ${CHOSEN[*]}"
+	for id in "${CHOSEN[@]}"; do
+		preseed="preseed_${id//-/_}"
+		if declare -F "$preseed" >/dev/null; then "$preseed"; fi
+	done
 	if ((${#PACKAGES[@]})); then
 		case $FAMILY in
 		debian)
@@ -250,7 +320,14 @@ if ((${#CHOSEN[@]})); then
 			printf '#!/bin/sh\nexit 101\n' >/usr/sbin/policy-rc.d
 			chmod 755 /usr/sbin/policy-rc.d
 			trap 'rm -f /usr/sbin/policy-rc.d' EXIT
-			apt-get install -yq "${PACKAGES[@]}"
+			# Two goes: most with their recommended packages, a few (EXTRA_NO_RECOMMENDS) without.
+			lean=() full=()
+			for id in "${CHOSEN[@]}"; do
+				read -ra pkgs <<<"${EXTRA_PACKAGES[$id]}"
+				if [[ " ${EXTRA_NO_RECOMMENDS[*]} " == *" $id "* ]]; then lean+=("${pkgs[@]}"); else full+=("${pkgs[@]}"); fi
+			done
+			if ((${#full[@]})); then apt-get install -yq "${full[@]}"; fi
+			if ((${#lean[@]})); then apt-get install -yq --no-install-recommends "${lean[@]}"; fi
 			rm -f /usr/sbin/policy-rc.d
 			;;
 		rhel)
