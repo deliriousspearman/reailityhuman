@@ -342,7 +342,10 @@ push. Then deploy one from **Machines → Windows Server**. Its activity log sho
 up…*, then *Ready. Sign in as labadmin.* Connect with **Remote Desktop** (the machine page has the
 command and an `.rdp` file) or `ssh labadmin@<address>`.
 
-If the deploy fails, the machine's log has the reason. On the machine, these show how far it got:
+If the deploy fails, the machine's log has the reason, and its failed job (under **Jobs** on the
+machine page) has the end of the machine's own log too, read through VMware Tools. If SSH didn't
+start, the deploy still finishes, with a warning in the log; Remote Desktop works regardless. On the
+machine, these show how far it got:
 - `C:\Program Files\Cloudbase Solutions\Cloudbase-Init\log\cloudbase-init.log`: the computer name
   and the first-boot script;
 - `C:\ProgramData\lab-deploy\logs\<extra>.log`: each extra.
