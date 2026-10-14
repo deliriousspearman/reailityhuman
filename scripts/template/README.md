@@ -42,10 +42,12 @@ in `/var/log/lab-deploy/<extra>.log`.
 
 - After building a template with them, list them under its `extras:` in
   `backend/templates.yaml`. Until then the panel doesn't offer them for it.
-- To add an extra: add it to `extras.yaml`, and add its packages to `EXTRA_PACKAGES_<FAMILY>` (and
-  its service to `EXTRA_SERVICES_<FAMILY>`) in `prepare.sh`. Then rebuild the templates. A backend
-  test fails if `prepare.sh` is missing an extra's packages.
-- `--no-extras` builds a template without them.
+- To add an extra: add it to `extras.yaml`, and to `prepare.sh`: its packages under its id in
+  `EXTRA_PACKAGES_<FAMILY>`, the services they bring in `EXTRA_SERVICES`, and, if it needs more than
+  packages (an archive to download, an installer's questions answered), a `bake_<id>` function.
+  Then rebuild the templates. A backend test fails if `prepare.sh` is missing an extra's packages.
+- By default a template gets every extra for its family. `--extras=nginx,apache` bakes in only
+  those (a smaller template), `--no-extras` none. `/etc/lab-template` records which.
 
 ## Supported OSes
 

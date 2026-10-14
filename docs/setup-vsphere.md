@@ -147,7 +147,8 @@ re-run.
 
 It also installs the packages for the panel's extras (nginx, Apache…), switched off: a machine
 deployed with one has it set up on first boot, without needing the internet. List them under the
-template's `extras:` in `backend/templates.yaml`. Pass `--no-extras` for a template without them.
+template's `extras:` in `backend/templates.yaml`. Pass `--extras=nginx,apache` for only some of
+them, or `--no-extras` for none.
 
 Optionally, install anything every machine should have, now.
 

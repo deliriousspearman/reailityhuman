@@ -4,7 +4,7 @@
 # scripts/template/README.md). Run it on the VM, as the user you created during install, either
 # copied over:
 #
-#   sudo bash prepare.sh [--dry-run] [--no-extras]
+#   sudo bash prepare.sh [--dry-run] [--extras=<id>,<id>... | --no-extras]
 #
 # or straight from this repo:
 #
@@ -19,10 +19,10 @@
 #   4. Lets cloud-init run on clones and read its data from vCenter. Ubuntu's installer turns it
 #      off (/etc/cloud/cloud-init.disabled) and limits it to its own seed. Also makes sure OpenSSH is
 #      installed and on at boot, with host keys made on first boot.
-#   5. Installs the packages for the panel's extras (backend/extras.yaml: nginx, Apache, …), switched
-#      off. A machine deployed with an extra has it set up and started on its first boot, without
-#      downloading anything. --no-extras leaves them out; then list no extras for this template in
-#      backend/templates.yaml.
+#   5. Installs what the panel's extras need (backend/extras.yaml: nginx, Apache, …), switched off. A
+#      machine deployed with an extra has it set up and started on its first boot, without
+#      downloading anything. By default, every extra there is for this OS family; --extras=a,b only
+#      those, --no-extras none. List the same under the template's extras: in templates.yaml.
 #   6. Labels the template in /etc/lab-template (OS, version, date, extras).
 #
 # The VM keeps its network and your user, so you can still install more afterwards. When you're
@@ -34,21 +34,39 @@ set -euo pipefail
 declare -A MIN_VERSION=([ubuntu]=22.04 [debian]=12 [centos]=9 [rocky]=9 [almalinux]=9)
 MIN_CLOUD_INIT=21.3
 
-# Packages for the panel's extras, per family, and their services (left disabled). Keep these in
-# step with backend/extras.yaml: a backend test fails if an extra's packages are missing here.
-EXTRA_PACKAGES_DEBIAN=(nginx apache2 openssl)
-EXTRA_PACKAGES_RHEL=(nginx httpd mod_ssl openssl)
-EXTRA_SERVICES_DEBIAN=(nginx apache2)
-EXTRA_SERVICES_RHEL=(nginx httpd)
+# The panel's extras: the packages each needs, per family. Keep these in step with
+# backend/extras.yaml: a backend test fails if an extra's packages are missing here. An extra that
+# needs more than packages (an archive to download, an installer's questions) also has a bake_<id>
+# function (with - as _) in step 5.
+# shellcheck disable=SC2034 # used through EXTRA_PACKAGES, a reference to the family's list
+declare -A EXTRA_PACKAGES_DEBIAN=(
+	[nginx]="nginx"
+	[apache]="apache2"
+	[apache-https]="apache2 openssl"
+)
+# shellcheck disable=SC2034 # used through EXTRA_PACKAGES, a reference to the family's list
+declare -A EXTRA_PACKAGES_RHEL=(
+	[nginx]="nginx"
+	[apache]="httpd"
+	[apache-https]="httpd mod_ssl openssl"
+)
+# The services those packages bring, either family's name: switched off here, and started by the
+# extra on a machine deployed with it.
+declare -A EXTRA_SERVICES=(
+	[nginx]="nginx"
+	[apache]="apache2 httpd"
+	[apache-https]="apache2 httpd"
+)
 
 DRY_RUN=0
-EXTRAS=1
+WANT_EXTRAS=all
 for arg in "$@"; do
 	case $arg in
 	--dry-run) DRY_RUN=1 ;;
-	--no-extras) EXTRAS=0 ;;
+	--no-extras) WANT_EXTRAS= ;;
+	--extras=*) WANT_EXTRAS=${arg#--extras=} ;;
 	*)
-		echo "Usage: sudo bash prepare.sh [--dry-run] [--no-extras]" >&2
+		echo "Usage: sudo bash prepare.sh [--dry-run] [--extras=<id>,<id>... | --no-extras]" >&2
 		exit 1
 		;;
 	esac
@@ -80,13 +98,33 @@ if ! version_ge "${VERSION_ID:-0}" "${MIN_VERSION[$ID]}"; then
 fi
 echo "==> $PRETTY_NAME ($FAMILY family)"
 
+# The extras to bake in, and their packages.
+declare -n EXTRA_PACKAGES="EXTRA_PACKAGES_${FAMILY^^}"
+if [[ $WANT_EXTRAS == all ]]; then
+	mapfile -t CHOSEN < <(printf '%s\n' "${!EXTRA_PACKAGES[@]}" | sort)
+else
+	IFS=, read -ra CHOSEN <<<"$WANT_EXTRAS"
+fi
+PACKAGES=()
+for id in "${CHOSEN[@]}"; do
+	if [[ ! -v "EXTRA_PACKAGES[$id]" ]]; then
+		echo "No extra '$id' for the $FAMILY family. There are: $(printf '%s\n' "${!EXTRA_PACKAGES[@]}" | sort | paste -sd' ')" >&2
+		exit 1
+	fi
+	read -ra pkgs <<<"${EXTRA_PACKAGES[$id]}"
+	PACKAGES+=("${pkgs[@]}")
+done
+if ((${#PACKAGES[@]})); then
+	mapfile -t PACKAGES < <(printf '%s\n' "${PACKAGES[@]}" | awk '!seen[$0]++')
+fi
+
 if ((DRY_RUN)); then
 	echo "Would: update all packages; install open-vm-tools and cloud-init; check cloud-init is $MIN_CLOUD_INIT+;"
 	echo "grow the root filesystem; turn cloud-init on with the VMware datasource; write /etc/lab-template."
-	if ((EXTRAS)); then
-		if [[ $FAMILY == debian ]]; then echo "Extras' packages, switched off: ${EXTRA_PACKAGES_DEBIAN[*]}"; else echo "Extras' packages, switched off: ${EXTRA_PACKAGES_RHEL[*]}"; fi
+	if ((${#CHOSEN[@]})); then
+		echo "Extras, switched off: ${CHOSEN[*]} (packages: ${PACKAGES[*]:-none})"
 	else
-		echo "No extras (--no-extras)."
+		echo "No extras."
 	fi
 	exit 0
 fi
@@ -199,33 +237,44 @@ for unit in ssh.socket ssh.service sshd.service; do
 	fi
 done
 
-# --- 5. Extras' packages ---------------------------------------------------------------------------
+# --- 5. Extras -------------------------------------------------------------------------------------
 
-INSTALLED_EXTRAS=none
-if ((EXTRAS)); then
-	echo "==> Extras' packages (switched off until a machine is deployed with them)"
-	case $FAMILY in
-	debian)
-		packages=("${EXTRA_PACKAGES_DEBIAN[@]}")
-		services=("${EXTRA_SERVICES_DEBIAN[@]}")
-		# Don't let the packages start their services: nginx and Apache both want port 80.
-		printf '#!/bin/sh\nexit 101\n' >/usr/sbin/policy-rc.d
-		chmod 755 /usr/sbin/policy-rc.d
-		trap 'rm -f /usr/sbin/policy-rc.d' EXIT
-		apt-get install -yq "${packages[@]}"
-		rm -f /usr/sbin/policy-rc.d
-		;;
-	rhel)
-		packages=("${EXTRA_PACKAGES_RHEL[@]}")
-		services=("${EXTRA_SERVICES_RHEL[@]}")
-		dnf -y -q install "${packages[@]}"
-		;;
-	esac
-	for unit in "${services[@]}"; do
-		systemctl disable --now "$unit" >/dev/null 2>&1 || true
-		echo "  $unit: $(systemctl is-enabled "$unit" 2>/dev/null || true), $(systemctl is-active "$unit" 2>/dev/null || true)"
+# Steps for extras that need more than their packages go here, as bake_<id> functions.
+
+if ((${#CHOSEN[@]})); then
+	echo "==> Extras (switched off until a machine is deployed with them): ${CHOSEN[*]}"
+	if ((${#PACKAGES[@]})); then
+		case $FAMILY in
+		debian)
+			# Don't let the packages start their services: several want the same port.
+			printf '#!/bin/sh\nexit 101\n' >/usr/sbin/policy-rc.d
+			chmod 755 /usr/sbin/policy-rc.d
+			trap 'rm -f /usr/sbin/policy-rc.d' EXIT
+			apt-get install -yq "${PACKAGES[@]}"
+			rm -f /usr/sbin/policy-rc.d
+			;;
+		rhel)
+			dnf -y -q install "${PACKAGES[@]}"
+			;;
+		esac
+	fi
+	for id in "${CHOSEN[@]}"; do
+		bake="bake_${id//-/_}"
+		if declare -F "$bake" >/dev/null; then
+			echo "  $id: extra steps"
+			"$bake"
+		fi
 	done
-	INSTALLED_EXTRAS="${packages[*]}"
+	declare -A seen=()
+	for id in "${CHOSEN[@]}"; do
+		for unit in ${EXTRA_SERVICES[$id]:-}; do
+			[[ -v "seen[$unit]" ]] && continue
+			seen[$unit]=1
+			systemctl list-unit-files --no-legend "$unit.service" | grep -q . || continue
+			systemctl disable --now "$unit" >/dev/null 2>&1 || true
+			echo "  $unit: $(systemctl is-enabled "$unit" 2>/dev/null || true), $(systemctl is-active "$unit" 2>/dev/null || true)"
+		done
+	done
 fi
 
 # --- 6. Label --------------------------------------------------------------------------------------
@@ -236,7 +285,8 @@ os=$ID
 version=${VERSION_ID:-}
 name=$PRETTY_NAME
 cloud_init=$CI_VERSION
-extras_packages=$INSTALLED_EXTRAS
+extras=${CHOSEN[*]}
+extras_packages=${PACKAGES[*]}
 prepared=$(date -u +%Y-%m-%dT%H:%MZ)
 EOF
 echo "==> Labelled in /etc/lab-template"

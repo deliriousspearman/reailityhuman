@@ -64,14 +64,16 @@ def _prepare_sh() -> Path:
 
 
 def test_prepare_sh_installs_every_extras_packages():
+    """Each extra's packages, per family, are in prepare.sh's list for that extra."""
     text = _prepare_sh().read_text()
     for family in ("debian", "rhel"):  # Windows extras install their features at deploy
-        m = re.search(rf"^EXTRA_PACKAGES_{family.upper()}=\(([^)]*)\)", text, re.M)
-        assert m, f"prepare.sh has no EXTRA_PACKAGES_{family.upper()}"
-        in_script = set(m.group(1).split())
+        block = re.search(rf"^declare -A EXTRA_PACKAGES_{family.upper()}=\(\n(.*?)^\)", text, re.M | re.S)
+        assert block, f"prepare.sh has no EXTRA_PACKAGES_{family.upper()}"
+        listed = {i: set(p.split()) for i, p in re.findall(r'^\s*\[([\w-]+)\]="([^"]*)"', block.group(1), re.M)}
         for x in extras.extras().values():
             if family in x.families:
-                missing = set(x.families[family][0]) - in_script
+                assert x.id in listed, f"prepare.sh has no EXTRA_PACKAGES_{family.upper()}[{x.id}]"
+                missing = set(x.families[family][0]) - listed[x.id]
                 assert not missing, f"prepare.sh doesn't install {missing} for {x.id} ({family})"
 
 
