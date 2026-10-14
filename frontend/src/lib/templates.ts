@@ -111,9 +111,10 @@ export const templates: MachineTemplate[] = [
 		name: 'Windows Server',
 		category: 'Windows Server',
 		os: 'Windows',
-		description: 'Windows Server with Desktop Experience. Add roles yourself, or promote it to a domain controller.',
+		description: 'Windows Server with Desktop Experience, or as Server Core (no desktop, half the memory). Add roles yourself.',
 		versions: [
 			{ version: '2025' },
+			{ version: '2025 Core' },
 			{ version: '2022' },
 			{ version: '2019' },
 			{ version: '2016' },
@@ -121,8 +122,8 @@ export const templates: MachineTemplate[] = [
 			{ version: '2008 R2', eol: true },
 		],
 		resources: { cpu: 2, memoryGB: 4, diskGB: 60 },
-		access: ['rdp', 'console'],
-		credentials: 'Administrator / set on first deploy',
+		access: ['rdp', 'ssh', 'console'],
+		credentials: 'labadmin / set on first deploy',
 		flags: ['licence'],
 	},
 

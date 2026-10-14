@@ -23,3 +23,30 @@ def test_every_deployable_version_is_in_the_frontend_catalogue():
     for t in catalogue.catalogue().values():
         assert t.template in blocks, f"{t.template} is in templates.yaml but not in templates.ts"
         assert f"version: '{t.version}'" in blocks[t.template], f"{t.template} {t.version} is in templates.yaml but not in templates.ts"
+
+
+def test_commented_out_templates_are_ready_to_uncomment(tmp_path, monkeypatch):
+    """Entries in templates.yaml waiting for their template to be built (e.g. Windows Server) load,
+    with their extras, once uncommented, and are in the frontend's catalogue."""
+    import shutil
+
+    from app import extras
+    from app.config import settings
+
+    source = settings().catalogue_path.read_text()
+    lines = source.splitlines()
+    first = next(i for i, line in enumerate(lines) if line.startswith("# - template:"))
+    entries = [line[2:] for line in lines[first:] if line.startswith(("# - ", "#   "))]
+    (tmp_path / "templates.yaml").write_text("\n".join(lines[:first] + entries))
+    shutil.copy(settings().catalogue_path.with_name("extras.yaml"), tmp_path / "extras.yaml")
+    monkeypatch.setattr(settings(), "catalogue_path", tmp_path / "templates.yaml")
+    catalogue.catalogue.cache_clear()
+    extras.extras.cache_clear()
+    try:
+        windows = catalogue.find("windows-server", "2025 Core")
+        assert windows is not None and windows.family == "windows" and windows.admin_group == "Administrators"
+        assert windows.extras == ("iis",) and windows.access == ("rdp", "ssh", "console")
+        test_every_deployable_version_is_in_the_frontend_catalogue()
+    finally:
+        catalogue.catalogue.cache_clear()
+        extras.extras.cache_clear()

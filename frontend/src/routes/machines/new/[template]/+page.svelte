@@ -94,7 +94,9 @@
 	);
 	const deployed = $derived(template && store.asDeployed(template, version));
 	const eol = $derived(template?.versions.find((v) => v.version === version)?.eol);
-	const username = $derived(store.config?.templates.find((t) => t.template === template?.id && t.version === version)?.username);
+	const live = $derived(store.config?.templates.find((t) => t.template === template?.id && t.version === version));
+	const username = $derived(live?.username);
+	const windows = $derived(live?.family === 'windows');
 
 	// Extras --------------------------------------------------------------------------------------------
 	const offered = $derived(template ? store.extrasFor(template.id, version) : []);
@@ -307,7 +309,7 @@
 				</div>
 				<p id="password-hint" class="hint" class:problem={passwordProblem}>
 					{passwordProblem ??
-						`For ${username ?? 'the user'}, and sudo. Blank: a random one, shown once it's deployed. Anyone who can open the panel can see it, so don't reuse one you use elsewhere.`}
+						`For ${username ?? 'the user'}, ${windows ? 'an administrator. Windows needs three of: capitals, small letters, digits and symbols' : 'and sudo'}. Blank: a random one, shown once it's deployed. Anyone who can open the panel can see it, so don't reuse one you use elsewhere.`}
 				</p>
 			</div>
 

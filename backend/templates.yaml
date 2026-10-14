@@ -5,9 +5,10 @@
 #               "clean" (machines are linked clones of it), cloud-init and open-vm-tools. How to
 #               build one: docs/setup-vsphere.md and scripts/template/.
 #   username    the account cloud-init creates; its password is generated for each machine.
-#   family      debian (Debian, Ubuntu; the default) or rhel (CentOS Stream, Rocky, Alma).
+#   family      debian (Debian, Ubuntu; the default), rhel (CentOS Stream, Rocky, Alma) or windows
+#               (sysprepped with Cloudbase-Init: scripts/template/prepare.ps1 and clean.ps1).
 #   adminGroup  optional: the group that gives that account sudo. Default: "sudo" for the debian
-#               family, "wheel" for rhel.
+#               family, "wheel" for rhel. (Windows users always go in Administrators.)
 #   extras      optional: extras (extras.yaml) people can tick at deploy. Only list those whose
 #               packages are in the template, i.e. it was built with scripts/template/prepare.sh
 #               from after extras existed; older templates list none.
@@ -28,3 +29,27 @@
   username: ubuntu
   family: debian
   # Built before extras existed. Once rebuilt with today's prepare.sh: extras: [nginx, apache, apache-https]
+
+# Windows Server 2025, with Desktop Experience and as Server Core. Uncomment each once its template
+# is built (docs/setup-vsphere.md, "Windows Server templates"). Windows needs more memory: Core runs
+# in 2 GB, the desktop wants 4.
+# - template: windows-server
+#   version: "2025"
+#   vsphere: Labs/Templates/tpl-windows-server-2025
+#   cpu: 2
+#   memoryGB: 4
+#   diskGB: 60
+#   username: labadmin
+#   family: windows
+#   access: [rdp, ssh, console]
+#   extras: [iis]
+# - template: windows-server
+#   version: "2025 Core"
+#   vsphere: Labs/Templates/tpl-windows-server-2025-core
+#   cpu: 2
+#   memoryGB: 2
+#   diskGB: 40
+#   username: labadmin
+#   family: windows
+#   access: [rdp, ssh, console]
+#   extras: [iis]

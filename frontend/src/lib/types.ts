@@ -226,6 +226,8 @@ export interface PanelConfig {
 		version: string;
 		resources: { cpu: number; memoryGB: number; diskGB: number };
 		username: string;
+		/** debian, rhel or windows (backend/templates.yaml). */
+		family: string;
 		/** Extras this version's template offers. */
 		extras: Extra[];
 		/** Set in templates.yaml; otherwise the catalogue's (templates.ts). */

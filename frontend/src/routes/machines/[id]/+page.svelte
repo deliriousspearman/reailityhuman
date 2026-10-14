@@ -86,6 +86,12 @@
 		};
 	}
 
+	/** A Remote Desktop file for the machine, with its user filled in (the password is asked for). */
+	function rdpFile(ip: string, username: string): string {
+		const lines = [`full address:s:${ip}`, `username:s:${username}`, 'prompt for credentials:i:1', 'screen mode id:i:1'];
+		return `data:application/x-rdp;charset=utf-8,${encodeURIComponent(lines.join('\r\n') + '\r\n')}`;
+	}
+
 	let more: HTMLDetailsElement | undefined = $state();
 	function fromMenu(action: () => void) {
 		more?.removeAttribute('open');
@@ -266,6 +272,7 @@
 				<span class="way">Remote Desktop</span>
 				<code class="cmd">{cmd}</code>
 				<button class="btn btn-quiet btn-sm" type="button" onclick={() => copy(cmd)}><Icon name="copy" />{copied === cmd ? 'Copied' : 'Copy'}</button>
+				<a class="btn btn-quiet btn-sm" href={rdpFile(m.ip, m.username)} download="{m.name}.rdp"><Icon name="download" />.rdp file</a>
 			</li>
 		{/if}
 		{#if t.access.includes('console')}
