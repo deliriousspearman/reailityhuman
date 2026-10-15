@@ -6,7 +6,7 @@ lab slugs match its `labs/<slug>.md` pages.
 
 What works so far is **single machines**: deploy one VM from a template (Ubuntu 26.04 for now;
 Windows Server 2025 is written and waiting for its template) onto the LAN, with optional extras
-(web servers, WordPress, Nextcloud, a mail server, FTP, a remote desktop; IIS on Windows), then
+(web servers, WordPress, Nextcloud, a mail server, FTP, a remote desktop; IIS and Outlook on Windows), then
 start, stop, reboot, reset, redeploy, extend and destroy it. Machines expire unless they're extended or kept. The admin page shows capacity, every
 machine, leftover VMs and the job queue. Pro Labs, the VPN and sign-in come later; the panel shows
 them greyed out.

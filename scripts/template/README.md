@@ -109,7 +109,7 @@ Every OS:
 
 | Script | What it does | Can be undone? |
 |---|---|---|
-| [`prepare.ps1`](prepare.ps1) | Checks VMware Tools, installs Cloudbase-Init and configures it to read the panel's data from vCenter, turns on Remote Desktop and OpenSSH Server, and stops Server Manager opening at sign-in. | Yes. It's safe to re-run. |
+| [`prepare.ps1`](prepare.ps1) | Checks VMware Tools, installs Cloudbase-Init and configures it to read the panel's data from vCenter, turns on Remote Desktop and OpenSSH Server, and stops Server Manager opening at sign-in. With `-Office`, copies in Office's install files for the Outlook extra. | Yes. It's safe to re-run. |
 | [`clean.ps1`](clean.ps1) | Clears Cloudbase-Init's records, the OpenSSH host keys and administrators' authorized keys, then runs sysprep (generalize) with Cloudbase-Init's Unattend.xml and shuts down. | No: sysprep can't be undone. |
 
 Run both in an elevated Windows PowerShell on the VM, from a CD image (part 5 shows how to make one
@@ -122,8 +122,17 @@ only say what they'd do.
 | Server 2016–2022, Windows 10/11 (64-bit) | `family: windows` | Should work the same; not tested |
 
 On clones, the panel's first-boot script (written by the backend, run by Cloudbase-Init) creates
-`labadmin`, disables the built-in Administrator, starts OpenSSH, and runs the Windows extras (IIS),
-logging each to `C:\ProgramData\lab-deploy\logs\<extra>.log`. Windows extras install their roles
-from files already on the machine, so unlike Linux there's nothing to bake into the template. An
+`labadmin`, disables the built-in Administrator, starts OpenSSH, and runs the Windows extras (IIS, Outlook),
+logging each to `C:\ProgramData\lab-deploy\logs\<extra>.log`. IIS installs from files already on
+the machine, so there's nothing to bake into the template for it. An
 extra that needs a restart (a server role, say) exits with 3010: Windows restarts, Cloudbase-Init
 runs the first-boot script again, and it carries on with the extras after it.
+
+**Outlook** is the exception: Office can't be downloaded or activated without internet, so its
+install files (2–3 GB) are baked into the template. They're not kept in this repo, since they're
+large and they're Microsoft's to distribute: the repo has only
+[`office/download.xml`](office/download.xml), which says what to download (Office LTSC 2024's
+volume edition, Outlook only) and how. `prepare.ps1 -Office D:\office` copies the files to
+`C:\LabDeploy\office`. When Outlook is ticked, the machine installs it from there on first boot
+(about 5–10 minutes), unactivated: it shows a licence notice, and some features stop working after
+its grace period, which suits short-lived machines. It needs the desktop, so not on Server Core.

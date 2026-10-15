@@ -251,7 +251,7 @@ On a clone's first boot:
 1. sysprep's setup runs, and Cloudbase-Init sets the computer name from the panel, then Windows restarts;
 2. Cloudbase-Init runs the panel's first-boot script: it creates `labadmin` in Administrators with
    the machine's password (and your SSH key, if you gave one), disables the built-in Administrator,
-   starts OpenSSH, and sets up any extras (IIS);
+   starts OpenSSH, and sets up any extras (IIS, Outlook);
 3. the panel sees the script has finished, through VMware Tools, and clears the password from the
    VM's settings in vCenter.
 
@@ -265,7 +265,9 @@ can run at once.
 **Licensing:** without internet access, Windows can't activate online. The evaluation edition runs
 for 180 days. Generalizing with sysprep should restart that period for each clone, which suits
 short-lived machines (to be confirmed on the first build). For anything longer-lived, a KMS host on
-the LAN with volume-licence keys is the clean answer.
+the LAN with volume-licence keys is the clean answer. Outlook (Office) isn't activated either: it
+shows a licence notice, and after its grace period some features stop working. A KMS host with
+Office LTSC 2024's host key would activate it too, since it's the volume edition.
 
 ### What you need
 
@@ -276,10 +278,16 @@ the LAN with volume-licence keys is the clean answer.
 
   ```sh
   mkdir -p /tmp/lab-tools && cp CloudbaseInitSetup_x64.msi scripts/template/*.ps1 /tmp/lab-tools/
-  genisoimage -quiet -J -R -V LABTOOLS -o lab-tools.iso /tmp/lab-tools   # or mkisofs
+  genisoimage -quiet -J -R -iso-level 3 -V LABTOOLS -o lab-tools.iso /tmp/lab-tools   # or mkisofs
   ```
 
   Upload `lab-tools.iso` to the `ISO` folder as well.
+- Optionally, for the **Outlook** extra (Desktop Experience only): Office's install files. On any
+  Windows PC with internet, follow the steps at the top of
+  [`scripts/template/office/download.xml`](../scripts/template/office/download.xml), which leave an
+  `office` folder (about 2–3 GB). Copy it into `/tmp/lab-tools` before making the ISO, so it ends
+  up at `D:\office` (`-iso-level 3` lets the ISO hold files over 2 GB, which Office's can be).
+  Without it, leave `outlook` out of the template's `extras` in `backend/templates.yaml`.
 
 ### Create the VM
 
@@ -309,8 +317,12 @@ the LAN with volume-licence keys is the clean answer.
    D:\prepare.ps1 -Msi D:\CloudbaseInitSetup_x64.msi
    ```
 
+   With the Office files on the ISO, add `-Office D:\office` to both. Not on Server Core: Outlook
+   needs the desktop.
+
    It checks VMware Tools, installs Cloudbase-Init and points it at vCenter, turns on Remote Desktop
-   and OpenSSH Server, and stops Server Manager opening at sign-in. It's safe to re-run. Pass
+   and OpenSSH Server, and stops Server Manager opening at sign-in. With `-Office`, it copies the
+   Office files to `C:\LabDeploy\office` (clean.ps1 leaves them). It's safe to re-run. Pass
    `-NoSsh` to leave OpenSSH off; then remove `ssh` from the template's `access` in
    `backend/templates.yaml`.
 
