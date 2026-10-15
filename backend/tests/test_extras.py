@@ -80,48 +80,48 @@ def test_prepare_sh_installs_every_extras_packages():
 # Choosing ---------------------------------------------------------------------------------------------
 
 
-def test_clashes_come_from_ports_and_shared_services():
+def test_clashes_come_from_shared_ports():
     from app.extras import Extra, clashes
 
     nginx = Extra("nginx", "nginx", "", ports=(80,))
-    apache = Extra("apache", "Apache", "", ports=(80,), provides="apache")
-    https = Extra("apache-https", "Apache + HTTPS", "", ports=(80, 443), provides="apache")
-    wordpress = Extra("wordpress", "WordPress", "", uses="apache")
-    nextcloud = Extra("nextcloud", "Nextcloud", "", uses="apache")
-    mail = Extra("mail", "Mail", "", ports=(25, 143), uses="apache")
-    snap = Extra("nextcloud-snap", "Nextcloud (snap)", "", ports=(80, 443))
+    https = Extra("apache-https", "Apache + HTTPS", "", ports=(80, 443))
+    wordpress = Extra("wordpress", "WordPress", "", ports=(80, 443))
     ftp = Extra("ftp", "FTP", "", ports=(21,))
-
-    # Web servers all want port 80.
-    assert clashes(nginx, apache) and clashes(apache, https) and clashes(nginx, snap)
-    # Web apps share Apache: with each other, and with whichever Apache extra is ticked.
-    for app in (wordpress, nextcloud, mail):
-        assert not clashes(app, apache) and not clashes(apache, app) and not clashes(app, https)
-        assert clashes(app, nginx) and clashes(nginx, app) and clashes(app, snap)
-    assert not clashes(wordpress, nextcloud) and not clashes(wordpress, mail)
-    # Different ports, no clash.
-    assert not clashes(ftp, nginx) and not clashes(ftp, mail)
+    desktop = Extra("desktop", "Desktop", "", ports=(3389, 5901))
+    assert clashes(nginx, https) and clashes(wordpress, nginx) and clashes(wordpress, https)
+    assert not clashes(ftp, wordpress) and not clashes(desktop, https) and not clashes(ftp, desktop)
     assert not clashes(nginx, nginx)
 
 
 def test_catalogue_conflicts_are_worked_out():
+    """One web service per machine; FTP and the desktop go with anything."""
     found = {i: set(x.conflicts) for i, x in extras.extras().items()}
-    # nginx clashes with every other web server, and the web apps that would run inside Apache.
-    assert found["nginx"] == {"apache", "apache-https", "iis", "wordpress", "nextcloud", "nextcloud-snap", "mail"}
-    # The Apache extras clash with each other and other servers, but not the apps inside them.
-    assert found["apache-https"] == {"nginx", "apache", "nextcloud-snap", "iis"}
-    assert found["wordpress"] == {"nginx", "nextcloud-snap", "iis"}
+    web = {"nginx", "apache", "apache-https", "wordpress", "nextcloud", "nextcloud-snap", "mail", "iis"}
+    for i in web:
+        assert found[i] == web - {i}, i
     assert found["ftp"] == set() and found["desktop"] == set()
 
 
+def test_old_sharing_keys_are_refused(tmp_path, monkeypatch):
+    (tmp_path / "extras.yaml").write_text("- id: x\n  name: X\n  description: ''\n  uses: apache\n")
+    monkeypatch.setattr(extras, "_path", lambda: tmp_path / "extras.yaml")
+    extras.extras.cache_clear()
+    try:
+        with pytest.raises(ValueError, match="no longer used"):
+            extras.extras()
+    finally:
+        monkeypatch.undo()
+        extras.extras.cache_clear()
+
+
 def test_extras_run_in_catalogue_order(monkeypatch):
-    """Web servers come before the apps that run inside them, whatever order they were ticked in."""
+    """Always in the catalogue's order, whatever order they were ticked in."""
     from app.extras import Extra
 
-    catalogue_ = {"apache": Extra("apache", "Apache", "", ports=(80,), provides="apache"), "wordpress": Extra("wordpress", "WordPress", "", uses="apache")}
+    catalogue_ = {"apache": Extra("apache", "Apache", "", ports=(80,)), "ftp": Extra("ftp", "FTP", "", ports=(21,))}
     monkeypatch.setattr(extras, "extras", lambda: catalogue_)
-    chosen = extras.resolve(("apache", "wordpress"), [{"id": "wordpress"}, {"id": "apache"}], "web01")
-    assert [c["id"] for c in chosen] == ["apache", "wordpress"]
+    chosen = extras.resolve(("apache", "ftp"), [{"id": "ftp"}, {"id": "apache"}], "web01")
+    assert [c["id"] for c in chosen] == ["apache", "ftp"]
 
 
 def test_defaults_follow_the_name_and_machine_domain(monkeypatch):
@@ -198,7 +198,7 @@ def test_parse_status():
 def test_config_lists_extras_for_templates_that_have_them(offered):
     t = client.get("/api/config").json()["templates"][0]
     https = next(x for x in t["extras"] if x["id"] == "apache-https")
-    assert https["conflicts"] == ["nginx", "apache", "nextcloud-snap", "iis"]
+    assert https["conflicts"] == ["nginx", "apache", "wordpress", "nextcloud", "nextcloud-snap", "mail", "iis"]
     assert https["options"][0]["id"] == "domain" and https["options"][0]["default"] == "{fqdn}"
 
 
@@ -299,16 +299,25 @@ def test_links_and_notes_are_filled_in(monkeypatch):
 
     wp = Extra(
         "wordpress", "WordPress", "",
-        links=("http://{ip}/wordpress/",),
-        notes=(("Admin: http://{ip}/wordpress/wp-admin as {username}, for {domain} on {hostname}. Keep {braces}.", {}),),
+        links=(("http://{ip}/", {"https": ("no",)}), ("https://{ip}/", {"https": ("yes",)})),
+        notes=(("Admin: /wp-admin/ as {username}, for {domain} on {hostname}. Keep {braces}.", {}),),
     )  # fmt: skip
     monkeypatch.setattr(extras, "find", lambda i: wp)
-    chosen = {"id": "wordpress", "options": {"domain": "blog.lab.example"}}
-    assert extras.details(chosen, "192.0.2.7", "ubuntu", "web01") == {
-        "links": ["http://192.0.2.7/wordpress/"],
-        "notes": ["Admin: http://192.0.2.7/wordpress/wp-admin as ubuntu, for blog.lab.example on web01. Keep {braces}."],
+    plain = {"id": "wordpress", "options": {"domain": "blog.lab.example", "https": "no"}}
+    assert extras.details(plain, "192.0.2.7", "ubuntu", "web01") == {
+        "links": ["http://192.0.2.7/"],
+        "notes": ["Admin: /wp-admin/ as ubuntu, for blog.lab.example on web01. Keep {braces}."],
     }
-    assert extras.details(chosen, "", "ubuntu", "web01") == {"links": [], "notes": []}  # no address yet
+    secure = {"id": "wordpress", "options": {"domain": "blog.lab.example", "https": "yes"}}
+    assert extras.details(secure, "192.0.2.7", "ubuntu", "web01")["links"] == ["https://192.0.2.7/"]
+    assert extras.details(plain, "", "ubuntu", "web01") == {"links": [], "notes": []}  # no address yet
+
+
+def test_web_apps_are_the_whole_site():
+    for i in ("wordpress", "nextcloud", "mail"):
+        _, script = extras.find(i).families["debian"]
+        assert 'lab_apache_site ' in script and '"$https" "$domain"' in script, i
+        assert "Alias /" not in script, i
 
 
 def test_extras_too_big_for_the_machine_are_refused(monkeypatch):
@@ -358,3 +367,11 @@ def test_notes_can_depend_on_options():
     both = extras.details({"id": "desktop", "options": {"protocol": "both"}}, "192.0.2.7", "ubuntu", "web01")["notes"]
     assert desktop and len(rdp) == 1 and rdp[0].startswith("RDP: connect to 192.0.2.7 as ubuntu")
     assert len(both) == 2 and both[1].startswith("VNC: connect to 192.0.2.7:5901")
+
+
+def test_domain_shows_only_with_https():
+    """The web apps' domain name only matters for their certificate."""
+    for i in ("wordpress", "nextcloud"):
+        domain = next(o for o in extras.find(i).options if o.id == "domain")
+        assert domain.when == {"https": ("yes",)}, i
+    assert next(o for o in extras.find("mail").options if o.id == "domain").when == {}  # mail uses it anyway

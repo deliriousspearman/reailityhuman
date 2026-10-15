@@ -7,19 +7,17 @@
 #   category   the heading it's listed under on the deploy form, e.g. Web servers; extras of a
 #              category are listed in this file's order, and categories in order of first use
 #   minMemoryGB  optional: the least memory a machine needs for it (e.g. a desktop)
-#   ports      the ports it listens on. Extras that would share one can't be chosen together.
-#   provides   apache, for the extras that set Apache up; web apps can run inside them.
-#   uses       apache, for web apps that run inside Apache at their own path: they can be combined
-#              with each other and with an extra that provides Apache, but not with other servers
-#              on Apache's ports (80, 443).
-#   links      shown on the machine's page, once it has an address; and
+#   ports      the ports it listens on. Extras that would share one can't be chosen together: each
+#              web service (80/443) gets a machine of its own, while FTP or a desktop go with any.
+#   links      addresses shown on the machine's page, once it has an address; and
 #   notes      sentences shown with them, e.g. how to sign in. In both, {ip} is its address,
 #              {username} its user, {hostname} its name, and {<option id>} that option's value. A
-#              note can be {text, when: {<option id>: [values]}}, shown only for those values.
+#              link or note can be {text, when: {<option id>: [values]}}, shown only for those values.
 #   options    fields shown when the extra is ticked. Each value reaches the script as a shell
 #              variable of the same name, already validated and quoted; scripts never get raw input.
 #                type      hostname: a DNS name, optionally "*."-prefixed; text: matched by `pattern`;
 #                          choice: one of `choices` ([{value, label}]); boolean: "yes" or "no"
+#                when      optional: {<option id>: [values]}, to show it only then
 #                default   used when it's left blank. {hostname} is the machine's name, {fqdn} the
 #                          name plus MACHINE_DOMAIN (just the name when that's empty)
 #   password   true if the script needs the machine's password as it is ($password), e.g. for a web
@@ -28,7 +26,8 @@
 #   <family>   debian or rhel: `packages` (must be in prepare.sh's EXTRA_PACKAGES_<FAMILY>, which a
 #              test checks) and `script`, run with bash -e as root. $hostname is always set, and
 #              the helpers in extras.py's LIB are there: lab_cert (a self-signed certificate),
-#              lab_apache and lab_apache_conf (web apps inside Apache), lab_open (firewalld), lab_ip.
+#              lab_apache, lab_apache_site (a folder as the whole site, optionally over HTTPS),
+#              lab_open (firewalld), lab_ip.
 #              windows: just `script`, PowerShell run as SYSTEM with $ErrorActionPreference = 'Stop'
 #              (any PowerShell error fails the extra). A program that fails doesn't stop it, though:
 #              after running one, check it, e.g. `if ($LASTEXITCODE) { throw "x.exe failed" }`.
@@ -61,7 +60,6 @@
   category: Web servers
   description: Apache web server on port 80, with a page showing the machine's name.
   ports: [80]
-  provides: apache
   links: ["http://{ip}/"]
   debian:
     packages: [apache2]
@@ -80,7 +78,6 @@
   category: Web servers
   description: Apache on ports 80 and 443, with a self-signed certificate made for this machine.
   ports: [80, 443]
-  provides: apache
   links: ["http://{ip}/", "https://{ip}/"]
   options:
     - id: domain
@@ -112,12 +109,28 @@
 - id: wordpress
   name: WordPress
   category: Web apps
-  description: WordPress at /wordpress, with the machine's user as its administrator.
-  uses: apache
+  description: WordPress as the machine's website, with its user as the administrator. Optionally over HTTPS.
+  ports: [80, 443]
   password: true
-  links: ["http://{ip}/wordpress/"]
+  links:
+    - text: "http://{ip}/"
+      when: {https: ["no"]}
+    - text: "https://{ip}/"
+      when: {https: ["yes"]}
   notes:
-    - "Sign in at http://{ip}/wordpress/wp-admin/ as {username}, with the machine's password."
+    - "Sign in at /wp-admin/ as {username}, with the machine's password."
+  options:
+    - id: https
+      label: Use HTTPS
+      help: Served on https:// (http:// sends people there), with a self-signed certificate.
+      type: boolean
+      default: "no"
+    - id: domain
+      label: Domain name
+      help: The name the certificate is for, e.g. blog.lab.example. The machine's name and address are always on it too.
+      type: hostname
+      default: "{fqdn}"
+      when: {https: ["yes"]}
   debian:
     packages: [apache2, libapache2-mod-php, php-mysql, php-gd, php-curl, php-xml, php-mbstring, php-zip, php-intl, mariadb-server, openssl]
     script: |
@@ -133,29 +146,40 @@
       mkdir -p /var/www/wordpress
       tar -xzf /opt/lab-deploy/wordpress.tar.gz -C /var/www/wordpress --strip-components=1
       chown -R www-data:www-data /var/www/wordpress
-      lab_apache_conf wordpress <<'EOF'
-      Alias /wordpress /var/www/wordpress
-      <Directory /var/www/wordpress>
-          AllowOverride All
-          Require all granted
-      </Directory>
-      EOF
       a2enmod -q rewrite
-      lab_apache
+      lab_apache_site /var/www/wordpress "$https" "$domain" </dev/null
+      scheme=http
+      [ "$https" = yes ] && scheme=https
       wp() { runuser -u www-data -- env HOME=/tmp WP_CLI_CACHE_DIR=/tmp/wp-cli php /usr/local/bin/wp --path=/var/www/wordpress "$@"; }
       wp config create --dbname=wordpress --dbuser=wordpress --dbpass="$db_pass" --skip-check
-      wp core install --url="http://$(lab_ip)/wordpress" --title="$hostname" --admin_user="$username" \
+      wp core install --url="$scheme://$(lab_ip)" --title="$hostname" --admin_user="$username" \
         --admin_password="$password" --admin_email="$username@$hostname.lab.invalid" --skip-email
 
 - id: nextcloud
   name: Nextcloud
   category: Web apps
-  description: Nextcloud at /nextcloud, installed from its archive, with the machine's user as its administrator.
-  uses: apache
+  description: Nextcloud as the machine's website, installed from its archive, with its user as the administrator. Optionally over HTTPS.
+  ports: [80, 443]
   password: true
-  links: ["http://{ip}/nextcloud/"]
+  links:
+    - text: "http://{ip}/"
+      when: {https: ["no"]}
+    - text: "https://{ip}/"
+      when: {https: ["yes"]}
   notes:
     - "Sign in as {username}, with the machine's password."
+  options:
+    - id: https
+      label: Use HTTPS
+      help: Served on https:// (http:// sends people there), with a self-signed certificate.
+      type: boolean
+      default: "no"
+    - id: domain
+      label: Domain name
+      help: The name the certificate is for, e.g. cloud.lab.example. The machine's name and address are always on it too.
+      type: hostname
+      default: "{fqdn}"
+      when: {https: ["yes"]}
   debian:
     packages: [apache2, libapache2-mod-php, php-mysql, php-gd, php-curl, php-xml, php-mbstring, php-zip, php-intl, php-gmp, php-bcmath, mariadb-server, bzip2, openssl]
     script: |
@@ -172,26 +196,23 @@
       chown -R www-data:www-data /var/www/nextcloud
       # Nextcloud wants 512 MB for PHP.
       for dir in /etc/php/*/apache2/conf.d; do echo "memory_limit = 512M" >"$dir/99-lab-nextcloud.ini"; done
-      lab_apache_conf nextcloud <<'EOF'
-      Alias /nextcloud /var/www/nextcloud
-      <Directory /var/www/nextcloud>
-          Require all granted
-          AllowOverride All
-          Options FollowSymLinks MultiViews
-          <IfModule mod_dav.c>
-              Dav off
-          </IfModule>
-      </Directory>
-      EOF
       a2enmod -q rewrite headers env dir mime
-      lab_apache
+      lab_apache_site /var/www/nextcloud "$https" "$domain" <<'EOF'
+      Options FollowSymLinks MultiViews
+      <IfModule mod_dav.c>
+          Dav off
+      </IfModule>
+      EOF
       occ() { runuser -u www-data -- php /var/www/nextcloud/occ "$@"; }
       occ maintenance:install --database=mysql --database-name=nextcloud --database-user=nextcloud \
         --database-pass="$db_pass" --admin-user="$username" --admin-pass="$password"
       ip=$(lab_ip)
+      scheme=http
+      [ "$https" = yes ] && scheme=https
       occ config:system:set trusted_domains 1 --value="$ip"
       occ config:system:set trusted_domains 2 --value="$hostname"
-      occ config:system:set overwrite.cli.url --value="http://$ip/nextcloud"
+      occ config:system:set trusted_domains 3 --value="$domain"
+      occ config:system:set overwrite.cli.url --value="$scheme://$ip"
 
 - id: nextcloud-snap
   name: Nextcloud (snap)
@@ -216,11 +237,14 @@
 - id: mail
   name: Mail server
   category: Mail
-  description: Postfix and Dovecot (IMAP, POP3, submission), with Roundcube webmail at /roundcube. Mail is delivered on this machine only.
-  ports: [25, 110, 143, 587, 993, 995]
-  uses: apache
+  description: Postfix and Dovecot (IMAP, POP3, submission), with Roundcube webmail as the machine's website. Mail is delivered on this machine only.
+  ports: [25, 80, 110, 143, 443, 587, 993, 995]
   password: true
-  links: ["http://{ip}/roundcube/"]
+  links:
+    - text: "http://{ip}/"
+      when: {https: ["no"]}
+    - text: "https://{ip}/"
+      when: {https: ["yes"]}
   notes:
     - "Mailboxes: {username}@{domain}, and any test users ({users}). Sign in to webmail, IMAP or POP3 with the machine's password."
     - "IMAP 143 (STARTTLS) and 993, POP3 110 and 995, SMTP submission 587, all with a self-signed certificate for {domain}."
@@ -230,6 +254,11 @@
       help: The domain mail is for, e.g. mail.lab.example. Mail to user@domain is delivered here.
       type: hostname
       default: "{fqdn}"
+    - id: https
+      label: Webmail over HTTPS
+      help: Roundcube on https:// (http:// sends people there), with the mail domain's certificate.
+      type: boolean
+      default: "no"
     - id: users
       label: Test users
       help: More mailboxes, separated by commas, e.g. alice, bob. Each gets the machine's password.
@@ -295,14 +324,13 @@
           { print } inside && /^}$/ { print "}"; inside = 0 }' "$boot" >"$boot.lab"
         mv "$boot.lab" "$boot"
       fi
-      # The package's Apache config sets up Roundcube's folder but leaves its address commented out.
+      # Roundcube as the website. The package's own config (its folder's rules) stays on.
       a2enconf -q roundcube
-      echo "Alias /roundcube /var/lib/roundcube/public_html" | lab_apache_conf roundcube
+      lab_apache_site /var/lib/roundcube/public_html "$https" "$domain" </dev/null
       systemctl enable -q postfix dovecot
       # Postfix first: its first start makes the folder Dovecot puts its sign-in socket in.
       systemctl restart postfix
       systemctl restart dovecot
-      lab_apache
 
 - id: ftp
   name: FTP
