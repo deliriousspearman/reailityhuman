@@ -1,0 +1,33 @@
+<!--
+  Outlook for the panel's Windows templates (the "outlook" extra): Office LTSC 2024's volume edition,
+  64-bit, with every app but Outlook left out. It isn't activated: the panel has no licence for it.
+
+  On any Windows PC with internet:
+    1. Make a folder called office, and put this file and the Office Deployment Tool's setup.exe in it
+       (from https://www.microsoft.com/download/details.aspx?id=49117; run the download to extract it).
+    2. In that folder, run:  setup.exe /download download.xml
+       That adds an Office folder of about 2-3 GB.
+    3. Put the whole office folder on lab-tools.iso, and run prepare.ps1 with -Office D:\office.
+  The machine installs from that copy on first boot, using these settings (the extra adds the source,
+  and installs silently). For another language, change Language ID (e.g. en-gb) before downloading.
+-->
+<Configuration>
+  <Add OfficeClientEdition="64" Channel="PerpetualVL2024">
+    <Product ID="ProPlus2024Volume">
+      <Language ID="en-us" />
+      <ExcludeApp ID="Access" />
+      <ExcludeApp ID="Excel" />
+      <ExcludeApp ID="Lync" />
+      <ExcludeApp ID="OneDrive" />
+      <ExcludeApp ID="OneNote" />
+      <ExcludeApp ID="PowerPoint" />
+      <ExcludeApp ID="Publisher" />
+      <ExcludeApp ID="Word" />
+    </Product>
+  </Add>
+  <!-- No internet: don't look for updates or try to activate. -->
+  <Updates Enabled="FALSE" />
+  <Property Name="AUTOACTIVATE" Value="0" />
+  <Property Name="FORCEAPPSHUTDOWN" Value="TRUE" />
+  <Property Name="SharedComputerLicensing" Value="0" />
+</Configuration>

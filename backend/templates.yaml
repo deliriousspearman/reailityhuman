@@ -45,7 +45,7 @@
 #   username: labadmin
 #   family: windows
 #   access: [rdp, ssh, console]
-#   extras: [iis]
+#   extras: [iis, outlook]   # Outlook: built with prepare.ps1 -Office
 # - template: windows-server
 #   version: "2025 Core"
 #   vsphere: Labs/Templates/tpl-windows-server-2025-core
@@ -55,4 +55,4 @@
 #   username: labadmin
 #   family: windows
 #   access: [rdp, ssh, console]
-#   extras: [iis]
+#   extras: [iis]   # not Outlook: it needs the desktop

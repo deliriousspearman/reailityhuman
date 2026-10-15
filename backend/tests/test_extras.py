@@ -99,7 +99,7 @@ def test_catalogue_conflicts_are_worked_out():
     web = {"nginx", "apache", "apache-https", "wordpress", "nextcloud", "nextcloud-snap", "mail", "iis"}
     for i in web:
         assert found[i] == web - {i}, i
-    assert found["ftp"] == set() and found["desktop"] == set()
+    assert found["ftp"] == set() and found["desktop"] == set() and found["outlook"] == set()
 
 
 def test_old_sharing_keys_are_refused(tmp_path, monkeypatch):

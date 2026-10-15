@@ -10,7 +10,8 @@ as Administrator. It:
     (VMware guestinfo): the computer name during sysprep, then the panel's first-boot script;
   - turns on Remote Desktop (with Network Level Authentication) and its firewall rules;
   - turns on OpenSSH Server, if Windows has it, with PowerShell as its shell;
-  - stops Server Manager opening at every sign-in, and never sleeps.
+  - stops Server Manager opening at every sign-in, and never sleeps;
+  - with -Office, copies Office's install files in, for the panel's Outlook extra.
 It's safe to re-run. Then install anything every machine should have, and run clean.ps1.
 
 The whole process, including the vCenter steps, is in docs/setup-vsphere.md.
@@ -22,16 +23,25 @@ Cloudbase-Init is installed already.
 .PARAMETER NoSsh
 Don't set up OpenSSH Server.
 
+.PARAMETER Office
+A folder with the Office Deployment Tool's setup.exe, download.xml and the Office folder it
+downloaded (scripts/template/office/download.xml says how). They're copied to C:\LabDeploy\office,
+and clones install Outlook from there when it's chosen. Not for Server Core: Outlook needs the desktop.
+
 .PARAMETER DryRun
 Only say what it found and what it would do.
 
 .EXAMPLE
 powershell -ExecutionPolicy Bypass -File prepare.ps1 -Msi C:\Users\Administrator\Downloads\CloudbaseInitSetup_x64.msi
+
+.EXAMPLE
+powershell -ExecutionPolicy Bypass -File D:\prepare.ps1 -Msi D:\CloudbaseInitSetup_x64.msi -Office D:\office
 #>
 [CmdletBinding()]
 param(
     [string]$Msi,
     [switch]$NoSsh,
+    [string]$Office,
     [switch]$DryRun
 )
 
@@ -40,6 +50,9 @@ Set-StrictMode -Version 2.0
 
 $CloudbaseDir = Join-Path $env:ProgramFiles 'Cloudbase Solutions\Cloudbase-Init'
 $ConfDir = Join-Path $CloudbaseDir 'conf'
+# Where the Outlook extra (backend/extras.yaml) looks for them. Not under C:\ProgramData\lab-deploy,
+# which clean.ps1 empties.
+$OfficeDir = 'C:\LabDeploy\office'
 
 function Step([string]$Text) { Write-Host "==> $Text" -ForegroundColor Cyan }
 function Note([string]$Text) { Write-Host "    $Text" }
@@ -76,6 +89,17 @@ if (-not $installed -and -not $Msi) {
 if ($Msi -and -not (Test-Path $Msi)) {
     throw "No such file: $Msi"
 }
+if ($Office) {
+    foreach ($file in 'setup.exe', 'download.xml', 'Office\Data\v64.cab') {
+        if (-not (Test-Path (Join-Path $Office $file))) {
+            throw "$Office has no $file. It needs setup.exe and download.xml, and the Office folder that setup.exe /download download.xml makes."
+        }
+    }
+    $installType = (Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion').InstallationType
+    if ($installType -eq 'Server Core') {
+        throw 'Outlook needs the desktop, and this is Server Core: leave out -Office.'
+    }
+}
 $sshCapability = $null
 if (-not $NoSsh) {
     $sshCapability = Get-WindowsCapability -Online | Where-Object { $_.Name -like 'OpenSSH.Server*' } | Select-Object -First 1
@@ -89,6 +113,10 @@ if ($NoSsh) {
     Note 'OpenSSH Server: not available on this Windows; machines get Remote Desktop only'
 } else {
     Note "OpenSSH Server: $($sshCapability.State)"
+}
+if ($Office) {
+    $size = (Get-ChildItem -Path $Office -Recurse -File | Measure-Object -Property Length -Sum).Sum
+    Note ("Office files: to copy from $Office to $OfficeDir ({0:N1} GB)" -f ($size / 1GB))
 }
 if ($DryRun) {
     Note 'Dry run: nothing changed.'
@@ -178,6 +206,17 @@ if ($sshCapability) {
     New-Item -Path 'HKLM:\SOFTWARE\OpenSSH' -Force | Out-Null
     Set-ItemProperty -Path 'HKLM:\SOFTWARE\OpenSSH' -Name DefaultShell -Value (Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe')
     # Started on each clone by the panel's first-boot script, once it has its own host keys.
+}
+
+# Office --------------------------------------------------------------------------------------------------
+
+if ($Office) {
+    Step "Copying Office's install files to $OfficeDir"
+    # /MIR: a re-run leaves an exact copy. Robocopy's exit codes below 8 all mean success.
+    robocopy.exe $Office $OfficeDir /MIR /NFL /NDL /NJH /NJS /NP | Out-Null
+    if ($LASTEXITCODE -ge 8) {
+        throw "Copying $Office to $OfficeDir failed (robocopy exit code $LASTEXITCODE)."
+    }
 }
 
 # Odds and ends -------------------------------------------------------------------------------------------

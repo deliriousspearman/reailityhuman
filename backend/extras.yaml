@@ -32,7 +32,8 @@
 #              (any PowerShell error fails the extra). A program that fails doesn't stop it, though:
 #              after running one, check it, e.g. `if ($LASTEXITCODE) { throw "x.exe failed" }`.
 #              Options and $hostname are PowerShell variables. Windows roles and features install
-#              from files already on the machine, so no packages are baked into the template.
+#              from files already on the machine, so nothing is baked into the template, except
+#              for Outlook: prepare.ps1 -Office copies Office's install files in.
 #              An extra that needs a restart to finish exits with 3010 ("done, restart needed"), e.g.
 #              `if ((Install-WindowsFeature X).RestartNeeded -eq 'Yes') { exit 3010 }`: Windows
 #              restarts and the extras after it carry on (3 restarts at most, for all of them).
@@ -445,3 +446,47 @@
         Enable-WindowsOptionalFeature -Online -FeatureName IIS-WebServerRole, IIS-WebServer -All -NoRestart | Out-Null
       }
       Set-Content -Path C:\inetpub\wwwroot\index.html -Encoding ascii -Value "<h1>$hostname</h1><p>IIS, deployed by the lab panel.</p>"
+
+- id: outlook
+  name: Outlook
+  category: Mail
+  description: Microsoft Outlook (Office LTSC 2024), unactivated, from files in the template. Not on Server Core.
+  minMemoryGB: 4
+  notes:
+    - "Office isn't activated: Outlook shows a licence notice, and after its grace period some features stop working. Fine for a short-lived machine."
+    - "Add an account in Outlook yourself, e.g. a mail server deployed from the panel (IMAP on 143 or 993, SMTP on 587)."
+  windows:
+    script: |
+      # The Office files prepare.ps1 -Office copied into the template, with the download's settings
+      # (product, language, the apps left out), scripts/template/office/download.xml.
+      $src = 'C:\LabDeploy\office'
+      if (-not (Test-Path "$src\setup.exe")) {
+        throw "This template has no Office files in $src. Rebuild it with prepare.ps1 -Office."
+      }
+      [xml]$config = Get-Content -Path "$src\download.xml"
+      $add = $config.Configuration.SelectSingleNode('Add')
+      $add.SetAttribute('SourcePath', $src)
+      $add.SetAttribute('AllowCdnFallback', 'FALSE')
+      foreach ($node in @($config.Configuration.SelectNodes('Display|Logging'))) {
+        $config.Configuration.RemoveChild($node) | Out-Null
+      }
+      $logs = 'C:\ProgramData\lab-deploy\logs\office'
+      $display = $config.CreateElement('Display')
+      $display.SetAttribute('Level', 'None')
+      $display.SetAttribute('AcceptEULA', 'TRUE')
+      $logging = $config.CreateElement('Logging')
+      $logging.SetAttribute('Level', 'Standard')
+      $logging.SetAttribute('Path', $logs)
+      $config.Configuration.AppendChild($display) | Out-Null
+      $config.Configuration.AppendChild($logging) | Out-Null
+      $install = 'C:\ProgramData\lab-deploy\outlook.xml'
+      $config.Save($install)
+
+      # Waits until Office is installed: about 5 to 10 minutes.
+      $setup = Start-Process -FilePath "$src\setup.exe" -ArgumentList '/configure', "`"$install`"" -Wait -PassThru
+      if ($setup.ExitCode -ne 0) { throw "Office setup failed (exit code $($setup.ExitCode)); its logs are in $logs." }
+      $exe = Join-Path $env:ProgramFiles 'Microsoft Office\root\Office16\OUTLOOK.EXE'
+      if (-not (Test-Path $exe)) { throw "Office setup finished, but there's no $exe." }
+      $link = (New-Object -ComObject WScript.Shell).CreateShortcut("$env:PUBLIC\Desktop\Outlook.lnk")
+      $link.TargetPath = $exe
+      $link.Save()

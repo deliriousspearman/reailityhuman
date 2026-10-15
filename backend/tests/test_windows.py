@@ -4,6 +4,7 @@ file faked: vcsim VMs have no guest). vcsim's VM stands in for a Windows templat
 import base64
 import re
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 import yaml
@@ -109,6 +110,27 @@ def test_windows_extras_scripts():
     assert "\n" not in script.replace("\r\n", "")  # Windows line endings throughout
     assert extras.status_file("windows") == r"C:\ProgramData\lab-deploy\extras.status"
     assert extras.log_file("windows", "iis") == r"C:\ProgramData\lab-deploy\logs\iis.log"
+
+
+def _template_script(name: str) -> str:
+    for candidate in (Path(__file__).resolve().parents[2] / "scripts", Path("/scripts")):
+        if (candidate / "template" / name).exists():
+            return (candidate / "template" / name).read_text()
+    pytest.skip(f"scripts/template/{name} isn't mounted here")
+
+
+def test_outlook_goes_with_iis_and_installs_from_the_templates_copy():
+    chosen = extras.resolve(("iis", "outlook"), [{"id": "outlook"}, {"id": "iis"}], "win01", memory_gb=4)
+    assert [c["id"] for c in chosen] == ["iis", "outlook"]
+    with pytest.raises(extras.ExtraError, match="at least 4 GB"):
+        extras.resolve(("outlook",), [{"id": "outlook"}], "win01", memory_gb=2)
+    script = extras.script(extras.find("outlook"), "windows", "win01", {})
+    source = re.search(r"\$src = '([^']+)'", script).group(1)
+    # Where prepare.ps1 -Office copies the files, and not in the folder clean.ps1 empties.
+    assert f"$OfficeDir = '{source}'" in _template_script("prepare.ps1")
+    assert not source.lower().startswith(extras.WINDOWS_DIR.lower())
+    assert "'lab-deploy') -Recurse" in _template_script("clean.ps1")
+    assert "/configure" in script and "ExitCode -ne 0" in script
 
 
 # Passwords --------------------------------------------------------------------------------------------

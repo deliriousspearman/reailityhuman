@@ -46,6 +46,7 @@ def test_commented_out_templates_are_ready_to_uncomment(tmp_path, monkeypatch):
         windows = catalogue.find("windows-server", "2025 Core")
         assert windows is not None and windows.family == "windows" and windows.admin_group == "Administrators"
         assert windows.extras == ("iis",) and windows.access == ("rdp", "ssh", "console")
+        assert catalogue.find("windows-server", "2025").extras == ("iis", "outlook")  # not on Core
         test_every_deployable_version_is_in_the_frontend_catalogue()
     finally:
         catalogue.catalogue.cache_clear()
