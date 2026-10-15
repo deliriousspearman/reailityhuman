@@ -170,6 +170,11 @@
 		return names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
 	}
 
+	/** Whether an option applies, given the extra's other options (e.g. a domain only with HTTPS). */
+	function shown(o: ExtraOption, values: Record<string, string> | undefined): boolean {
+		return Object.entries(o.when ?? {}).every(([k, vs]) => vs.includes(values?.[k] ?? ''));
+	}
+
 	function optionProblem(o: ExtraOption, value: string): string | null {
 		if (o.type === 'choice' || o.type === 'boolean') return null; // can only be one of its values
 		const v = value.trim().toLowerCase().replace(/\.$/, '');
@@ -183,7 +188,9 @@
 		return null;
 	}
 	const extrasProblem = $derived(
-		chosen.some((x) => x.options.some((o) => optionProblem(o, picked[x.id]?.[o.id] ?? ''))) ? "Fix the extras' settings first." : null,
+		chosen.some((x) => x.options.some((o) => shown(o, picked[x.id]) && optionProblem(o, picked[x.id]?.[o.id] ?? '')))
+			? "Fix the extras' settings first."
+			: null,
 	);
 
 	async function deploy(event: SubmitEvent) {
@@ -262,7 +269,7 @@
 											{x.description}{#if small && !on}{' '}<span class="replaces">{small}</span>{:else if clash && !on}{' '}<span class="replaces">Replaces {clash}: they'd use the same port.</span>{/if}
 										</p>
 										{#if on}
-											{#each x.options as o (o.id)}
+											{#each x.options.filter((o) => shown(o, picked[x.id])) as o (o.id)}
 												{@const problem = optionProblem(o, picked[x.id][o.id] ?? '')}
 												{@const fallback = store.optionDefault(o.default, name || 'name')}
 												{#if o.type === 'boolean'}

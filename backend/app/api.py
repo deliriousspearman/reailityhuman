@@ -141,7 +141,7 @@ def extra_out(x: extras.Extra) -> dict:
         "conflicts": list(x.conflicts),
         "category": x.category,
         "minMemoryGB": x.min_memory_gb,
-        "ports": extras.claimed_ports(x),
+        "ports": sorted(x.ports),
         "options": [
             {
                 "id": o.id,
@@ -152,6 +152,7 @@ def extra_out(x: extras.Extra) -> dict:
                 "default": o.default,
                 **({"pattern": o.pattern} if o.pattern else {}),
                 **({"choices": [{"value": v, "label": label} for v, label in o.choices]} if o.choices else {}),
+                **({"when": {k: list(vs) for k, vs in o.when.items()}} if o.when else {}),
             }
             for o in x.options
         ],

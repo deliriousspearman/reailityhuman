@@ -96,15 +96,32 @@ lab_apache() {
 	systemctl restart "$unit"
 }
 
-# lab_apache_conf <app> < config: Apache configuration for a web app at its own path, e.g. an Alias.
-# It applies to every site (HTTP and, with Apache + HTTPS, HTTPS). Then call lab_apache.
-lab_apache_conf() {
-	if [ -d /etc/apache2 ]; then
-		cat >"/etc/apache2/conf-available/lab-$1.conf"
-		a2enconf -q "lab-$1"
-	else
-		cat >"/etc/httpd/conf.d/lab-$1.conf"
-	fi
+# lab_apache_site <folder> <https: yes|no> <domain> < settings: Apache serves the folder as the whole
+# site on port 80 or, with https, on 443 with a certificate for the domain (lab_cert), port 80 then
+# sending people there. Settings for the folder (e.g. "Dav off") come on standard input: always give
+# it one, even </dev/null. Then (re)starts Apache. Debian family.
+lab_apache_site() {
+	local root=$1 https=$2 domain=$3 settings
+	settings=$(cat)
+	[ "$https" = yes ] && lab_cert "$domain"
+	{
+		echo "# Written by the lab panel: this machine's web app, as the whole site."
+		if [ "$https" = yes ]; then
+			printf '<VirtualHost *:80>\n\tRewriteEngine On\n\tRewriteRule ^ https://%%{HTTP_HOST}%%{REQUEST_URI} [R=301,L]\n</VirtualHost>\n'
+			printf '<VirtualHost *:443>\n\tDocumentRoot %s\n\tSSLEngine on\n' "$root"
+			printf '\tSSLCertificateFile %s\n\tSSLCertificateKeyFile %s\n</VirtualHost>\n' "$LAB_CERT" "$LAB_KEY"
+		else
+			printf '<VirtualHost *:80>\n\tDocumentRoot %s\n</VirtualHost>\n' "$root"
+		fi
+		printf '<Directory %s>\n\tRequire all granted\n\tAllowOverride All\n' "$root"
+		[ -z "$settings" ] || printf '%s\n' "$settings"
+		echo "</Directory>"
+	} >/etc/apache2/sites-available/lab-site.conf
+	[ "$https" = yes ] && a2enmod -q ssl rewrite
+	a2dissite -q 000-default >/dev/null 2>&1 || true
+	a2dissite -q default-ssl >/dev/null 2>&1 || true
+	a2ensite -q lab-site
+	lab_apache
 }
 
 # lab_open <port/proto>...: opens ports in firewalld, where it's running (RHEL family).
@@ -132,11 +149,9 @@ class Option:
     pattern: str | None = None
     # For type "choice": (value, label) pairs; the default must be one of the values.
     choices: tuple[tuple[str, str], ...] = ()
-
-
-# Services a web app can run inside, and the ports they own. A web app (`uses: apache`) can be
-# combined with an extra that `provides` that service, but not with anything else on those ports.
-SERVICES = {"apache": (80, 443)}
+    # Shown on the deploy form only when other options have these values, e.g. a domain name only
+    # with HTTPS ticked. (It still gets its default either way.)
+    when: dict[str, tuple[str, ...]] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -148,16 +163,13 @@ class Extra:
     category: str = "Other"
     # Least memory (GB) a machine needs for it, if more than any template's.
     min_memory_gb: int = 0
-    # Ports it listens on itself, e.g. (80,) for a web server; which ones clash is worked out from these.
+    # Ports it listens on, e.g. (80,) for a web server. Extras sharing a port can't be chosen together.
     ports: tuple[int, ...] = ()
-    # A service from SERVICES it runs inside (web apps), or that it is (the Apache extras).
-    uses: str | None = None
-    provides: str | None = None
-    # Worked out from the above at load: the extras it can't be chosen with.
+    # Worked out from the ports at load: the extras it can't be chosen with.
     conflicts: tuple[str, ...] = ()
-    # Shown on the machine page once it has an address. {ip}, {username}, {hostname} and the extra's
-    # options ({domain}...) are filled in.
-    links: tuple[str, ...] = ()
+    # Shown on the machine page once it has an address, as (text, when) like notes. {ip}, {username},
+    # {hostname} and the extra's options ({domain}...) are filled in.
+    links: tuple[tuple[str, dict[str, tuple[str, ...]]], ...] = ()
     # (text, when): `when` maps option ids to the values the note is for; empty, always.
     notes: tuple[tuple[str, dict[str, tuple[str, ...]]], ...] = ()
     # Whether its script gets the machine's password as it is (as $password), e.g. to make a web
@@ -188,6 +200,7 @@ def extras() -> dict[str, Extra]:
                 required=bool(o.get("required", False)),
                 pattern=o.get("pattern"),
                 choices=tuple((str(c["value"]), c["label"]) for c in o.get("choices", [])),
+                when={k: tuple(str(v) for v in vs) for k, vs in o.get("when", {}).items()},
             )
             for o in e.get("options", [])
         )
@@ -198,11 +211,13 @@ def extras() -> dict[str, Extra]:
                 raise ValueError(f"extras.yaml: {e['id']}.{o.id}: a choice needs choices, and a default that's one of them")
             if o.type == "boolean" and o.default.lower() not in _YES | _NO | {""}:
                 raise ValueError(f"extras.yaml: {e['id']}.{o.id}: a boolean's default is yes or no")
+            if unknown := set(o.when) - {other.id for other in options}:
+                raise ValueError(f"extras.yaml: {e['id']}.{o.id}: 'when' names no such option {', '.join(sorted(unknown))}")
             if not re.fullmatch(r"[a-z][a-z0-9_]*", o.id) or o.id in RESERVED:
                 raise ValueError(f"extras.yaml: {e['id']}: option id '{o.id}' must be a lowercase shell name other than {', '.join(RESERVED)}")
-        for key in ("uses", "provides"):
-            if e.get(key) and e[key] not in SERVICES:
-                raise ValueError(f"extras.yaml: {e['id']}: {key} '{e[key]}' isn't one of {', '.join(SERVICES)}")
+        for key in ("uses", "provides", "conflicts"):
+            if key in e:
+                raise ValueError(f"extras.yaml: {e['id']}: '{key}' is no longer used: clashes come from ports alone")
         out[e["id"]] = Extra(
             id=e["id"],
             name=e["name"],
@@ -210,10 +225,8 @@ def extras() -> dict[str, Extra]:
             category=e.get("category", "Other"),
             min_memory_gb=int(e.get("minMemoryGB", 0)),
             ports=tuple(int(p) for p in e.get("ports", [])),
-            uses=e.get("uses"),
-            provides=e.get("provides"),
-            links=tuple(e.get("links", [])),
-            notes=tuple(_note(n) for n in e.get("notes", [])),
+            links=tuple(_conditional(link) for link in e.get("links", [])),
+            notes=tuple(_conditional(n) for n in e.get("notes", [])),
             password=bool(e.get("password", False)),
             options=options,
             families={f: (tuple(e[f].get("packages", [])), e[f]["script"]) for f in FAMILIES if f in e},
@@ -221,37 +234,17 @@ def extras() -> dict[str, Extra]:
     return {i: replace(x, conflicts=tuple(y.id for y in out.values() if clashes(x, y))) for i, x in out.items()}
 
 
-def claimed_ports(x: Extra) -> list[int]:
-    """The ports an extra means a machine listens on, its service's included."""
-    return sorted(_claimed(x) | set(x.ports))
-
-
-def _note(entry) -> tuple[str, dict[str, tuple[str, ...]]]:
-    """A note from extras.yaml: a string, or {text, when: {option: [values...]}}."""
+def _conditional(entry) -> tuple[str, dict[str, tuple[str, ...]]]:
+    """A link or note from extras.yaml: a string, or {text, when: {option: [values...]}}."""
     if isinstance(entry, str):
         return entry, {}
     return entry["text"], {k: tuple(str(v) for v in vs) for k, vs in entry.get("when", {}).items()}
 
 
-def _claimed(x: Extra) -> set[int]:
-    """The ports an extra needs to itself: its own, plus its service's when it runs inside one
-    (unless it is that service)."""
-    ports = set(x.ports)
-    if x.uses and x.uses != x.provides:
-        ports |= set(SERVICES[x.uses])
-    return ports
-
-
 def clashes(x: Extra, y: Extra) -> bool:
-    """Whether two extras can't run on one machine: they'd listen on the same port. Web apps inside
-    the same service share its ports, as does an app with the extra that provides that service."""
-    if x.id == y.id:
-        return False
-    if x.uses and (x.uses == y.uses or x.uses == y.provides):
-        return bool(set(x.ports) & set(y.ports))
-    if y.uses and y.uses == x.provides:
-        return bool(set(x.ports) & set(y.ports))
-    return bool(_claimed(x) & _claimed(y))
+    """Whether two extras can't run on one machine: they'd listen on the same port. (Each web service
+    has a machine of its own; FTP or a desktop go alongside anything.)"""
+    return x.id != y.id and bool(set(x.ports) & set(y.ports))
 
 
 def find(extra_id: str) -> Extra | None:
@@ -454,11 +447,11 @@ def details(chosen: dict, ip: str, username: str, hostname: str) -> dict:
     x = find(chosen["id"])
     if x is None or not ip:
         return {"links": [], "notes": []}
-    values = {"ip": ip, "username": username, "hostname": hostname, **chosen.get("options", {})}
-
-    def fill(text: str) -> str:
-        return re.sub(r"\{(\w+)\}", lambda m: values.get(m.group(1), m.group(0)), text)
-
     options = chosen.get("options", {})
-    notes = [fill(text) for text, when in x.notes if all(options.get(k) in vs for k, vs in when.items())]
-    return {"links": [fill(link) for link in x.links], "notes": notes}
+    values = {"ip": ip, "username": username, "hostname": hostname, **options}
+
+    def fill(items: tuple[tuple[str, dict[str, tuple[str, ...]]], ...]) -> list[str]:
+        shown = [text for text, when in items if all(options.get(k) in vs for k, vs in when.items())]
+        return [re.sub(r"\{(\w+)\}", lambda m: values.get(m.group(1), m.group(0)), text) for text in shown]
+
+    return {"links": fill(x.links), "notes": fill(x.notes)}

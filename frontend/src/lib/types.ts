@@ -207,6 +207,8 @@ export interface ExtraOption {
 	pattern?: string;
 	/** For `choice`. */
 	choices?: { value: string; label: string }[];
+	/** Shown only when other options of the extra have one of these values. */
+	when?: Record<string, string[]>;
 }
 
 /** An optional service set up on a machine's first boot (backend/extras.yaml). */
