@@ -5,7 +5,7 @@ machines) on VMware vSphere, for a LAN without internet access. The labs are adv
 lab slugs match its `labs/<slug>.md` pages.
 
 What works so far is **single machines**: deploy one VM from a template (Ubuntu 26.04 for now;
-Windows Server 2025 is written and waiting for its template) onto the LAN, with optional extras
+Windows Server 2025, Kali Linux and Parrot Security are written and waiting for their templates) onto the LAN, with optional extras
 (web servers, WordPress, Nextcloud, a mail server, FTP, a remote desktop; IIS and Outlook on Windows), then
 start, stop, reboot, reset, redeploy, extend and destroy it. Machines expire unless they're extended or kept. The admin page shows capacity, every
 machine, leftover VMs and the job queue. Pro Labs, the VPN and sign-in come later; the panel shows
@@ -18,10 +18,10 @@ them greyed out.
 - [`deploy/`](deploy/): server setup and deployment (Docker Compose, Caddy).
 - [`scripts/setup_vcenter.py`](scripts/setup_vcenter.py): prepares vCenter (folders, roles, permissions).
 - [`scripts/template/`](scripts/template/): `prepare.sh` and `clean.sh` turn a fresh Linux VM (Ubuntu, Debian,
-  CentOS Stream, Rocky, Alma) into a template; `prepare.ps1` and `clean.ps1` do the same for Windows,
+  Kali, Parrot, CentOS Stream, Rocky, Alma) into a template; `prepare.ps1` and `clean.ps1` do the same for Windows,
   with Cloudbase-Init and sysprep.
 - [`docs/setup-vsphere.md`](docs/setup-vsphere.md): the one-off vCenter setup and how to build the
-  Ubuntu and Windows Server templates.
+  Ubuntu, Windows Server, and Kali and Parrot templates.
 - [`docs/plan.md`](docs/plan.md): the plan: stack, vSphere architecture, features, limitations and phases.
 
 **No sign-in yet:** anyone who can reach the panel can deploy and destroy machines and read their

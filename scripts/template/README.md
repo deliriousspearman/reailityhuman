@@ -7,8 +7,8 @@ for Linux, part 5 for Windows.
 
 | Script | What it does | Can be undone? |
 |---|---|---|
-| [`prepare.sh`](prepare.sh) | Updates the VM, installs VMware Tools and cloud-init, grows the root filesystem, points cloud-init at vCenter, and installs the panel's extras' packages (switched off). | Yes. It's safe to re-run, and you can install more afterwards. |
-| [`clean.sh`](clean.sh) | Removes the VM's identity (cloud-init, machine-id, SSH host keys, network config) and deletes the build user, then powers off. | No: you lose your way in. |
+| [`prepare.sh`](prepare.sh) | Updates the VM, installs VMware Tools and cloud-init, grows the root filesystem, points cloud-init at vCenter, and installs the panel's extras' packages (switched off). On Kali and Parrot, also turns on Remote Desktop (xrdp) to their desktop. | Yes. It's safe to re-run, and you can install more afterwards. |
+| [`clean.sh`](clean.sh) | Removes the VM's identity (cloud-init, machine-id, SSH host keys, xrdp's keys, network config) and deletes the build user, then powers off. | No: you lose your way in. |
 
 Both scripts work out which OS they're running on, so there's one pair of scripts for every OS, not
 one per OS. Each template's name says which OS it is: `tpl-<os>-<version>`, e.g. `tpl-debian-13`.
@@ -29,7 +29,7 @@ When piped like this, `sudo` can't ask for a password. First, on the VM, run
 `echo 'builder ALL=(ALL) NOPASSWD:ALL' | sudo tee /etc/sudoers.d/builder`. `clean.sh` deletes that
 file. Or copy the scripts to the VM and run `sudo bash prepare.sh` yourself.
 
-Name the build user anything except an account the panel creates on clones (`ubuntu`, `labuser`…).
+Name the build user anything except an account the panel creates on clones (`ubuntu`, `kali`, `labuser`…).
 `clean.sh` refuses those names.
 
 ## Extras
@@ -61,7 +61,8 @@ now.
   `EXTRA_PACKAGES_<FAMILY>`, the services they bring in `EXTRA_SERVICES`, and, if it needs more than
   packages (an archive to download, an installer's questions answered), a `bake_<id>` function.
   Then rebuild the templates. A backend test fails if `prepare.sh` is missing an extra's packages.
-- By default a template gets every extra for its family. `--extras=nginx,apache` bakes in only
+- By default a template gets every extra for its family, except the desktop extra on Kali and
+  Parrot, which have their own desktop. `--extras=nginx,apache` bakes in only
   those (a smaller template), `--no-extras` none. `/etc/lab-template` records which.
 
 ## Supported OSes
@@ -70,6 +71,8 @@ now.
 |---|---|---|---|
 | Ubuntu Server | 22.04+ | `family: debian` | 26.04 built, with extras |
 | Debian | 12+ | `family: debian` | Written, not tested yet |
+| Kali Linux | 2025.3+ | `family: debian` | Tested in a container (build, Remote Desktop, extras); not on a VM yet |
+| Parrot Security | 7+ | `family: debian` | Tested in a container (build, Remote Desktop to Xfce, extras); its own KDE desktop over Remote Desktop, and a VM, not yet |
 | CentOS Stream | 9+ | `family: rhel` | Written, not tested yet |
 | Rocky Linux, AlmaLinux | 9+ | `family: rhel` | Written, not tested yet |
 
@@ -98,6 +101,15 @@ Every OS:
 - Under software selection, untick the desktop and tick **SSH server**.
 - Debian's installer puts the network in `/etc/network/interfaces`. `clean.sh` cuts that file back to
   the loopback, so cloud-init brings the NIC up on clones.
+
+**Kali Linux** (its *Installer* ISO, *Graphical install*), and **Parrot Security** (*Install Parrot*,
+Calamares):
+- Keep the desktop: they're reached over Remote Desktop, and `prepare.sh` refuses one without.
+- On Parrot, untick **Log in automatically**: the build user is deleted at the end.
+- Both install SSH switched off: on the console, `sudo apt-get install -y openssh-server && sudo
+  systemctl enable --now ssh`.
+- They need their own package repositories (a LAN mirror, or internet) while building.
+- [docs/setup-vsphere.md](../../docs/setup-vsphere.md), part 6, has the whole process.
 
 **CentOS Stream / Rocky / Alma** (Anaconda):
 - Pick **Minimal Install**.

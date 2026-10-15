@@ -103,7 +103,7 @@ The template therefore needs cloud-init and VMware Tools, with all trace of its 
 
 This part builds the Ubuntu 26.04 template. The scripts also handle Debian, CentOS Stream, Rocky and
 Alma: [scripts/template/README.md](../scripts/template/README.md) lists which versions work and what
-to pick in each installer.
+to pick in each installer. Kali Linux and Parrot Security are in part 6.
 
 ### Create the VM
 
@@ -426,3 +426,104 @@ with IMAP. If it failed, the machine's log says why:
   take `outlook` out of its `extras`.
 - *Office setup failed (exit code …)*: Office's own logs are in
   `C:\ProgramData\lab-deploy\logs\office` on the machine.
+
+## 6. Kali Linux and Parrot Security templates
+
+Kali and Parrot are attack boxes with a desktop. They're built like the Ubuntu template (part 2),
+with the same scripts. The differences:
+- **Remote Desktop:** `prepare.sh` turns on xrdp to the distribution's own desktop, so machines are
+  reached over Remote Desktop as well as SSH. Each clone makes its own Remote Desktop keys on first
+  boot.
+- **Their own user:** machines get `kali` on Kali and `labuser` on Parrot, with the panel's
+  password. Name the build user anything else (`builder`).
+- **Extras:** everything but the desktop extra, which is for servers. Each web service still gets
+  a machine of its own.
+- **Never sleeps:** suspend is turned off, so an idle machine stays reachable.
+
+These steps build `tpl-kali-2026.3` and `tpl-parrot-7`. Kali is a rolling distribution with a
+release every few months: build a new template for a new release rather than updating an old one.
+
+### What you need
+
+- The installer ISO, uploaded to the datastore's `ISO` folder: Kali's **Installer** image
+  (`kali-linux-2026.3-installer-amd64.iso`, not the Live one), or Parrot's **Security Edition**
+  (`Parrot-security-7.x_amd64.iso`).
+- **Their package repositories**, reachable from the VM while you build it: `prepare.sh` updates
+  every package and installs cloud-init, xrdp and the extras' packages. That means a LAN mirror
+  of Kali's (`http.kali.org/kali`) or Parrot's (`deb.parrot.sh/parrot`) repository, set in the
+  VM's `/etc/apt/sources.list` (Kali) or `/etc/apt/sources.list.d/parrot.list` (Parrot), or
+  internet access while building. WordPress and Nextcloud are downloaded too, as for Ubuntu (set
+  `WORDPRESS_URL`, `WP_CLI_URL` and `NEXTCLOUD_URL` for a mirror: the template scripts' README has
+  more).
+- Releases on Debian 13's packages: **Kali 2025.3** or later, **Parrot 7** or later. `prepare.sh`
+  refuses older ones, since the extras are written for those packages.
+
+### Create the VM
+
+1. **Create the VM** in `Labs/Templates`, named `tpl-kali-2026.3` (or `tpl-parrot-7`):
+   - Guest OS: Linux, the newest **Debian GNU/Linux (64-bit)** listed
+   - 2 vCPU, **4 GB** memory, **60 GB** disk for Kali (40 GB for Parrot), **thin provisioned**
+   - Network adapter: **VMXNET3**, on the LAN port group
+   - CD/DVD: **Datastore ISO File**, the ISO, **Connect at power on**
+2. **Install it.**
+   - **Kali:** pick *Graphical install*. Create the user `builder` (any name but `kali`). Under
+     partitioning, pick *Guided - use entire disk* and *All files in one partition*. Under software
+     selection, keep the defaults: the Xfce desktop and the default tools. The VM needs a desktop:
+     `prepare.sh` refuses one without.
+   - **Parrot:** start *Try / Install*, then run **Install Parrot** on the desktop. Create the user
+     `builder`, and **untick "Log in automatically"**: `clean.sh` deletes `builder`, which would leave
+     the console trying to sign in as a user that's gone. Pick *Erase disk*.
+3. **Reboot**, then in **Edit Settings** set the CD/DVD to **Client Device**.
+4. **Turn on SSH**, on the VM's console, signed in as `builder`. Both install it switched off:
+
+   ```sh
+   sudo apt-get install -y openssh-server && sudo systemctl enable --now ssh
+   ip -4 addr   # its address
+   ```
+
+### Prepare it, clean it, and make it a template
+
+As in part 2, from a machine with this repo:
+
+```sh
+# Once: let builder use sudo without a password (-t: so sudo can ask for it this time).
+ssh -t builder@<vm address> "echo 'builder ALL=(ALL) NOPASSWD:ALL' | sudo tee /etc/sudoers.d/builder"
+
+ssh builder@<vm address> 'sudo bash -s -- --dry-run' < scripts/template/prepare.sh   # says "Remote Desktop (xrdp)…"
+ssh builder@<vm address> 'sudo bash -s' < scripts/template/prepare.sh
+ssh builder@<vm address> 'sudo bash -s -- --yes' < scripts/template/clean.sh
+```
+
+On a Kali or Parrot VM, `prepare.sh` does everything it does on Ubuntu, and also:
+- installs xrdp and VMware Tools' desktop part (copy and paste, and resizing on the console);
+- makes each clone create its own Remote Desktop keys at first boot (`lab-rdp-keys.service`);
+- stops Remote Desktop sessions asking for a password to "create a color managed device";
+- turns off suspend.
+
+It bakes in every extra except the desktop extra. Pass `--extras=nginx,apache` for only some,
+or `--no-extras` for none. A full Kali upgrade can take a while.
+
+`clean.sh` also deletes xrdp's keys and NetworkManager's saved connections, so each clone starts
+clean. Then, with the VM powered off, **take the snapshot `clean`** and **convert it to a
+template**, as in part 2.
+
+### Tell the panel
+
+In `backend/templates.yaml`, uncomment the Kali or Parrot entry. Its `version` must match a
+version in the frontend's catalogue (`frontend/src/lib/templates.ts`, the `kali` and `parrot`
+entries): for a newer Kali, change it in both, and `vsphere:` to the new template's name. A test
+fails if they don't match. If you built it with `--extras=…`, list only those under `extras:`.
+Commit and push.
+
+### Check it
+
+1. Deploy one from **Machines → Kali Linux** (or **Parrot Security**). Within a few minutes the
+   machine page shows its address and password.
+2. **Remote Desktop:** download the machine page's `.rdp` file, or connect to its address with any
+   Remote Desktop client, and sign in as `kali` (or `labuser`) with that password. You get the
+   desktop.
+3. **SSH:** `ssh kali@<address>` works too, and `hostname` prints the machine's name.
+
+Sign in to the same user either on the console or over Remote Desktop, not both at once: a second
+desktop session for a user who's already signed in fails or shows a black screen. Sign out of one
+first.
