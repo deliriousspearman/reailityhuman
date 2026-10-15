@@ -274,7 +274,9 @@ Office LTSC 2024's host key would activate it too, since it's the volume edition
 - The Windows Server 2025 ISO (the evaluation is fine), uploaded to the datastore's `ISO` folder.
 - **Cloudbase-Init**'s 64-bit MSI (`CloudbaseInitSetup_x64.msi`, the Stable build) from
   cloudbase.it, and this repo's `scripts/template/prepare.ps1` and `clean.ps1`. The easiest way to
-  get them onto an offline VM is a small ISO, which works for Server Core too. From this repo:
+  get them onto an offline VM is a small ISO, which works for Server Core too. If you want
+  Outlook, get Office's files into `/tmp/lab-tools/office` first (next section). Then, from this
+  repo:
 
   ```sh
   mkdir -p /tmp/lab-tools && cp CloudbaseInitSetup_x64.msi scripts/template/*.ps1 /tmp/lab-tools/
@@ -282,12 +284,53 @@ Office LTSC 2024's host key would activate it too, since it's the volume edition
   ```
 
   Upload `lab-tools.iso` to the `ISO` folder as well.
-- Optionally, for the **Outlook** extra (Desktop Experience only): Office's install files. On any
-  Windows PC with internet, follow the steps at the top of
-  [`scripts/template/office/download.xml`](../scripts/template/office/download.xml), which leave an
-  `office` folder (about 2–3 GB). Copy it into `/tmp/lab-tools` before making the ISO, so it ends
-  up at `D:\office` (`-iso-level 3` lets the ISO hold files over 2 GB, which Office's can be).
-  Without it, leave `outlook` out of the template's `extras` in `backend/templates.yaml`.
+- Optionally, for the **Outlook** extra (Desktop Experience only): Office's install files (next
+  section). `-iso-level 3` lets the ISO hold files over 2 GB, which Office's can be.
+
+### Optional: Office's files, for Outlook
+
+The panel can install Outlook on Windows Server machines (the `outlook` extra). The lab network
+can't download Office or activate it, so its install files go into the template, and machines
+install Outlook from there when it's ticked. They aren't in this repo: they're 2–3 GB, and they're
+Microsoft's to distribute. Skip this for Server Core, or if you don't want Outlook.
+
+You need a Windows PC with internet (any Windows 10/11 or Server), about 5 GB free, and this repo's
+[`scripts/template/office/download.xml`](../scripts/template/office/download.xml).
+
+1. **Get the Office Deployment Tool** from Microsoft:
+   https://www.microsoft.com/download/details.aspx?id=49117. It downloads as
+   `officedeploymenttool_<version>.exe`.
+2. **Make a folder** `C:\office`, copy `download.xml` into it, and extract the tool there. In
+   PowerShell, from the folder you downloaded it to:
+
+   ```powershell
+   New-Item -ItemType Directory -Force C:\office
+   .\officedeploymenttool_*.exe /quiet /extract:C:\office
+   ```
+
+   That adds `setup.exe` and some sample `configuration-*.xml` files (which you can delete).
+3. **Pick the language** (optional). `download.xml` has `<Language ID="en-us" />`. For another,
+   edit it now, e.g. `en-gb`. Machines get the language you download.
+4. **Download Office:**
+
+   ```powershell
+   cd C:\office
+   .\setup.exe /download download.xml
+   ```
+
+   It shows nothing while it works, and takes a while (2–3 GB). When the prompt comes back,
+   `C:\office\Office\Data` should have a version folder and `v64.cab`. If not, run it again: it
+   may resume where it stopped.
+5. **Move the folder to where you build `lab-tools.iso`**, all of it: `setup.exe`,
+   `download.xml` and `Office`. A USB drive or network share is fine, or, after
+   `mkdir -p /tmp/lab-tools` there, from the PC: `scp -r C:\office <you>@<build machine>:/tmp/lab-tools/`.
+   It must end up as `/tmp/lab-tools/office`, so the VM sees it as `D:\office`. Then make the ISO
+   (above).
+
+The download is Office LTSC 2024's volume edition with every app except Outlook left out. It isn't
+activated (see **Licensing** above). To update it later, download it again and rebuild the
+template: a sysprepped template can't be prepared again. The files add about 3 GB to the
+template, and each machine with Outlook grows by about as much again once it's installed.
 
 ### Create the VM
 
@@ -317,8 +360,16 @@ Office LTSC 2024's host key would activate it too, since it's the volume edition
    D:\prepare.ps1 -Msi D:\CloudbaseInitSetup_x64.msi
    ```
 
-   With the Office files on the ISO, add `-Office D:\office` to both. Not on Server Core: Outlook
-   needs the desktop.
+   For **Outlook** (Desktop Experience, with the Office files on the ISO), add `-Office D:\office`
+   to both instead:
+
+   ```powershell
+   D:\prepare.ps1 -Msi D:\CloudbaseInitSetup_x64.msi -Office D:\office -DryRun   # shows "Office files: to copy…"
+   D:\prepare.ps1 -Msi D:\CloudbaseInitSetup_x64.msi -Office D:\office
+   ```
+
+   Copying them takes a few minutes. It refuses on Server Core (Outlook needs the desktop), and
+   says which file is missing if the folder is incomplete.
 
    It checks VMware Tools, installs Cloudbase-Init and points it at vCenter, turns on Remote Desktop
    and OpenSSH Server, and stops Server Manager opening at sign-in. With `-Office`, it copies the
@@ -352,7 +403,9 @@ With the VM powered off:
 ### Tell the panel
 
 In `backend/templates.yaml`, uncomment the Windows Server 2025 entry (or the Core one), commit and
-push. Then deploy one from **Machines → Windows Server**. Its activity log shows *Windows is setting
+push. The 2025 entry lists `extras: [iis, outlook]`: if you built it without `-Office`, take
+`outlook` out, or machines that tick it fail to set it up. Then deploy one from
+**Machines → Windows Server**. Its activity log shows *Windows is setting
 up…*, then *Ready. Sign in as labadmin.* Connect with **Remote Desktop** (the machine page has the
 command and an `.rdp` file) or `ssh labadmin@<address>`.
 
@@ -363,3 +416,13 @@ machine, these show how far it got:
 - `C:\Program Files\Cloudbase Solutions\Cloudbase-Init\log\cloudbase-init.log`: the computer name
   and the first-boot script;
 - `C:\ProgramData\lab-deploy\logs\<extra>.log`: each extra.
+
+**To check Outlook**, deploy a machine with **Outlook** ticked. Its setup takes 5–10 minutes longer.
+When it's ready, sign in over Remote Desktop: there's an **Outlook** shortcut on the desktop, and it
+opens and asks for an account, with a notice that Office isn't activated. To try it with
+mail, deploy a mail server (Ubuntu, **Mail server** ticked) and add one of its users in Outlook
+with IMAP. If it failed, the machine's log says why:
+- *This template has no Office files*: the template was built without `-Office`. Rebuild it, or
+  take `outlook` out of its `extras`.
+- *Office setup failed (exit code …)*: Office's own logs are in
+  `C:\ProgramData\lab-deploy\logs\office` on the machine.

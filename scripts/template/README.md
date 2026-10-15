@@ -132,7 +132,9 @@ runs the first-boot script again, and it carries on with the extras after it.
 install files (2–3 GB) are baked into the template. They're not kept in this repo, since they're
 large and they're Microsoft's to distribute: the repo has only
 [`office/download.xml`](office/download.xml), which says what to download (Office LTSC 2024's
-volume edition, Outlook only) and how. `prepare.ps1 -Office D:\office` copies the files to
+volume edition, Outlook only). The steps to download them and build them in are in
+[docs/setup-vsphere.md](../../docs/setup-vsphere.md), part 5, "Optional: Office's files, for
+Outlook". `prepare.ps1 -Office D:\office` copies the files to
 `C:\LabDeploy\office`. When Outlook is ticked, the machine installs it from there on first boot
 (about 5–10 minutes), unactivated: it shows a licence notice, and some features stop working after
 its grace period, which suits short-lived machines. It needs the desktop, so not on Server Core.
