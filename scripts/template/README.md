@@ -42,12 +42,15 @@ one's log is on the machine in `/var/log/lab-deploy/<extra>.log`.
 | Category | Extras (Debian family) |
 |---|---|
 | Web servers | nginx; Apache; Apache + HTTPS (self-signed certificate for a domain you give) |
-| Web apps | WordPress and Nextcloud (inside Apache, at `/wordpress` and `/nextcloud`); Nextcloud as the snap (its own web server) |
-| Mail | Postfix + Dovecot (IMAP, POP3, submission) + Roundcube at `/roundcube`, with optional test users |
+| Web apps | WordPress; Nextcloud from its archive; Nextcloud as the snap. Each optionally over HTTPS (self-signed) |
+| Mail | Postfix + Dovecot (IMAP, POP3, submission) + Roundcube webmail, optionally over HTTPS, with optional test users |
 | File transfer | FTP (vsftpd), optionally FTPS only |
 | Remote desktop | XFCE over RDP (xrdp), VNC (TigerVNC), or both |
 
-Web apps sign in with the machine's own user and password. `prepare.sh` downloads WordPress, WP-CLI
+Each web service (the web servers, web apps and the mail server's webmail) is the machine's whole
+website, at `http(s)://<address>/`, so a machine has one of them: deploy another machine for another.
+FTP and the desktop use other ports, so they go with any of them. Web apps sign in with the machine's
+own user and password. `prepare.sh` downloads WordPress, WP-CLI
 and Nextcloud while building and checks their checksums; set `WORDPRESS_URL`, `WP_CLI_URL` or
 `NEXTCLOUD_URL` to fetch them from a mirror instead. The RHEL family has the web servers only, for
 now.
