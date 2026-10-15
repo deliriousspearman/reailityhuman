@@ -56,3 +56,27 @@
 #   family: windows
 #   access: [rdp, ssh, console]
 #   extras: [iis]   # not Outlook: it needs the desktop
+
+# Kali Linux and Parrot Security: attack boxes, reached over Remote Desktop to their own desktop.
+# Uncomment each once its template is built (docs/setup-vsphere.md, "Kali Linux and Parrot Security
+# templates"). Not the desktop extra: they have their own.
+# - template: kali
+#   version: "2026.3"
+#   vsphere: Labs/Templates/tpl-kali-2026.3
+#   cpu: 2
+#   memoryGB: 4
+#   diskGB: 60
+#   username: kali
+#   family: debian
+#   access: [ssh, rdp, console]
+#   extras: [nginx, apache, apache-https, wordpress, nextcloud, nextcloud-snap, mail, ftp]
+# - template: parrot
+#   version: "7"
+#   vsphere: Labs/Templates/tpl-parrot-7
+#   cpu: 2
+#   memoryGB: 4
+#   diskGB: 40
+#   username: labuser
+#   family: debian
+#   access: [ssh, rdp, console]
+#   extras: [nginx, apache, apache-https, wordpress, nextcloud, nextcloud-snap, mail, ftp]

@@ -63,6 +63,17 @@ def _prepare_sh() -> Path:
     pytest.skip("scripts/template/prepare.sh isn't mounted here")
 
 
+def test_prepare_and_clean_know_the_same_oses():
+    """An OS prepare.sh builds, clean.sh can finish (and the other way round)."""
+    def oses(text: str) -> set[str]:
+        found = re.findall(r"^\t?([a-z |]+)\) FAMILY=", text, re.M)
+        return {os.strip() for line in found for os in line.split("|")}
+
+    prepare = oses(_prepare_sh().read_text())
+    assert prepare == oses(_prepare_sh().with_name("clean.sh").read_text())
+    assert {"kali", "parrot"} <= prepare
+
+
 def test_prepare_sh_installs_every_extras_packages():
     """Each extra's packages, per family, are in prepare.sh's list for that extra."""
     text = _prepare_sh().read_text()

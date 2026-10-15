@@ -224,10 +224,10 @@ export const templates: MachineTemplate[] = [
 		category: 'Security',
 		os: 'Linux',
 		description: 'Attack box with the usual tools, and a desktop you can reach over RDP.',
-		versions: [{ version: '2026.2' }, { version: '2026.1' }],
+		versions: [{ version: '2026.3' }],
 		resources: { cpu: 2, memoryGB: 4, diskGB: 60 },
 		access: ['ssh', 'rdp', 'console'],
-		credentials: 'kali / kali',
+		credentials: 'kali / set on first deploy',
 	},
 	// Linux: Red Hat rebuilds
 	{
@@ -440,7 +440,7 @@ export const templates: MachineTemplate[] = [
 		category: 'Security',
 		os: 'Linux',
 		description: 'Attack box based on Debian, an alternative to Kali, with a desktop over RDP.',
-		versions: [{ version: '6' }],
+		versions: [{ version: '7' }, { version: '6' }],
 		resources: { cpu: 2, memoryGB: 4, diskGB: 40 },
 		access: ['ssh', 'rdp', 'console'],
 		credentials: 'labuser / set on first deploy',

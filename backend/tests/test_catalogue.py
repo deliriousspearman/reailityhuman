@@ -47,6 +47,10 @@ def test_commented_out_templates_are_ready_to_uncomment(tmp_path, monkeypatch):
         assert windows is not None and windows.family == "windows" and windows.admin_group == "Administrators"
         assert windows.extras == ("iis",) and windows.access == ("rdp", "ssh", "console")
         assert catalogue.find("windows-server", "2025").extras == ("iis", "outlook")  # not on Core
+        for key in (("kali", "2026.3"), ("parrot", "7")):
+            box = catalogue.find(*key)
+            assert box is not None and box.family == "debian" and "rdp" in box.access
+            assert "desktop" not in box.extras  # they have their own, over RDP
         test_every_deployable_version_is_in_the_frontend_catalogue()
     finally:
         catalogue.catalogue.cache_clear()

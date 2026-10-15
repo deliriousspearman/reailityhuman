@@ -23,15 +23,18 @@
 #      machine deployed with an extra has it set up and started on its first boot, without
 #      downloading anything. By default, every extra there is for this OS family; --extras=a,b only
 #      those, --no-extras none. List the same under the template's extras: in templates.yaml.
-#   6. Labels the template in /etc/lab-template (OS, version, date, extras).
+#   6. Kali and Parrot: turns on Remote Desktop (xrdp) to their own desktop, with its keys made on
+#      each clone's first boot, and stops them sleeping. (The desktop extra is for servers.)
+#   7. Labels the template in /etc/lab-template (OS, version, date, extras).
 #
 # The VM keeps its network and your user, so you can still install more afterwards. When you're
 # done, run clean.sh. --dry-run only shows the OS it found and what it would do.
 set -euo pipefail
 
 # Oldest version of each OS this is written and tested for. cloud-init 21.3+ is the real limit;
-# older releases (Ubuntu 18.04, Debian 11, CentOS 7) don't ship it.
-declare -A MIN_VERSION=([ubuntu]=22.04 [debian]=12 [centos]=9 [rocky]=9 [almalinux]=9)
+# older releases (Ubuntu 18.04, Debian 11, CentOS 7) don't ship it. Kali and Parrot: their releases
+# on Debian 13's packages (Dovecot 2.4, PHP 8.4), which the extras are written for.
+declare -A MIN_VERSION=([ubuntu]=22.04 [debian]=12 [kali]=2025.3 [parrot]=7 [centos]=9 [rocky]=9 [almalinux]=9)
 MIN_CLOUD_INIT=21.3
 
 # >>> extras: everything the panel's extras need in a template. Keep this in step with
@@ -152,8 +155,11 @@ version_ge() { [[ $(printf '%s\n%s\n' "$2" "$1" | sort -V | head -1) == "$2" ]];
 
 # shellcheck source=/dev/null
 . /etc/os-release
+# Desktop distributions: reached over Remote Desktop to their own desktop.
+RDP_DESKTOP=0
 case $ID in
 ubuntu | debian) FAMILY=debian ;;
+kali | parrot) FAMILY=debian RDP_DESKTOP=1 ;;
 centos | rocky | almalinux) FAMILY=rhel ;;
 *)
 	echo "$PRETTY_NAME isn't supported (yet). Supported: ${!MIN_VERSION[*]}; see scripts/template/README.md." >&2
@@ -165,13 +171,24 @@ if ! version_ge "${VERSION_ID:-0}" "${MIN_VERSION[$ID]}"; then
 	exit 1
 fi
 echo "==> $PRETTY_NAME ($FAMILY family)"
+if ((RDP_DESKTOP)) && ! compgen -G '/usr/share/xsessions/*.desktop' >/dev/null; then
+	echo "$PRETTY_NAME has no desktop installed, and its machines are reached over Remote Desktop." >&2
+	echo "Reinstall with a desktop, or install one, e.g. apt install kali-desktop-xfce (or parrot-desktop-kde)." >&2
+	exit 1
+fi
 
 # The extras to bake in, and their packages.
 declare -n EXTRA_PACKAGES="EXTRA_PACKAGES_${FAMILY^^}"
 if [[ $WANT_EXTRAS == all ]]; then
 	mapfile -t CHOSEN < <(printf '%s\n' "${!EXTRA_PACKAGES[@]}" | sort)
+	# Kali and Parrot have their own desktop.
+	if ((RDP_DESKTOP)); then mapfile -t CHOSEN < <(printf '%s\n' "${CHOSEN[@]}" | grep -vx desktop); fi
 else
 	IFS=, read -ra CHOSEN <<<"$WANT_EXTRAS"
+fi
+if ((RDP_DESKTOP)) && [[ " ${CHOSEN[*]} " == *" desktop "* ]]; then
+	echo "The desktop extra is for servers: $PRETTY_NAME has its own desktop, over Remote Desktop already." >&2
+	exit 1
 fi
 PACKAGES=()
 for id in "${CHOSEN[@]}"; do
@@ -189,6 +206,7 @@ fi
 if ((DRY_RUN)); then
 	echo "Would: update all packages; install open-vm-tools and cloud-init; check cloud-init is $MIN_CLOUD_INIT+;"
 	echo "grow the root filesystem; turn cloud-init on with the VMware datasource; write /etc/lab-template."
+	if ((RDP_DESKTOP)); then echo "Remote Desktop (xrdp) to its desktop, and never sleep."; fi
 	if ((${#CHOSEN[@]})); then
 		echo "Extras, switched off: ${CHOSEN[*]} (packages: ${PACKAGES[*]:-none})"
 	else
@@ -206,6 +224,8 @@ debian)
 	apt-get update -q
 	apt-get full-upgrade -yq -o Dpkg::Options::=--force-confold
 	apt-get install -yq open-vm-tools cloud-init
+	# With a desktop: copy and paste, and the console's screen size follows its window.
+	if ((RDP_DESKTOP)); then apt-get install -yq open-vm-tools-desktop; fi
 	apt-get autoremove -yq
 	;;
 rhel)
@@ -354,7 +374,49 @@ if ((${#CHOSEN[@]})); then
 	done
 fi
 
-# --- 6. Label --------------------------------------------------------------------------------------
+# --- 6. Remote Desktop (Kali, Parrot) --------------------------------------------------------------
+
+if ((RDP_DESKTOP)); then
+	echo "==> Remote Desktop"
+	apt-get install -yq xrdp xorgxrdp ssl-cert
+	# xrdp reads its TLS key from ssl-cert's snakeoil one.
+	adduser --quiet xrdp ssl-cert
+	# clean.sh deletes the snakeoil certificate and xrdp's RSA keys, so no two machines share them:
+	# each clone makes its own at first boot, after cloud-init has set its name.
+	cat >/etc/systemd/system/lab-rdp-keys.service <<'UNIT'
+[Unit]
+Description=Make Remote Desktop's keys if there are none (lab panel template)
+After=cloud-init-local.service cloud-init.service cloud-init-network.service
+Before=xrdp.service
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -c '[ -e /etc/ssl/private/ssl-cert-snakeoil.key ] || make-ssl-cert generate-default-snakeoil --force-overwrite'
+ExecStart=/bin/sh -c '[ -e /etc/xrdp/rsakeys.ini ] || xrdp-keygen xrdp auto'
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+	# Without this, every Remote Desktop session asks for a password to "create a color managed
+	# device" (colord).
+	mkdir -p /etc/polkit-1/rules.d
+	cat >/etc/polkit-1/rules.d/45-lab-rdp.rules <<'RULES'
+// Lab panel template: no password prompts for colour profiles in Remote Desktop sessions.
+polkit.addRule(function (action, subject) {
+	if (action.id.indexOf("org.freedesktop.color-manager.") === 0 && subject.local !== true) {
+		return polkit.Result.YES;
+	}
+});
+RULES
+	systemctl daemon-reload
+	systemctl enable lab-rdp-keys.service xrdp >/dev/null 2>&1
+	echo "  xrdp: $(systemctl is-enabled xrdp)"
+	# A VM shouldn't suspend when nobody's using it.
+	systemctl mask sleep.target suspend.target hibernate.target hybrid-sleep.target >/dev/null 2>&1
+	echo "  sleep: off"
+fi
+
+# --- 7. Label --------------------------------------------------------------------------------------
 
 cat >/etc/lab-template <<EOF
 # Panel template, built with scripts/template/prepare.sh and clean.sh.
@@ -364,6 +426,7 @@ name=$PRETTY_NAME
 cloud_init=$CI_VERSION
 extras=${CHOSEN[*]}
 extras_packages=${PACKAGES[*]}
+rdp=$( ((RDP_DESKTOP)) && echo yes || echo no)
 prepared=$(date -u +%Y-%m-%dT%H:%MZ)
 EOF
 echo "==> Labelled in /etc/lab-template"

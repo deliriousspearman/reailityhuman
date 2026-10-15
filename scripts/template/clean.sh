@@ -12,9 +12,10 @@
 # What it does:
 #   1. Resets cloud-init (logs, seed, instance data), so it runs again on each clone's first boot.
 #   2. Empties the machine-id. Without this, clones can end up sharing one DHCP lease.
-#   3. Deletes the SSH host keys and any TLS certificates (each clone makes its own), and the
-#      installer's network config, so cloud-init writes a fresh one: netplan on Ubuntu,
-#      /etc/network/interfaces on Debian, NetworkManager connections on the RHEL family.
+#   3. Deletes the SSH host keys, any TLS certificates and xrdp's keys (each clone makes its own),
+#      and the installer's network config, so cloud-init writes a fresh one: netplan on Ubuntu,
+#      /etc/network/interfaces on Debian, NetworkManager connections on Kali, Parrot and the RHEL
+#      family.
 #   4. Clears the package cache, logs and shell histories.
 #   5. Deletes the build user, its home and its sudoers file.
 #   6. Powers off. Your SSH session ends, and there's no way back in: snapshot and convert it next.
@@ -23,7 +24,7 @@
 set -euo pipefail
 
 # Accounts the panel creates on clones (backend/templates.yaml, username): never the build user.
-RESERVED_USERS=(ubuntu debian labuser cloud-user centos rocky almalinux)
+RESERVED_USERS=(ubuntu debian kali labuser cloud-user centos rocky almalinux)
 
 if [[ $EUID -ne 0 ]]; then
 	echo "Run this with sudo: sudo bash clean.sh --yes" >&2
@@ -33,7 +34,7 @@ fi
 # shellcheck source=/dev/null
 . /etc/os-release
 case $ID in
-ubuntu | debian) FAMILY=debian ;;
+ubuntu | debian | kali | parrot) FAMILY=debian ;;
 centos | rocky | almalinux) FAMILY=rhel ;;
 *)
 	echo "$PRETTY_NAME isn't supported (yet); see scripts/template/README.md." >&2
@@ -73,8 +74,8 @@ echo "==> machine-id"
 truncate -s 0 /etc/machine-id
 rm -f /var/lib/dbus/machine-id
 
-echo "==> SSH host keys, and certificates the extras' packages made"
-rm -f /etc/ssh/ssh_host_*
+echo "==> SSH host keys, and certificates and keys the extras' packages or xrdp made"
+rm -f /etc/ssh/ssh_host_* /etc/xrdp/rsakeys.ini
 # Made while building (ssl-cert's snakeoil; mod_ssl's localhost). A machine deployed with HTTPS
 # makes its own, so no two machines share a key.
 rm -f /etc/ssl/certs/ssl-cert-snakeoil.pem /etc/ssl/private/ssl-cert-snakeoil.key \
@@ -96,6 +97,8 @@ iface lo inet loopback
 EOF
 		echo "  /etc/network/interfaces cut back to the loopback"
 	fi
+	# Kali and Parrot: NetworkManager's, e.g. "Wired connection 1".
+	rm -fv /etc/NetworkManager/system-connections/*.nmconnection
 	;;
 rhel)
 	# The installer's connections (e.g. ens192.nmconnection); cloud-init writes its own.
