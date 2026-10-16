@@ -1,8 +1,11 @@
 <script lang="ts">
+	import { goto } from '$app/navigation';
+	import { page } from '$app/state';
 	import MachineTable from '$lib/components/MachineTable.svelte';
 	import { store } from '$lib/store.svelte';
-	import { categories, flagNotes, templates } from '$lib/templates';
+	import { categories, findTemplate, flagNotes, templates } from '$lib/templates';
 	import { categorySlug } from '$lib/nav';
+	import type { Service } from '$lib/types';
 
 	let query = $state('');
 	let category = $state<string>('All');
@@ -33,6 +36,42 @@
 				.sort((a, b) => Number(store.isLive(b.id)) - Number(store.isLive(a.id))),
 		})),
 	].filter((g) => g.items.length));
+
+	// Choosing a service first (?by=service), then where to run it ----------------------------------------
+	const byService = $derived(page.url.searchParams.get('by') === 'service');
+	function showBy(service: boolean) {
+		if (service === byService) return;
+		category = 'All';
+		goto(service ? '?by=service' : page.url.pathname, { keepFocus: true, noScroll: true });
+	}
+
+	const services = $derived(store.config?.services ?? []);
+	/** Service categories, in the order extras.yaml first uses them. */
+	const serviceCategories = $derived([...new Set(services.map((x) => x.category))]);
+	/** "Ubuntu Server 26.04": a template version as people know it. */
+	const osName = (template: string, version: string) => `${findTemplate(template)?.name ?? template} ${version}`;
+	const ready = (x: Service) => x.offeredBy.some((o) => o.ready);
+	const serviceGroups = $derived.by(() => {
+		const q = query.trim().toLowerCase();
+		const shown = services.filter((x) => {
+			if (category !== 'All' && x.category !== category) return false;
+			if (!q) return true;
+			const oses = x.offeredBy.map((o) => osName(o.template, o.version));
+			return [x.name, x.category, x.description, ...oses].join(' ').toLowerCase().includes(q);
+		});
+		return serviceCategories
+			.map((c) => ({
+				category: c,
+				items: shown.filter((x) => x.category === c).sort((a, b) => Number(ready(b)) - Number(ready(a))),
+			}))
+			.filter((g) => g.items.length);
+	});
+	/** "port 21", "ports 80, 443", or "8 ports" for a mail server's many. */
+	const portSummary = (ports: number[]) =>
+		ports.length > 3 ? `${ports.length} ports` : `${ports.length > 1 ? 'ports' : 'port'} ${ports.join(', ')}`;
+	/** Deploy form for a template version, with the service already ticked. */
+	const deployHref = (x: Service, o: Service['offeredBy'][number]) =>
+		`/machines/new/${o.template}?version=${encodeURIComponent(o.version)}&extra=${encodeURIComponent(x.id)}`;
 
 	function versionSummary(versions: { version: string }[]) {
 		const names = versions.map((v) => v.version);
@@ -78,53 +117,101 @@
 	<h2>Deploy a machine</h2>
 </div>
 
+<div class="chips by" role="group" aria-label="Choose by">
+	<button type="button" class="chip" aria-pressed={!byService} onclick={() => showBy(false)}>By OS</button>
+	<button type="button" class="chip" aria-pressed={byService} onclick={() => showBy(true)}>By service</button>
+</div>
+
 <div class="filters">
 	<label class="search">
-		<span class="visually-hidden">Search machines</span>
-		<input class="input" type="search" placeholder="Search, e.g. ubuntu 22.04 or firewall" bind:value={query} />
+		<span class="visually-hidden">{byService ? 'Search services' : 'Search machines'}</span>
+		<input
+			class="input"
+			type="search"
+			placeholder={byService ? 'Search, e.g. postgresql or web server' : 'Search, e.g. ubuntu 22.04 or firewall'}
+			bind:value={query}
+		/>
 	</label>
 	<div class="chips" role="group" aria-label="Category">
-		{#each ['All', ...categories] as c (c)}
+		{#each ['All', ...(byService ? serviceCategories : categories)] as c (c)}
 			<button type="button" class="chip" aria-pressed={category === c} onclick={() => (category = c)}>{c}</button>
 		{/each}
 	</div>
 </div>
 
-{#each groups as group (group.category)}
-	{@const slug = categorySlug(group.category)}
-	<section class="group" aria-labelledby={slug}>
-		<h3 id={slug}>{group.category} <span>{group.items.length}</span></h3>
-		<div class="templates">
-			{#each group.items as t (t.id)}
-				{@const live = store.isLive(t.id)}
-				{@const r = store.asDeployed(t).resources}
-				<article class="template" class:soon={!live}>
-					<header>
-						<h4>{#if live}<a href="/machines/new/{t.id}">{t.name}</a>{:else}{t.name}{/if}</h4>
-						<span class="os" data-os={t.os.toLowerCase()}>{t.os}</span>
-					</header>
-					<p>{t.description}</p>
-					<p class="versions">
-						{live ? versionSummary(t.versions.filter((v) => store.isLive(t.id, v.version))) : versionSummary(t.versions)}
-					</p>
-					{#if t.flags?.length}
-						<ul class="flags">
-							{#each t.flags as f (f)}
-								<li class="tag" title={flagNotes[f].note}>{flagNotes[f].label}</li>
+{#if byService}
+	{#each serviceGroups as group (group.category)}
+		{@const slug = `svc-${categorySlug(group.category)}`}
+		<section class="group" aria-labelledby={slug}>
+			<h3 id={slug}>{group.category} <span>{group.items.length}</span></h3>
+			<div class="templates">
+				{#each group.items as x (x.id)}
+					<article class="template service" class:soon={!ready(x)}>
+						<header>
+							<h4>{x.name}</h4>
+							{#if x.ports.length}<span class="ports">{portSummary(x.ports)}</span>{/if}
+						</header>
+						<p>{x.description}</p>
+						<ul class="oses" aria-label="Runs on">
+							{#each x.offeredBy as o (`${o.template} ${o.version}`)}
+								<li>
+									{#if o.ready}
+										<a href={deployHref(x, o)}>{osName(o.template, o.version)}</a>
+										<span class="deploy">Deploy</span>
+									{:else}
+										<span class="planned">{osName(o.template, o.version)}</span>
+										<span class="soon-tag">Soon</span>
+									{/if}
+								</li>
+							{:else}
+								<li><span class="planned">No template offers it yet</span></li>
 							{/each}
 						</ul>
-					{/if}
-					<footer>
-						<span>{r.cpu} vCPU, {r.memoryGB} GB</span>
-						{#if live}<span class="deploy">Deploy</span>{:else}<span class="soon-tag">Soon</span>{/if}
-					</footer>
-				</article>
-			{/each}
-		</div>
-	</section>
+						{#if x.minMemoryGB}<footer><span>Needs {x.minMemoryGB} GB of memory</span></footer>{/if}
+					</article>
+				{/each}
+			</div>
+		</section>
+	{:else}
+		<p class="none">{store.config ? `Nothing matches “${query}”. Try a shorter search or another category.` : 'Loading…'}</p>
+	{/each}
 {:else}
-	<p class="none">Nothing matches “{query}”. Try a shorter search or another category.</p>
-{/each}
+	{#each groups as group (group.category)}
+		{@const slug = categorySlug(group.category)}
+		<section class="group" aria-labelledby={slug}>
+			<h3 id={slug}>{group.category} <span>{group.items.length}</span></h3>
+			<div class="templates">
+				{#each group.items as t (t.id)}
+					{@const live = store.isLive(t.id)}
+					{@const r = store.asDeployed(t).resources}
+					<article class="template" class:soon={!live}>
+						<header>
+							<h4>{#if live}<a href="/machines/new/{t.id}">{t.name}</a>{:else}{t.name}{/if}</h4>
+							<span class="os" data-os={t.os.toLowerCase()}>{t.os}</span>
+						</header>
+						<p>{t.description}</p>
+						<p class="versions">
+							{live ? versionSummary(t.versions.filter((v) => store.isLive(t.id, v.version))) : versionSummary(t.versions)}
+						</p>
+						{#if t.flags?.length}
+							<ul class="flags">
+								{#each t.flags as f (f)}
+									<li class="tag" title={flagNotes[f].note}>{flagNotes[f].label}</li>
+								{/each}
+							</ul>
+						{/if}
+						<footer>
+							<span>{r.cpu} vCPU, {r.memoryGB} GB</span>
+							{#if live}<span class="deploy">Deploy</span>{:else}<span class="soon-tag">Soon</span>{/if}
+						</footer>
+					</article>
+				{/each}
+			</div>
+		</section>
+	{:else}
+		<p class="none">Nothing matches “{query}”. Try a shorter search or another category.</p>
+	{/each}
+{/if}
 
 <style>
 	.lead {
@@ -279,5 +366,52 @@
 	}
 	.none {
 		color: var(--lms-gray-3);
+	}
+
+	.by {
+		margin-bottom: 0.75rem;
+	}
+	/* A service's card: the OSes it runs on, each its own link (so the card itself isn't one). */
+	.oses {
+		display: grid;
+		gap: 0.3rem;
+		margin: 0;
+		padding: 0.6rem 0 0;
+		border-top: 1px solid var(--lms-gray-5);
+		list-style: none;
+		font: 0.8rem var(--lms-mono);
+	}
+	.oses li {
+		display: flex;
+		justify-content: space-between;
+		gap: 0.75rem;
+	}
+	.oses a {
+		color: var(--lms-white);
+		font-weight: 600;
+	}
+	.template.service:hover .deploy {
+		text-decoration: none;
+	}
+	.template.service li:has(a:hover) .deploy {
+		text-decoration: underline;
+	}
+	.template.service:hover {
+		border-color: var(--lms-gray-5);
+		box-shadow: none;
+		translate: none;
+	}
+	/* Planned OSes stay readable, even on a card with nothing ready. */
+	.template.service.soon > .oses {
+		opacity: 1;
+		filter: none;
+	}
+	.planned {
+		color: var(--lms-gray-3);
+	}
+	.ports {
+		font: 0.75rem var(--lms-mono);
+		color: var(--lms-gray-3);
+		white-space: nowrap;
 	}
 </style>

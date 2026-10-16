@@ -33,6 +33,7 @@
 	// version that can be deployed, and a free name like "ubuntu01". Only those are tracked, so later
 	// changes to the machine list don't overwrite what you've typed.
 	// "Deploy another like this" (?from=<machine id>) starts from that machine's version and extras.
+	// Coming from a service (?version=<v>&extra=<id>), that version, with the service ticked.
 	$effect(() => {
 		const t = template;
 		const config = store.config;
@@ -40,6 +41,11 @@
 		if (!t) return;
 		untrack(() => {
 			version = (config && t.versions.find((v) => store.isLive(t.id, v.version))?.version) ?? t.versions[0].version;
+			const params = page.url.searchParams;
+			const wanted = params.get('version');
+			if (wanted && store.isLive(t.id, wanted)) version = wanted;
+			const service = store.extrasFor(t.id, version).find((x) => x.id === params.get('extra'));
+			if (service) picked = { [service.id]: Object.fromEntries(service.options.map((o) => [o.id, pickedDefault(o)])) };
 			const from = loaded ? store.machine(page.url.searchParams.get('from') ?? '') : undefined;
 			if (from && from.template === t.id && store.isLive(t.id, from.version)) {
 				version = from.version;

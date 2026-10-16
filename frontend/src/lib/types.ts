@@ -227,6 +227,12 @@ export interface Extra {
 	options: ExtraOption[];
 }
 
+/** An extra, with the template versions it runs on: `ready` ones can be deployed with it now; the
+ * rest are planned (the template isn't built, or not yet rebuilt with it). */
+export interface Service extends Extra {
+	offeredBy: { template: string; version: string; ready: boolean }[];
+}
+
 /** An extra chosen in a deploy request; blank options get their defaults. */
 export interface ExtraChoice {
 	id: string;
@@ -248,6 +254,8 @@ export interface PanelConfig {
 		access?: Access[];
 		webUrl?: string;
 	}[];
+	/** Every extra, and where it runs, for choosing a service first. */
+	services: Service[];
 	/** Domain for default names ({fqdn} in option defaults); empty: just the machine's name. */
 	machineDomain: string;
 	/** How long an expired machine is kept before it's deleted. */
