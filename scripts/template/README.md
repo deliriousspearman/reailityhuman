@@ -43,6 +43,7 @@ one's log is on the machine in `/var/log/lab-deploy/<extra>.log`.
 |---|---|
 | Web servers | nginx; Apache; Apache + HTTPS (self-signed certificate for a domain you give) |
 | Web apps | WordPress; Nextcloud from its archive; Nextcloud as the snap. Each optionally over HTTPS (self-signed) |
+| Databases | PostgreSQL; MariaDB; MySQL 8.4 (Ubuntu only); SQLite. Each optionally filled with dummy data |
 | Mail | Postfix + Dovecot (IMAP, POP3, submission) + Roundcube webmail, optionally over HTTPS, with optional test users |
 | File transfer | FTP (vsftpd), optionally FTPS only |
 | Remote desktop | XFCE over RDP (xrdp), VNC (TigerVNC), or both |
@@ -50,7 +51,19 @@ one's log is on the machine in `/var/log/lab-deploy/<extra>.log`.
 Each web service (the web servers, web apps and the mail server's webmail) is the machine's whole
 website, at `http(s)://<address>/`, so a machine has one of them: deploy another machine for another.
 FTP and the desktop use other ports, so they go with any of them. Web apps sign in with the machine's
-own user and password. `prepare.sh` downloads WordPress, WP-CLI
+own user and password.
+
+The databases listen on the network and give the machine's user full rights, with its password.
+MariaDB and MySQL share port 3306 with each other and with WordPress and Nextcloud's own MariaDB, so
+each needs a machine of its own; PostgreSQL and SQLite go with anything. **Dummy data** is
+[Chinook](https://github.com/lerocha/chinook-database), a sample music store (11 tables, about 15,000
+rows) with the same schema in every database, so a test can be compared across them. `prepare.sh`
+fetches the release pinned in `CHINOOK_URL`, checking each file's SHA-256, into
+`/opt/lab-deploy/chinook`. MySQL can't be installed alongside MariaDB, which the template has for
+WordPress and Nextcloud: `bake_mysql` keeps MySQL's packages in `/opt/lab-deploy/mysql` instead, and
+the extra installs them in MariaDB's place. They match the template's packages as they were when it
+was built, so after updating a template's packages, rebuild it. Debian, Kali and Parrot have no MySQL
+packages, so they leave it out. `prepare.sh` downloads WordPress, WP-CLI
 and Nextcloud while building and checks their checksums; set `WORDPRESS_URL`, `WP_CLI_URL` or
 `NEXTCLOUD_URL` to fetch them from a mirror instead. The RHEL family has the web servers only, for
 now.
@@ -63,7 +76,7 @@ now.
   packages (an archive to download, an installer's questions answered), a `bake_<id>` function.
   Then rebuild the templates. A backend test fails if `prepare.sh` is missing an extra's packages.
 - By default a template gets every extra for its family, except the desktop extra on Kali and
-  Parrot, which have their own desktop. `--extras=nginx,apache` bakes in only
+  Parrot, which have their own desktop, and MySQL anywhere but Ubuntu. `--extras=nginx,apache` bakes in only
   those (a smaller template), `--no-extras` none. `/etc/lab-template` records which.
 
 ## Supported OSes
@@ -122,7 +135,7 @@ Calamares):
 
 | Script | What it does | Can be undone? |
 |---|---|---|
-| [`prepare.ps1`](prepare.ps1) | Checks VMware Tools, installs Cloudbase-Init and configures it to read the panel's data from vCenter, turns on Remote Desktop and OpenSSH Server, and stops Server Manager opening at sign-in. With `-Office`, copies in Office's install files for the Outlook extra. | Yes. It's safe to re-run. |
+| [`prepare.ps1`](prepare.ps1) | Checks VMware Tools, installs Cloudbase-Init and configures it to read the panel's data from vCenter, turns on Remote Desktop and OpenSSH Server, and stops Server Manager opening at sign-in. With `-Office`, copies in Office's install files for the Outlook extra; with `-SqlServer`, SQL Server's, and the Chinook sample database. | Yes. It's safe to re-run. |
 | [`clean.ps1`](clean.ps1) | Clears Cloudbase-Init's records, the OpenSSH host keys and administrators' authorized keys, then runs sysprep (generalize) with Cloudbase-Init's Unattend.xml and shuts down. | No: sysprep can't be undone. |
 
 Run both in an elevated Windows PowerShell on the VM, from a CD image (part 5 shows how to make one
@@ -135,7 +148,7 @@ only say what they'd do.
 | Server 2016–2022, Windows 10/11 (64-bit) | `family: windows` | Should work the same; not tested |
 
 On clones, the panel's first-boot script (written by the backend, run by Cloudbase-Init) creates
-`labadmin`, disables the built-in Administrator, starts OpenSSH, and runs the Windows extras (IIS, Outlook),
+`labadmin`, disables the built-in Administrator, starts OpenSSH, and runs the Windows extras (IIS, SQL Server, Outlook),
 logging each to `C:\ProgramData\lab-deploy\logs\<extra>.log`. IIS installs from files already on
 the machine, so there's nothing to bake into the template for it. An
 extra that needs a restart (a server role, say) exits with 3010: Windows restarts, Cloudbase-Init
@@ -151,3 +164,12 @@ Outlook". `prepare.ps1 -Office D:\office` copies the files to
 `C:\LabDeploy\office`. When Outlook is ticked, the machine installs it from there on first boot
 (about 5–10 minutes), unactivated: it shows a licence notice, and some features stop working after
 its grace period, which suits short-lived machines. It needs the desktop, so not on Server Core.
+
+**SQL Server** is baked in the same way: SQL Server 2025 Developer edition (free for development and
+testing, not for production) needs its install media, about 1.5 GB, which aren't in this repo either.
+`prepare.ps1 -SqlServer E:\` copies them from the mounted ISO to `C:\LabDeploy\sqlserver`, and
+downloads Chinook's SQL Server script to `C:\LabDeploy\chinook` (checking its SHA-256). When SQL
+Server is ticked, the machine installs it from there on first boot (about 10 minutes), listening on
+port 1433, with the machine's user as a SQL Server sign-in in the sysadmin role and `sa` switched off.
+It works on Server Core too. Part 5 of [docs/setup-vsphere.md](../../docs/setup-vsphere.md),
+"Optional: SQL Server's files", has the steps.

@@ -32,12 +32,13 @@ def test_planned_templates_are_listed_but_not_deployable():
     planned = {(t.template, t.version): t for t in catalogue.planned()}
     windows = planned[("windows-server", "2025 Core")]
     assert windows.family == "windows" and windows.admin_group == "Administrators"
-    assert windows.extras == ("iis",) and windows.access == ("rdp", "ssh", "console")
-    assert planned[("windows-server", "2025")].extras[:2] == ("iis", "outlook")  # not on Core
+    assert windows.extras == ("iis", "mssql") and windows.access == ("rdp", "ssh", "console")
+    assert "outlook" in planned[("windows-server", "2025")].extras  # not on Core: it needs the desktop
     for key in (("kali", "2026.3"), ("parrot", "7")):
         box = planned[key]
         assert box.family == "debian" and "rdp" in box.access
         assert "desktop" not in box.extras  # they have their own, over RDP
+        assert "mysql" not in box.extras and "mariadb" in box.extras  # Debian has only MariaDB
     for key in planned:
         assert catalogue.find(*key) is None
     source = _frontend_catalogue()

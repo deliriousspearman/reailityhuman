@@ -111,7 +111,7 @@
   name: WordPress
   category: Web apps
   description: WordPress as the machine's website, with its user as the administrator. Optionally over HTTPS.
-  ports: [80, 443]
+  ports: [80, 443, 3306]
   password: true
   links:
     - text: "http://{ip}/"
@@ -160,7 +160,7 @@
   name: Nextcloud
   category: Web apps
   description: Nextcloud as the machine's website, installed from its archive, with its user as the administrator. Optionally over HTTPS.
-  ports: [80, 443]
+  ports: [80, 443, 3306]
   password: true
   links:
     - text: "http://{ip}/"
@@ -234,6 +234,151 @@
       nextcloud.manual-install "$username" "$password"
       nextcloud.occ config:system:set trusted_domains 1 --value="$(lab_ip)"
       nextcloud.occ config:system:set trusted_domains 2 --value="$hostname"
+
+- id: postgresql
+  name: PostgreSQL
+  category: Databases
+  description: PostgreSQL, reachable from the network, with the machine's user as a superuser. Optionally filled with dummy data.
+  ports: [5432]
+  password: true
+  notes:
+    - "Connect to {ip} port 5432 as {username}, with the machine's password, e.g. psql -h {ip} -U {username}."
+    - text: "Dummy data is in the database chinook: 11 tables (artist, album, track, customer, invoice…), e.g. SELECT count(*) FROM track; gives 3503."
+      when: {sample_data: ["yes"]}
+  options:
+    - &sample_data
+      id: sample_data
+      label: Fill with dummy data
+      help: Loads Chinook, a sample music store (artists, albums, tracks, customers, employees, invoices), about 15,000 rows in 11 tables.
+      type: boolean
+      default: "no"
+  debian:
+    packages: [postgresql]
+    script: |
+      hba=$(find /etc/postgresql -mindepth 3 -maxdepth 3 -path '*/main/pg_hba.conf' | sort -V | tail -n 1)
+      if ! grep -q '^# Lab panel' "$hba"; then
+        printf '# Lab panel: sign-ins with a password from anywhere.\nhost all all 0.0.0.0/0 scram-sha-256\nhost all all ::/0 scram-sha-256\n' >>"$hba"
+      fi
+      sql() { runuser -u postgres -- psql -q -v ON_ERROR_STOP=1 "$@"; }
+      ready() { for _ in $(seq 30); do runuser -u postgres -- pg_isready -q && return; sleep 1; done; }
+      systemctl enable -q postgresql
+      systemctl restart postgresql
+      ready
+      # Listening on every address takes a restart.
+      sql -c "ALTER SYSTEM SET listen_addresses = '*'"
+      systemctl restart postgresql
+      ready
+      sql <<EOF
+      DO \$\$ BEGIN
+        IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '$username') THEN CREATE ROLE "$username"; END IF;
+      END \$\$;
+      ALTER ROLE "$username" LOGIN SUPERUSER PASSWORD $(lab_sql_string "$password");
+      EOF
+      # Its own database too, so psql signs in without naming one.
+      runuser -u postgres -- createdb -O "$username" "$username" 2>/dev/null || true
+      if [ "$sample_data" = yes ]; then
+        sql -f /opt/lab-deploy/chinook/Chinook_PostgreSql.sql >/dev/null
+        sql -c "ALTER DATABASE chinook OWNER TO \"$username\""
+      fi
+
+- id: mariadb
+  name: MariaDB
+  category: Databases
+  description: MariaDB, reachable from the network, with the machine's user able to do anything in it. Optionally filled with dummy data.
+  ports: [3306]
+  password: true
+  notes:
+    - "Connect to {ip} port 3306 as {username}, with the machine's password, e.g. mariadb -h {ip} -u {username} -p."
+    - text: "Dummy data is in the database Chinook: 11 tables (Artist, Album, Track, Customer, Invoice…), e.g. SELECT count(*) FROM Track; gives 3503."
+      when: {sample_data: ["yes"]}
+  options:
+    - *sample_data
+  debian:
+    packages: [mariadb-server]
+    script: |
+      cat >/etc/mysql/mariadb.conf.d/99-lab.cnf <<EOF
+      # Written by the lab panel's MariaDB extra: reachable from the network.
+      [mysqld]
+      bind-address = 0.0.0.0
+      EOF
+      systemctl enable -q mariadb
+      systemctl restart mariadb
+      pw=$(lab_sql_string "$password" mysql)
+      mariadb <<EOF
+      CREATE USER IF NOT EXISTS '$username'@'%' IDENTIFIED BY $pw;
+      ALTER USER '$username'@'%' IDENTIFIED BY $pw;
+      GRANT ALL ON *.* TO '$username'@'%' WITH GRANT OPTION;
+      EOF
+      if [ "$sample_data" = yes ]; then
+        mariadb --default-character-set=utf8mb4 </opt/lab-deploy/chinook/Chinook_MySql.sql
+      fi
+
+- id: mysql
+  name: MySQL
+  category: Databases
+  description: MySQL 8.4, reachable from the network, with the machine's user able to do anything in it. Optionally filled with dummy data.
+  ports: [3306]
+  password: true
+  notes:
+    - "Connect to {ip} port 3306 as {username}, with the machine's password, e.g. mysql -h {ip} -u {username} -p."
+    - text: "Dummy data is in the database Chinook: 11 tables (Artist, Album, Track, Customer, Invoice…), e.g. SELECT count(*) FROM Track; gives 3503."
+      when: {sample_data: ["yes"]}
+  options:
+    - *sample_data
+  debian:
+    # None baked in: it can't be alongside MariaDB, which the template has for WordPress and Nextcloud.
+    # prepare.sh's bake_mysql keeps its packages in /opt/lab-deploy/mysql; installed in MariaDB's place.
+    packages: []
+    script: |
+      export DEBIAN_FRONTEND=noninteractive
+      if ! dpkg-query -W -f '${Status}' mysql-server 2>/dev/null | grep -q 'ok installed'; then
+        [ -d /opt/lab-deploy/mysql ] || { echo "This template has no MySQL packages: rebuild it with today's prepare.sh."; exit 1; }
+        # MariaDB's data isn't MySQL's: put it aside, and MySQL starts its own.
+        systemctl disable -q --now mariadb 2>/dev/null || true
+        if [ -d /var/lib/mysql ]; then mv /var/lib/mysql "/var/lib/mysql.mariadb.$(date +%s)"; fi
+        # MariaDB's settings (which MySQL can't read) are what my.cnf points at while mariadb-common is
+        # installed, and MySQL starts as it's installed: the plain fallback until then, MySQL's after.
+        has_my_cnf() { update-alternatives --query my.cnf >/dev/null 2>&1; }
+        if has_my_cnf; then update-alternatives --quiet --set my.cnf /etc/mysql/my.cnf.fallback; fi
+        mkdir -p /opt/lab-deploy/mysql/partial
+        # From the kept packages (with no internet, only from them); apt takes MariaDB out.
+        apt-get install -yq -o Dir::Cache::archives=/opt/lab-deploy/mysql -o Dpkg::Options::=--force-confold mysql-server
+        if has_my_cnf; then update-alternatives --quiet --set my.cnf /etc/mysql/mysql.cnf; fi
+      fi
+      cat >/etc/mysql/mysql.conf.d/99-lab.cnf <<EOF
+      # Written by the lab panel's MySQL extra: reachable from the network.
+      [mysqld]
+      bind-address = 0.0.0.0
+      EOF
+      systemctl enable -q mysql
+      systemctl restart mysql
+      pw=$(lab_sql_string "$password" mysql)
+      mysql <<EOF
+      CREATE USER IF NOT EXISTS '$username'@'%' IDENTIFIED BY $pw;
+      ALTER USER '$username'@'%' IDENTIFIED BY $pw;
+      GRANT ALL ON *.* TO '$username'@'%' WITH GRANT OPTION;
+      EOF
+      if [ "$sample_data" = yes ]; then
+        mysql --default-character-set=utf8mb4 </opt/lab-deploy/chinook/Chinook_MySql.sql
+      fi
+
+- id: sqlite
+  name: SQLite
+  category: Databases
+  description: The sqlite3 command-line tool. SQLite has no server; with dummy data, a database file in the user's home folder.
+  notes:
+    - "Sign in over SSH and run sqlite3 with a file, e.g. sqlite3 lab.db (it's made when you first write to it)."
+    - text: "Dummy data is in ~/chinook.db: sqlite3 chinook.db, then .tables, or SELECT count(*) FROM Track; gives 3503."
+      when: {sample_data: ["yes"]}
+  options:
+    - *sample_data
+  debian:
+    packages: [sqlite3]
+    script: |
+      if [ "$sample_data" = yes ]; then
+        home=$(getent passwd "$username" | cut -d: -f6)
+        install -o "$username" -g "$(id -gn "$username")" -m 644 /opt/lab-deploy/chinook/Chinook_Sqlite.sqlite "$home/chinook.db"
+      fi
 
 - id: mail
   name: Mail server
@@ -446,6 +591,80 @@
         Enable-WindowsOptionalFeature -Online -FeatureName IIS-WebServerRole, IIS-WebServer -All -NoRestart | Out-Null
       }
       Set-Content -Path C:\inetpub\wwwroot\index.html -Encoding ascii -Value "<h1>$hostname</h1><p>IIS, deployed by the lab panel.</p>"
+
+- id: mssql
+  name: SQL Server
+  category: Databases
+  description: Microsoft SQL Server 2025 Developer edition, from files in the template, reachable from the network with the machine's user as an administrator. Optionally filled with dummy data.
+  ports: [1433]
+  password: true
+  minMemoryGB: 2
+  notes:
+    - "Connect to {ip} (port 1433) with SQL Server authentication, as {username} with the machine's password, e.g. from SQL Server Management Studio or sqlcmd -S {ip} -U {username}. Trust the server certificate: it's self-signed."
+    - text: "Dummy data is in the database Chinook: 11 tables (Artist, Album, Track, Customer, Invoice…), e.g. SELECT count(*) FROM Track; gives 3503."
+      when: {sample_data: ["yes"]}
+  options:
+    - *sample_data
+  windows:
+    script: |
+      # The install media prepare.ps1 -SqlServer copied into the template, and Chinook's script.
+      $src = 'C:\LabDeploy\sqlserver'
+      if (-not (Test-Path "$src\setup.exe")) {
+        throw "This template has no SQL Server files in $src. Rebuild it with prepare.ps1 -SqlServer."
+      }
+      $logs = 'C:\ProgramData\lab-deploy\logs'
+      if (-not (Get-Service -Name MSSQLSERVER -ErrorAction SilentlyContinue)) {
+        # Takes about 10 minutes. Windows sign-in for Administrators (and SYSTEM, which runs this);
+        # SQL Server sign-in too, for the machine's user below. "sa" gets a random password, then is
+        # switched off: the machine's password only ever goes in through SQL, not a command line.
+        $sa = -join ((48..57) + (65..90) + (97..122) | Get-Random -Count 24 | ForEach-Object { [char]$_ }) + 'aA1!'
+        $arguments = '/Q /ACTION=Install /FEATURES=SQLEngine /INSTANCENAME=MSSQLSERVER /IACCEPTSQLSERVERLICENSETERMS ' +
+          '/UPDATEENABLED=False /TCPENABLED=1 /SECURITYMODE=SQL /SAPWD="' + $sa + '" ' +
+          '/SQLSVCACCOUNT="NT Service\MSSQLSERVER" /SQLSYSADMINACCOUNTS="BUILTIN\Administrators" "NT AUTHORITY\SYSTEM"'
+        $setup = Start-Process -FilePath "$src\setup.exe" -ArgumentList $arguments -Wait -PassThru
+        # 3010: installed, a restart needed to finish; it's done after the steps below.
+        if ($setup.ExitCode -ne 0 -and $setup.ExitCode -ne 3010) {
+          throw "SQL Server setup failed (exit code $($setup.ExitCode)); its logs are under C:\Program Files\Microsoft SQL Server\*\Setup Bootstrap\Log."
+        }
+        $restart = $setup.ExitCode -eq 3010
+      } else {
+        $restart = $false
+      }
+      Start-Service -Name MSSQLSERVER
+      if (-not (Get-NetFirewallRule -Name 'LabSqlServer' -ErrorAction SilentlyContinue)) {
+        New-NetFirewallRule -Name 'LabSqlServer' -DisplayName 'SQL Server (lab panel)' -Direction Inbound -Protocol TCP -LocalPort 1433 -Action Allow | Out-Null
+      }
+
+      # T-SQL as this script's account (SYSTEM, a sysadmin), in batches split at "GO" lines.
+      function Invoke-Sql([string]$Text) {
+        $connection = New-Object System.Data.SqlClient.SqlConnection 'Server=localhost;Integrated Security=True;Database=master'
+        $connection.Open()
+        try {
+          foreach ($batch in [regex]::Split($Text, '(?im)^\s*GO\s*$')) {
+            if (-not $batch.Trim()) { continue }
+            $command = $connection.CreateCommand()
+            $command.CommandText = $batch
+            $command.CommandTimeout = 600
+            $command.ExecuteNonQuery() | Out-Null
+          }
+        } finally {
+          $connection.Close()
+        }
+      }
+      $name = $username.Replace(']', ']]')
+      $secret = $password.Replace("'", "''")
+      Invoke-Sql @"
+      IF NOT EXISTS (SELECT 1 FROM sys.server_principals WHERE name = N'$($username.Replace("'", "''"))')
+        CREATE LOGIN [$name] WITH PASSWORD = N'$secret', CHECK_POLICY = OFF;
+      ELSE
+        ALTER LOGIN [$name] WITH PASSWORD = N'$secret', CHECK_POLICY = OFF;
+      ALTER SERVER ROLE sysadmin ADD MEMBER [$name];
+      ALTER LOGIN sa DISABLE;
+      "@
+      if ($sample_data -eq 'yes') {
+        Invoke-Sql ([IO.File]::ReadAllText('C:\LabDeploy\chinook\Chinook_SqlServer.sql'))
+      }
+      if ($restart) { exit 3010 }
 
 - id: outlook
   name: Outlook

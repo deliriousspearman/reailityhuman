@@ -145,8 +145,9 @@ read its data from vCenter. The installer turned cloud-init off: while
 `/etc/cloud/cloud-init.disabled` exists, clones get no hostname, user or password. It's safe to
 re-run.
 
-It also installs the packages for the panel's extras (web servers, WordPress, Nextcloud, a mail
-server, FTP, a remote desktop: see the template scripts' README), switched off: a machine
+It also installs the packages for the panel's extras (web servers, WordPress, Nextcloud, databases
+with their dummy data, a mail server, FTP, a remote desktop: see the template scripts' README),
+switched off: a machine
 deployed with one has it set up on first boot, without needing the internet. List them under the
 template's `extras:` in `backend/templates.yaml`. Pass `--extras=nginx,apache` for only some of
 them, or `--no-extras` for none.
@@ -333,6 +334,25 @@ activated (see **Licensing** above). To update it later, download it again and r
 template: a sysprepped template can't be prepared again. The files add about 3 GB to the
 template, and each machine with Outlook grows by about as much again once it's installed.
 
+### Optional: SQL Server's files
+
+The panel can install SQL Server on Windows Server machines (the `mssql` extra, Desktop Experience
+or Core). Like Office, its install media go into the template, as the lab network can't download
+them. Skip this if you don't want SQL Server.
+
+1. **Download the media** on a PC with internet: from https://www.microsoft.com/sql-server/sql-server-downloads,
+   get the **Developer** edition of SQL Server 2025 (free for development and testing, not for
+   production). Run the installer it downloads, choose **Download Media**, then **ISO**. It's about
+   1.5 GB.
+2. **Upload the ISO** to the datastore's `ISO` folder, next to the Windows one.
+3. When you prepare the VM (below), add a **second CD/DVD drive** with that ISO, connected. Windows
+   gives it the next drive letter, e.g. `E:`; check in File Explorer, or `Get-Volume` on Core.
+
+`prepare.ps1 -SqlServer E:\` then copies the media to `C:\LabDeploy\sqlserver`, and downloads the
+Chinook sample database's SQL Server script (the dummy data) to `C:\LabDeploy\chinook`. That
+download needs the internet, from the VM, while you build the template. The media add about 1.5 GB
+to the template, and each machine with SQL Server grows by about as much again.
+
 ### Create the VM
 
 1. **Create the VM** in `Labs/Templates`, named `tpl-windows-server-2025`:
@@ -372,9 +392,13 @@ template, and each machine with Outlook grows by about as much again once it's i
    Copying them takes a few minutes. It refuses on Server Core (Outlook needs the desktop), and
    says which file is missing if the folder is incomplete.
 
+   For **SQL Server** (with its ISO in the second drive, `E:` here), add `-SqlServer E:\` the same
+   way, with or without `-Office`. The dry run shows *SQL Server files: to copy…*.
+
    It checks VMware Tools, installs Cloudbase-Init and points it at vCenter, turns on Remote Desktop
    and OpenSSH Server, and stops Server Manager opening at sign-in. With `-Office`, it copies the
-   Office files to `C:\LabDeploy\office` (clean.ps1 leaves them). It's safe to re-run. Pass
+   Office files to `C:\LabDeploy\office`, and with `-SqlServer`, SQL Server's to
+   `C:\LabDeploy\sqlserver` (clean.ps1 leaves both). It's safe to re-run. Pass
    `-NoSsh` to leave OpenSSH off; then remove `ssh` from the template's `access` in
    `backend/templates.yaml`.
 
@@ -404,8 +428,10 @@ With the VM powered off:
 ### Tell the panel
 
 In `backend/templates.yaml`, take `planned: true` out of the Windows Server 2025 entry (or the Core
-one), commit and push. Until then it's listed under the services it will offer, as *Soon*. The 2025 entry lists `extras: [iis, outlook]`: if you built it without `-Office`, take
-`outlook` out, or machines that tick it fail to set it up. Then deploy one from
+one), commit and push. Until then it's listed under the services it will offer, as *Soon*. The
+2025 entry lists `extras: [iis, mssql, outlook]` (Core: `[iis, mssql]`): if you built it without
+`-SqlServer` or `-Office`, take `mssql` or `outlook` out, or machines that tick it fail to set it
+up. Then deploy one from
 **Machines → Windows Server**. Its activity log shows *Windows is setting
 up…*, then *Ready. Sign in as labadmin.* Connect with **Remote Desktop** (the machine page has the
 command and an `.rdp` file) or `ssh labadmin@<address>`.
@@ -427,6 +453,17 @@ with IMAP. If it failed, the machine's log says why:
   take `outlook` out of its `extras`.
 - *Office setup failed (exit code …)*: Office's own logs are in
   `C:\ProgramData\lab-deploy\logs\office` on the machine.
+
+**To check SQL Server**, deploy a machine with **SQL Server** ticked and **Fill with dummy data** on.
+Its setup takes about 10 minutes longer. With Outlook as well, raise
+`WINDOWS_SETUP_TIMEOUT_SECONDS` (20 minutes by default) first. When it's ready, from another
+machine: `sqlcmd -S <address> -U labadmin -C -Q "SELECT count(*) FROM Chinook.dbo.Track"` with the
+machine's password gives 3503 (`-C` trusts SQL Server's self-signed certificate). If it failed, the
+machine's log says why:
+- *This template has no SQL Server files*: built without `-SqlServer`. Rebuild it, or take `mssql`
+  out of its `extras`.
+- *SQL Server setup failed (exit code …)*: its own logs are under
+  `C:\Program Files\Microsoft SQL Server\<version>\Setup Bootstrap\Log` on the machine.
 
 ## 6. Kali Linux and Parrot Security templates
 

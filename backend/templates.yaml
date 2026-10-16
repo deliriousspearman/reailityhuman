@@ -34,7 +34,7 @@
   family: debian
   # Built 2026-10-14, before the extras below existed.
   extras: [nginx, apache, apache-https]
-  plannedExtras: [wordpress, nextcloud, nextcloud-snap, mail, ftp, desktop]
+  plannedExtras: [wordpress, nextcloud, nextcloud-snap, postgresql, mariadb, mysql, sqlite, mail, ftp, desktop]
 
 # Windows Server 2025, with Desktop Experience and as Server Core: planned until each template is
 # built (docs/setup-vsphere.md, "Windows Server templates"). Windows needs more memory: Core runs in
@@ -49,7 +49,7 @@
   username: labadmin
   family: windows
   access: [rdp, ssh, console]
-  extras: [iis, outlook]   # Outlook: built with prepare.ps1 -Office
+  extras: [iis, mssql, outlook]   # SQL Server and Outlook: built with prepare.ps1 -SqlServer and -Office
 - template: windows-server
   version: "2025 Core"
   planned: true
@@ -60,11 +60,11 @@
   username: labadmin
   family: windows
   access: [rdp, ssh, console]
-  extras: [iis]   # not Outlook: it needs the desktop
+  extras: [iis, mssql]   # not Outlook: it needs the desktop
 
 # Kali Linux and Parrot Security: attack boxes, reached over Remote Desktop to their own desktop.
 # Planned until each template is built (docs/setup-vsphere.md, "Kali Linux and Parrot Security
-# templates"). Not the desktop extra: they have their own.
+# templates"). Not the desktop extra: they have their own; nor MySQL: Debian has only MariaDB.
 - template: kali
   version: "2026.3"
   planned: true
@@ -75,7 +75,7 @@
   username: kali
   family: debian
   access: [ssh, rdp, console]
-  extras: [nginx, apache, apache-https, wordpress, nextcloud, nextcloud-snap, mail, ftp]
+  extras: [nginx, apache, apache-https, wordpress, nextcloud, nextcloud-snap, postgresql, mariadb, sqlite, mail, ftp]
 - template: parrot
   version: "7"
   planned: true
@@ -86,4 +86,4 @@
   username: labuser
   family: debian
   access: [ssh, rdp, console]
-  extras: [nginx, apache, apache-https, wordpress, nextcloud, nextcloud-snap, mail, ftp]
+  extras: [nginx, apache, apache-https, wordpress, nextcloud, nextcloud-snap, postgresql, mariadb, sqlite, mail, ftp]

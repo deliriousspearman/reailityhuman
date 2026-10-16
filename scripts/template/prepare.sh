@@ -49,6 +49,11 @@ declare -A EXTRA_PACKAGES_DEBIAN=(
 	[wordpress]="apache2 libapache2-mod-php php-mysql php-gd php-curl php-xml php-mbstring php-zip php-intl mariadb-server openssl"
 	[nextcloud]="apache2 libapache2-mod-php php-mysql php-gd php-curl php-xml php-mbstring php-zip php-intl php-gmp php-bcmath mariadb-server bzip2 openssl"
 	[nextcloud-snap]="snapd"
+	[postgresql]="postgresql"
+	[mariadb]="mariadb-server"
+	# Not installed with the rest: it can't be alongside MariaDB. bake_mysql keeps its packages.
+	[mysql]=""
+	[sqlite]="sqlite3"
 	[mail]="postfix dovecot-imapd dovecot-pop3d roundcube roundcube-sqlite3 apache2 libapache2-mod-php openssl"
 	[ftp]="vsftpd openssl"
 	[desktop]="xfce4-session xfwm4 xfce4-panel xfdesktop4 xfce4-terminal thunar xfce4-settings xfce4-notifyd dbus-x11 xrdp xorgxrdp tigervnc-standalone-server tigervnc-tools ssl-cert fonts-dejavu-core adwaita-icon-theme"
@@ -70,6 +75,8 @@ declare -A EXTRA_SERVICES=(
 	[apache-https]="apache2 httpd"
 	[wordpress]="apache2 mariadb"
 	[nextcloud]="apache2 mariadb"
+	[postgresql]="postgresql"
+	[mariadb]="mariadb"
 	[mail]="postfix dovecot apache2"
 	[ftp]="vsftpd"
 	[desktop]="xrdp xrdp-sesman"
@@ -78,6 +85,8 @@ declare -A EXTRA_SERVICES=(
 WORDPRESS_URL=${WORDPRESS_URL:-https://wordpress.org/latest.tar.gz}
 WP_CLI_URL=${WP_CLI_URL:-https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar}
 NEXTCLOUD_URL=${NEXTCLOUD_URL:-https://download.nextcloud.com/server/releases/latest.tar.bz2}
+# The Chinook sample database, the databases' dummy data: a pinned release (checksums below).
+CHINOOK_URL=${CHINOOK_URL:-https://github.com/lerocha/chinook-database/releases/download/v1.4.5}
 
 # preseed_<id>: answers to the packages' installer questions, before they're installed.
 # bake_<id>: steps after, for what isn't a package. (With "-" in the id as "_".)
@@ -121,6 +130,35 @@ bake_nextcloud_snap() {
 	# Off until a machine is deployed with it, and not updated behind the template's back.
 	snap stop --disable nextcloud
 	snap refresh --hold=forever nextcloud
+}
+
+# fetch_chinook <file> <sha256>: one of Chinook's files, for the database extras' dummy data.
+fetch_chinook() {
+	mkdir -p /opt/lab-deploy/chinook
+	curl -fsSL -o "/opt/lab-deploy/chinook/$1" "$CHINOOK_URL/$1"
+	echo "$2  /opt/lab-deploy/chinook/$1" | sha256sum -c --quiet
+}
+
+bake_postgresql() {
+	fetch_chinook Chinook_PostgreSql.sql e3fde5c1a5b51a2a91429a702c9ca6e69ba56e6c7f5e112724d70c3d03db695e
+}
+
+bake_mariadb() {
+	fetch_chinook Chinook_MySql.sql 02a1835417c3ea19bff64e1d1f22be738ce51b3f88b0473c24eebff9a3ccde4b
+}
+
+bake_mysql() {
+	# MySQL can't be installed alongside MariaDB (which WordPress and Nextcloud use), so its packages
+	# are kept, not installed: the extra installs them in MariaDB's place. Downloaded with the
+	# template's packages as they are now, so they're exactly what a clone needs.
+	mkdir -p /opt/lab-deploy/mysql/partial
+	apt-get install -yq --download-only -o Dir::Cache::archives=/opt/lab-deploy/mysql mysql-server
+	rm -rf /opt/lab-deploy/mysql/partial /opt/lab-deploy/mysql/lock
+	fetch_chinook Chinook_MySql.sql 02a1835417c3ea19bff64e1d1f22be738ce51b3f88b0473c24eebff9a3ccde4b
+}
+
+bake_sqlite() {
+	fetch_chinook Chinook_Sqlite.sqlite bdf635be69850bd3be09c9a2dbeef7ddfb80036bd3ef3381383cd03b61e4a61a
 }
 
 bake_desktop() {
@@ -183,8 +221,14 @@ if [[ $WANT_EXTRAS == all ]]; then
 	mapfile -t CHOSEN < <(printf '%s\n' "${!EXTRA_PACKAGES[@]}" | sort)
 	# Kali and Parrot have their own desktop.
 	if ((RDP_DESKTOP)); then mapfile -t CHOSEN < <(printf '%s\n' "${CHOSEN[@]}" | grep -vx desktop); fi
+	# MySQL's packages are Ubuntu's: Debian (and Kali, Parrot) only have MariaDB.
+	if [[ $ID != ubuntu ]]; then mapfile -t CHOSEN < <(printf '%s\n' "${CHOSEN[@]}" | grep -vx mysql); fi
 else
 	IFS=, read -ra CHOSEN <<<"$WANT_EXTRAS"
+fi
+if [[ $ID != ubuntu && " ${CHOSEN[*]} " == *" mysql "* ]]; then
+	echo "The MySQL extra is for Ubuntu: $PRETTY_NAME has no MySQL packages (MariaDB stands in for it)." >&2
+	exit 1
 fi
 if ((RDP_DESKTOP)) && [[ " ${CHOSEN[*]} " == *" desktop "* ]]; then
 	echo "The desktop extra is for servers: $PRETTY_NAME has its own desktop, over Remote Desktop already." >&2

@@ -218,7 +218,7 @@ def windows_userdata(
             '        $warnings += "warn ssh $($_.Exception.Message)"',
             "    }",
         ]
-    lines += ["    " + line for line in extras.windows_setup(chosen, hostname).split("\r\n")]
+    lines += ["    " + line for line in extras.windows_setup(chosen, hostname, username, password).split("\r\n")]
     lines += [
         "} catch {",
         f"    New-Item -ItemType Directory -Force -Path (Split-Path '{status}') | Out-Null",

@@ -11,7 +11,9 @@ as Administrator. It:
   - turns on Remote Desktop (with Network Level Authentication) and its firewall rules;
   - turns on OpenSSH Server, if Windows has it, with PowerShell as its shell;
   - stops Server Manager opening at every sign-in, and never sleeps;
-  - with -Office, copies Office's install files in, for the panel's Outlook extra.
+  - with -Office, copies Office's install files in, for the panel's Outlook extra;
+  - with -SqlServer, copies SQL Server's install files in, with the Chinook sample database, for
+    the panel's SQL Server extra.
 It's safe to re-run. Then install anything every machine should have, and run clean.ps1.
 
 The whole process, including the vCenter steps, is in docs/setup-vsphere.md.
@@ -28,6 +30,12 @@ A folder with the Office Deployment Tool's setup.exe, download.xml and the Offic
 downloaded (scripts/template/office/download.xml says how). They're copied to C:\LabDeploy\office,
 and clones install Outlook from there when it's chosen. Not for Server Core: Outlook needs the desktop.
 
+.PARAMETER SqlServer
+SQL Server 2025 Developer edition's install media: the folder with its setup.exe, e.g. the mounted
+ISO's drive (docs/setup-vsphere.md says where to get it). It's copied to C:\LabDeploy\sqlserver,
+with the Chinook sample database's script (downloaded, so it needs the internet), and clones install
+SQL Server from there when it's chosen. Works on Server Core too.
+
 .PARAMETER DryRun
 Only say what it found and what it would do.
 
@@ -36,12 +44,16 @@ powershell -ExecutionPolicy Bypass -File prepare.ps1 -Msi C:\Users\Administrator
 
 .EXAMPLE
 powershell -ExecutionPolicy Bypass -File D:\prepare.ps1 -Msi D:\CloudbaseInitSetup_x64.msi -Office D:\office
+
+.EXAMPLE
+powershell -ExecutionPolicy Bypass -File D:\prepare.ps1 -Msi D:\CloudbaseInitSetup_x64.msi -SqlServer E:\
 #>
 [CmdletBinding()]
 param(
     [string]$Msi,
     [switch]$NoSsh,
     [string]$Office,
+    [string]$SqlServer,
     [switch]$DryRun
 )
 
@@ -53,6 +65,12 @@ $ConfDir = Join-Path $CloudbaseDir 'conf'
 # Where the Outlook extra (backend/extras.yaml) looks for them. Not under C:\ProgramData\lab-deploy,
 # which clean.ps1 empties.
 $OfficeDir = 'C:\LabDeploy\office'
+# Where the SQL Server extra looks for its install files, and for Chinook's script (pinned: its
+# release, and the file's SHA-256).
+$SqlServerDir = 'C:\LabDeploy\sqlserver'
+$ChinookDir = 'C:\LabDeploy\chinook'
+$ChinookUrl = 'https://github.com/lerocha/chinook-database/releases/download/v1.4.5/Chinook_SqlServer.sql'
+$ChinookSha256 = '5ea75c9e925ead917d3fabea6ed3cc8c1ff1d036b61e915c94631aafa2b0802b'
 
 function Step([string]$Text) { Write-Host "==> $Text" -ForegroundColor Cyan }
 function Note([string]$Text) { Write-Host "    $Text" }
@@ -100,6 +118,9 @@ if ($Office) {
         throw 'Outlook needs the desktop, and this is Server Core: leave out -Office.'
     }
 }
+if ($SqlServer -and -not (Test-Path (Join-Path $SqlServer 'setup.exe'))) {
+    throw "$SqlServer has no setup.exe. Give the folder (or mounted ISO) with SQL Server's install media."
+}
 $sshCapability = $null
 if (-not $NoSsh) {
     $sshCapability = Get-WindowsCapability -Online | Where-Object { $_.Name -like 'OpenSSH.Server*' } | Select-Object -First 1
@@ -117,6 +138,10 @@ if ($NoSsh) {
 if ($Office) {
     $size = (Get-ChildItem -Path $Office -Recurse -File | Measure-Object -Property Length -Sum).Sum
     Note ("Office files: to copy from $Office to $OfficeDir ({0:N1} GB)" -f ($size / 1GB))
+}
+if ($SqlServer) {
+    $size = (Get-ChildItem -Path $SqlServer -Recurse -File | Measure-Object -Property Length -Sum).Sum
+    Note ("SQL Server files: to copy from $SqlServer to $SqlServerDir ({0:N1} GB), and Chinook to $ChinookDir" -f ($size / 1GB))
 }
 if ($DryRun) {
     Note 'Dry run: nothing changed.'
@@ -216,6 +241,25 @@ if ($Office) {
     robocopy.exe $Office $OfficeDir /MIR /NFL /NDL /NJH /NJS /NP | Out-Null
     if ($LASTEXITCODE -ge 8) {
         throw "Copying $Office to $OfficeDir failed (robocopy exit code $LASTEXITCODE)."
+    }
+}
+
+# SQL Server ----------------------------------------------------------------------------------------------
+
+if ($SqlServer) {
+    Step "Copying SQL Server's install files to $SqlServerDir"
+    robocopy.exe $SqlServer $SqlServerDir /MIR /NFL /NDL /NJH /NJS /NP /XD 'System Volume Information' | Out-Null
+    if ($LASTEXITCODE -ge 8) {
+        throw "Copying $SqlServer to $SqlServerDir failed (robocopy exit code $LASTEXITCODE)."
+    }
+    Step "Downloading the Chinook sample database to $ChinookDir"
+    New-Item -ItemType Directory -Force -Path $ChinookDir | Out-Null
+    $chinook = Join-Path $ChinookDir 'Chinook_SqlServer.sql'
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+    Invoke-WebRequest -Uri $ChinookUrl -OutFile $chinook -UseBasicParsing
+    if ((Get-FileHash -Path $chinook -Algorithm SHA256).Hash -ne $ChinookSha256) {
+        Remove-Item -Path $chinook
+        throw "$ChinookUrl isn't the file expected (its SHA-256 differs)."
     }
 }
 

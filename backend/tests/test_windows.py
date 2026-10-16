@@ -112,6 +112,17 @@ def test_windows_extras_scripts():
     assert extras.log_file("windows", "iis") == r"C:\ProgramData\lab-deploy\logs\iis.log"
 
 
+def test_windows_extras_get_the_user_and_only_if_they_ask_the_password():
+    iis = extras.script(extras.find("iis"), "windows", "win01", {}, "labadmin", "Pass-word1")
+    mssql = extras.script(extras.find("mssql"), "windows", "win01", {"sample_data": "no"}, "labadmin", "Pass-word1")
+    assert f"$username = {extras.ps_string('labadmin')}" in iis and "$password" not in iis
+    assert f"$password = {extras.ps_string('Pass-word1')}" in mssql
+    script = cloudinit.windows_userdata("labadmin", "Pass-word1", None, [{"id": "mssql", "options": {"sample_data": "yes"}}], "win01")
+    assert extras.ps_string(extras.script(extras.find("mssql"), "windows", "win01", {"sample_data": "yes"}, "labadmin", "Pass-word1")) in script
+    # The scripts' folder: Administrators and SYSTEM only, as a script may hold the password.
+    assert "icacls.exe 'C:\\ProgramData\\lab-deploy\\extras' /inheritance:r" in script
+
+
 def _template_script(name: str) -> str:
     for candidate in (Path(__file__).resolve().parents[2] / "scripts", Path("/scripts")):
         if (candidate / "template" / name).exists():

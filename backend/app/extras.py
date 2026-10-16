@@ -124,6 +124,14 @@ lab_apache_site() {
 	lab_apache
 }
 
+# lab_sql_string <value> [mysql]: the value as an SQL string literal, its quotes doubled; with
+# "mysql", its backslashes too (MySQL and MariaDB read them as escapes; PostgreSQL doesn't).
+lab_sql_string() {
+	local value=${1//\'/\'\'}
+	[ "${2:-}" = mysql ] && value=${value//\\/\\\\}
+	printf "'%s'" "$value"
+}
+
 # lab_open <port/proto>...: opens ports in firewalld, where it's running (RHEL family).
 lab_open() {
 	systemctl is-active -q firewalld || return 0
@@ -335,6 +343,9 @@ def script(x: Extra, family: str, hostname: str, options: dict[str, str], userna
     _, body = x.families[family]
     if family == "windows":
         lines = [f"# {x.name}, written by the lab panel.", "$ErrorActionPreference = 'Stop'", f"$hostname = {ps_string(hostname)}"]
+        lines.append(f"$username = {ps_string(username)}")
+        if x.password:
+            lines.append(f"$password = {ps_string(password)}")
         lines += [f"${k} = {ps_string(v)}" for k, v in options.items()]
         return "\r\n".join(lines) + "\r\n" + body.replace("\r\n", "\n").replace("\n", "\r\n")
     lines = [f"# {x.name}, written by the lab panel.", f"hostname={shlex.quote(hostname)}", f"username={shlex.quote(username)}"]
@@ -407,7 +418,7 @@ exit 0
 """.replace("\n", "\r\n")
 
 
-def windows_setup(chosen: list[dict], hostname: str) -> str:
+def windows_setup(chosen: list[dict], hostname: str, username: str = "", password: str = "") -> str:
     """PowerShell that writes the chosen (resolved) extras' scripts and the runner, then runs it.
     Part of a Windows machine's first-boot script (cloudinit.windows_userdata)."""
 
@@ -416,10 +427,12 @@ def windows_setup(chosen: list[dict], hostname: str) -> str:
         return f"[IO.File]::WriteAllText('{path}', {ps_string(content)}, (New-Object Text.UTF8Encoding $true))"
 
     lines = [f"New-Item -ItemType Directory -Force -Path '{WINDOWS_DIR}\\extras' | Out-Null"]
+    # Only Administrators and SYSTEM may read the scripts: an extra's may hold the password.
+    lines.append(f"icacls.exe '{WINDOWS_DIR}\\extras' /inheritance:r /grant '*S-1-5-32-544:(OI)(CI)F' /grant '*S-1-5-18:(OI)(CI)F' | Out-Null")
     lines.append(write(rf"{WINDOWS_DIR}\extras\run.ps1", WINDOWS_RUNNER))
     for c in chosen:
         x = extras()[c["id"]]
-        lines.append(write(rf"{WINDOWS_DIR}\extras\{x.id}.ps1", script(x, "windows", hostname, c["options"])))
+        lines.append(write(rf"{WINDOWS_DIR}\extras\{x.id}.ps1", script(x, "windows", hostname, c["options"], username, password)))
     ids = ", ".join(f"'{c['id']}'" for c in chosen)
     # $warnings: lines the first-boot script collected ("warn <what> <why>"), reported with the rest.
     lines.append(f"& '{WINDOWS_DIR}\\extras\\run.ps1' -Ids @({ids}) -Warnings $warnings")

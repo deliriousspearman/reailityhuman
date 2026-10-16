@@ -105,12 +105,68 @@ def test_clashes_come_from_shared_ports():
 
 
 def test_catalogue_conflicts_are_worked_out():
-    """One web service per machine; FTP and the desktop go with anything."""
+    """One web service per machine; FTP and the desktop go with anything. MariaDB and MySQL take
+    port 3306, as do WordPress and Nextcloud's own MariaDB."""
     found = {i: set(x.conflicts) for i, x in extras.extras().items()}
     web = {"nginx", "apache", "apache-https", "wordpress", "nextcloud", "nextcloud-snap", "mail", "iis"}
-    for i in web:
-        assert found[i] == web - {i}, i
-    assert found["ftp"] == set() and found["desktop"] == set() and found["outlook"] == set()
+    mysql_port = {"wordpress", "nextcloud", "mariadb", "mysql"}
+    for i in web | mysql_port:
+        expected = (web if i in web else set()) | (mysql_port if i in mysql_port else set())
+        assert found[i] == expected - {i}, i
+    for i in ("ftp", "desktop", "outlook", "postgresql", "sqlite", "mssql"):
+        assert found[i] == set(), i
+
+
+DATABASES = ("postgresql", "mariadb", "mysql", "sqlite", "mssql")
+
+
+def test_databases_can_be_filled_with_dummy_data():
+    for i in DATABASES:
+        x = extras.find(i)
+        assert x.category == "Databases"
+        [option] = x.options
+        assert (option.id, option.type, option.default) == ("sample_data", "boolean", "no")
+        [c] = extras.resolve((i,), [{"id": i}], "db01", memory_gb=4)
+        assert c["options"] == {"sample_data": "no"}
+        [c] = extras.resolve((i,), [{"id": i, "options": {"sample_data": "true"}}], "db01", memory_gb=4)
+        assert c["options"] == {"sample_data": "yes"}
+        assert any("chinook" in text.lower() for text, when in x.notes if when == {"sample_data": ("yes",)}), i
+    assert extras.details({"id": "postgresql", "options": {"sample_data": "no"}}, "192.0.2.5", "ubuntu", "db01")["notes"] == [
+        "Connect to 192.0.2.5 port 5432 as ubuntu, with the machine's password, e.g. psql -h 192.0.2.5 -U ubuntu."
+    ]
+
+
+def test_dummy_data_is_what_the_templates_bake_in():
+    """Each Linux database loads a Chinook file prepare.sh fetches; SQL Server, the one prepare.ps1 does."""
+    prepare = _prepare_sh().read_text()
+    fetched = set(re.findall(r"^\tfetch_chinook (\S+) [0-9a-f]{64}$", prepare, re.M))
+    for i in ("postgresql", "mariadb", "mysql", "sqlite"):
+        _, body = extras.find(i).families["debian"]
+        used = set(re.findall(r"/opt/lab-deploy/chinook/(\S+?)(?=[\s\"]|$)", body))
+        assert used and used <= fetched, (i, used)
+        bake = re.search(rf"^bake_{i}\(\) {{\n(.*?)^}}", prepare, re.M | re.S)
+        assert bake and any(f in bake.group(1) for f in used), f"bake_{i} doesn't fetch {used}"
+    assert "Dir::Cache::archives=/opt/lab-deploy/mysql" in prepare
+    assert "Dir::Cache::archives=/opt/lab-deploy/mysql" in extras.find("mysql").families["debian"][1]
+    _, body = extras.find("mssql").families["windows"]
+    prepare_ps1 = _prepare_sh().with_name("prepare.ps1").read_text()
+    source = re.search(r"\$src = '([^']+)'", body).group(1)
+    assert f"$SqlServerDir = '{source}'" in prepare_ps1
+    chinook_dir = re.search(r"\$ChinookDir = '([^']+)'", prepare_ps1).group(1)
+    assert f"'{chinook_dir}\\Chinook_SqlServer.sql'" in body and "Chinook_SqlServer.sql" in prepare_ps1
+
+
+def test_sql_strings_are_quoted_for_each_database():
+    import subprocess
+
+    def quoted(value: str, *mode: str) -> str:
+        run = subprocess.run(["bash", "-c", extras.LIB + '\nlab_sql_string "$@"', "lib", value, *mode], capture_output=True, text=True, check=True)
+        return run.stdout
+
+    assert quoted("plain") == "'plain'"
+    assert quoted("it's a\\b") == "'it''s a\\b'"  # PostgreSQL: backslashes as they are
+    assert quoted("it's a\\b", "mysql") == "'it''s a\\\\b'"
+    assert quoted("$(reboot) `x`") == "'$(reboot) `x`'"
 
 
 def test_old_sharing_keys_are_refused(tmp_path, monkeypatch):
