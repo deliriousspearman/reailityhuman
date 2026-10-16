@@ -1,0 +1,13 @@
+# Installer ISOs the template builds use (packer/). fetch.sh downloads one, checks it and uploads it
+# to the datastore's ISO folder, where packer/ expects it.
+#
+# One per line:  <name>  <url>  <sha256, the URL of a checksum list naming the file, or - for none>  [file]
+# [file]: the name to save it as, when the URL doesn't end with it (e.g. Microsoft's redirecting links).
+# With -, fetch.sh prints the download's SHA-256: pin it here once you trust it.
+# Bump a line when a new point release comes out, and the template's iso variable with it.
+
+ubuntu-26.04     https://releases.ubuntu.com/26.04/ubuntu-26.04.1-live-server-amd64.iso    https://releases.ubuntu.com/26.04/SHA256SUMS
+windows-server-2025  https://go.microsoft.com/fwlink/?linkid=2293312&clcid=0x409&culture=en-us&country=us  -  windows-server-2025-eval-26100.1742.iso
+# SQL Server 2025 Enterprise Developer: free for development and testing, not production.
+sql-server-2025  https://download.microsoft.com/download/dea8c210-c44a-4a9d-9d80-0c81578860c5/ENU/SQLServer2025-x64-ENU-EntDev.iso  -
+kali-2026.2      https://cdimage.kali.org/kali-2026.2/kali-linux-2026.2-installer-amd64.iso    https://cdimage.kali.org/kali-2026.2/SHA256SUMS

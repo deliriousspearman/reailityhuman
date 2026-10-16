@@ -1,0 +1,14 @@
+# Where template builds go. Copy to packer/lab.pkrvars.hcl (not committed) and fill in. The vCenter
+# account isn't here: build.sh reads it from a file (VCENTER_CREDENTIALS).
+
+vcenter_server   = "vcenter.lab.example"
+vcenter_insecure = true   # vCenter's own self-signed certificate
+datacenter       = "Datacenter"
+cluster          = "Cluster"
+datastore        = "datastore1"
+network          = "VM Network"   # the LAN port group, with DHCP
+template_folder  = "Labs/Templates"
+iso_folder       = "ISO"           # where scripts/isos/fetch.sh puts the ISOs
+
+# Offline: a LAN mirror of Ubuntu's archive (otherwise the build needs the internet).
+# apt_mirror = "http://mirror.lab.example/ubuntu"
