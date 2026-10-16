@@ -194,10 +194,8 @@ build {
     elevated_password = var.build_password
   }
 
-  # Cloudbase-Init and OpenSSH settle in before sysprep.
-  provisioner "windows-restart" {
-    restart_timeout = "30m"
-  }
+  # Straight on to sysprep, as by hand: no restart, which would also run Cloudbase-Init on the
+  # template itself (and once left WinRM refusing Packer's shutdown command).
 
   post-processor "manifest" {
     output     = "${path.root}/../output/windows-server-2025${local.suffix}.json"

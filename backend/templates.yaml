@@ -40,8 +40,8 @@
 # 2 GB, the desktop wants 4.
 - template: windows-server
   version: "2025"
-  planned: true
-  vsphere: Labs/Templates/tpl-windows-server-2025
+  # Built by Packer (packer/build.sh windows-server) on 2026-10-16, with Office's and SQL Server's files.
+  vsphere: Labs/Templates/tpl-windows-server-2025-20261016
   cpu: 2
   memoryGB: 4
   diskGB: 60

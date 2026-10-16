@@ -274,7 +274,9 @@ def test_config_lists_every_service_and_where_it_runs(offered):
     assert set(services) == set(extras.extras())
     assert services["nginx"]["category"] == "Web servers" and services["nginx"]["ports"] == [80]
     assert {"template": "ubuntu", "version": "26.04", "ready": True} in services["nginx"]["offeredBy"]
-    assert all(not o["ready"] for o in services["iis"]["offeredBy"])  # Windows isn't built yet
+    iis = services["iis"]["offeredBy"]
+    assert {"template": "windows-server", "version": "2025", "ready": True} in iis
+    assert {"template": "windows-server", "version": "2025 Core", "ready": False} in iis  # not built yet
 
 
 def test_planned_templates_cant_be_deployed():
