@@ -7,7 +7,7 @@
 # Bump a line when a new point release comes out, and the template's iso variable with it.
 
 ubuntu-26.04     https://releases.ubuntu.com/26.04/ubuntu-26.04.1-live-server-amd64.iso    https://releases.ubuntu.com/26.04/SHA256SUMS
-windows-server-2025  https://go.microsoft.com/fwlink/?linkid=2293312&clcid=0x409&culture=en-us&country=us  -  windows-server-2025-eval-26100.1742.iso
+windows-server-2025  https://go.microsoft.com/fwlink/?linkid=2293312&clcid=0x409&culture=en-us&country=us  d0ef4502e350e3c6c53c15b1b3020d38a5ded011bf04998e950720ac8579b23d  windows-server-2025-eval-26100.1742.iso
 # SQL Server 2025 Enterprise Developer: free for development and testing, not production.
-sql-server-2025  https://download.microsoft.com/download/dea8c210-c44a-4a9d-9d80-0c81578860c5/ENU/SQLServer2025-x64-ENU-EntDev.iso  -
+sql-server-2025  https://download.microsoft.com/download/dea8c210-c44a-4a9d-9d80-0c81578860c5/ENU/SQLServer2025-x64-ENU-EntDev.iso  f78f869d44e8c2cbf93be16ce6ea52dd811636f046ded29e7a74dd1352134851
 kali-2026.2      https://cdimage.kali.org/kali-2026.2/kali-linux-2026.2-installer-amd64.iso    https://cdimage.kali.org/kali-2026.2/SHA256SUMS

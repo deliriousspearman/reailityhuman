@@ -30,7 +30,8 @@ $cd = Split-Path -Parent $prepare
 Copy-Item -Path (Join-Path $cd '*.ps1') -Destination $Build -Force
 # Offline builds: what would otherwise be downloaded, from the CD's media folder.
 $media = Join-Path $cd 'media'
-$prepareArgs = @()
+# By name, as a hashtable: an array of '-Name' strings would reach a script as positional values.
+$prepareArgs = @{}
 
 # Cloudbase-Init
 $msi = Join-Path $Build 'CloudbaseInitSetup_x64.msi'
@@ -40,7 +41,7 @@ if (Test-Path (Join-Path $media 'cloudbase-init\CloudbaseInitSetup_x64.msi')) {
     Write-Host '==> Downloading Cloudbase-Init'
     Get-Checked $CloudbaseUrl $msi $CloudbaseSha256
 }
-$prepareArgs += @('-Msi', $msi)
+$prepareArgs.Msi = $msi
 
 # Office, for the Outlook extra (desktop only)
 if ($env:LAB_OFFICE -eq 'yes') {
@@ -55,15 +56,15 @@ if ($env:LAB_OFFICE -eq 'yes') {
         $p = Start-Process -FilePath (Join-Path $office 'setup.exe') -ArgumentList '/download', 'download.xml' -WorkingDirectory $office -Wait -PassThru
         if ($p.ExitCode -ne 0) { throw "Office's download failed (exit code $($p.ExitCode))." }
     }
-    $prepareArgs += @('-Office', $office)
+    $prepareArgs.Office = $office
 }
 
 # SQL Server, from its ISO in a CD drive
 if ($env:LAB_SQLSERVER -eq 'yes') {
     $sql = Get-PSDrive -PSProvider FileSystem | Where-Object { Test-Path (Join-Path $_.Root 'x64\setup') } | ForEach-Object { $_.Root } | Select-Object -First 1
     if (-not $sql) { throw "SQL Server's ISO isn't attached." }
-    $prepareArgs += @('-SqlServer', $sql)
+    $prepareArgs.SqlServer = $sql
 }
 
-Write-Host "==> prepare.ps1 $($prepareArgs -join ' ')"
+Write-Host "==> prepare.ps1 $(($prepareArgs.GetEnumerator() | ForEach-Object { "-$($_.Key) $($_.Value)" }) -join ' ')"
 & (Join-Path $Build 'prepare.ps1') @prepareArgs

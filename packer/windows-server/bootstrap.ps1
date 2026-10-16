@@ -4,9 +4,13 @@
 $ErrorActionPreference = 'Stop'
 Start-Transcript -Path C:\Windows\Temp\lab-bootstrap.log
 
-# VMware Tools, from ESXi's tools CD (windows.iso), without the restart it asks for.
-$tools = Get-PSDrive -PSProvider FileSystem | ForEach-Object { Join-Path $_.Root 'setup64.exe' } | Where-Object { Test-Path $_ } | Select-Object -First 1
-if (-not $tools) { throw "No VMware Tools CD (setup64.exe) found." }
+# VMware Tools, from ESXi's tools CD (windows.iso, labelled "VMware Tools"), without the restart it
+# asks for. Older Tools have setup64.exe; newer ones only setup.exe, which the Windows and SQL Server
+# CDs have too, hence the label.
+$cd = Get-Volume | Where-Object { $_.DriveType -eq 'CD-ROM' -and $_.FileSystemLabel -eq 'VMware Tools' } | Select-Object -First 1
+if (-not $cd) { throw "No VMware Tools CD (labelled 'VMware Tools') found." }
+$tools = 'setup64.exe', 'setup.exe' | ForEach-Object { "$($cd.DriveLetter):\$_" } | Where-Object { Test-Path $_ } | Select-Object -First 1
+if (-not $tools) { throw "The VMware Tools CD has no setup64.exe or setup.exe." }
 $p = Start-Process -FilePath $tools -ArgumentList '/S', '/v"/qn REBOOT=R"' -Wait -PassThru
 if ($p.ExitCode -notin 0, 3010) { throw "VMware Tools setup failed (exit code $($p.ExitCode))." }
 
