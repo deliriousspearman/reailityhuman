@@ -144,3 +144,22 @@ def test_bulk_reads_match_reading_each_object():
         assert vc.vm("bulk01-test") == vm and vc.vm("nothing-here") is None
         assert vc.machine_states()["bulk01-test"] == (True, vc.ipv4(vm))
         assert vc.machine_vms() == {"bulk01-test": True}
+
+
+def test_reading_a_guest_file_waits_through_tools_restarting():
+    """Windows restarts during its first boot; vCenter then reports a "general system error" (VIX
+    3016) for guest file reads. That means "not yet", not a failed deploy."""
+    from types import SimpleNamespace
+
+    from pyVmomi import vmodl
+
+    from app.config import settings
+    from app.vsphere import VCenter
+
+    def transfer(**_):
+        raise vmodl.fault.SystemError(reason="vix error codes = (3016, 0)")
+
+    vc = VCenter.__new__(VCenter)
+    vc.cfg = settings()
+    vc.content = SimpleNamespace(guestOperationsManager=SimpleNamespace(fileManager=SimpleNamespace(InitiateFileTransferFromGuest=transfer)))
+    assert vc.read_guest_file(None, "labadmin", "pw", r"C:\ProgramData\lab-deploy\extras.status") is None

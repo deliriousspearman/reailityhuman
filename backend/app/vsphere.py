@@ -407,6 +407,9 @@ class VCenter:
             vim.fault.GuestOperationsUnavailable,
             vim.fault.ToolsUnavailable,
             vim.fault.InvalidState,
+            # "A general system error occurred: vix error codes = (3016, 0)": Tools went away mid-request,
+            # as Windows restarts during its first boot.
+            vmodl.fault.SystemError,
         ):
             return None
         except vim.fault.NoPermission as e:
