@@ -84,6 +84,13 @@ gunzip -c backups/labdeploy-<date>-<time>.sql.gz | docker compose exec -T postgr
 docker compose start worker
 ```
 
+## Templates and testing
+
+The machines' templates are built unattended with Packer (`packer/build.sh <template>`), from ISOs
+`scripts/isos/fetch.sh` puts on the datastore, online or from a carried-in media folder offline.
+`scripts/e2e/run.py` then deploys real machines through the panel and checks every extra works. The
+runbook: [docs/build-templates.md](docs/build-templates.md); by hand: [docs/setup-vsphere.md](docs/setup-vsphere.md).
+
 ## Conventions
 
 - Example addresses use documentation ranges (192.0.2.0/24, 198.51.100.0/24, 203.0.113.0/24) and

@@ -10,6 +10,11 @@ What to do once, by hand, before the panel can deploy machines:
 Names below (`Labs/Templates`, `tpl-ubuntu-26.04`…) are the defaults the panel expects. If you use
 others, change them in `lab-deploy.env` and `backend/templates.yaml` to match.
 
+**Templates are built unattended with Packer:** [build-templates.md](build-templates.md) has one
+command per template, offline builds, and the end-to-end tests that sign them off. Parts 2, 5 and 6
+below are the same steps by hand, for when Packer isn't an option or to see what it does. Part 1
+(vCenter) and part 3 (telling the panel) apply either way.
+
 ## 1. vCenter
 
 vCenter needs a datacenter with your ESXi host in it. On a fresh vCenter, first create a datacenter
