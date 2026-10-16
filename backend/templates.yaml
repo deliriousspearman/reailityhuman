@@ -61,13 +61,13 @@
   access: [rdp, ssh, console]
   extras: [iis, mssql]   # not Outlook: it needs the desktop
 
-# Kali Linux and Parrot Security: attack boxes, reached over Remote Desktop to their own desktop.
-# Planned until each template is built (docs/setup-vsphere.md, "Kali Linux and Parrot Security
-# templates"). Not the desktop extra: they have their own; nor MySQL: Debian has only MariaDB.
+# Kali Linux and Parrot Security: attack boxes, reached over Remote Desktop to their own desktop
+# (packer/kali, or by hand: docs/setup-vsphere.md, "Kali Linux and Parrot Security templates"). Not
+# the desktop extra: they have their own; nor MySQL: Debian has only MariaDB.
 - template: kali
-  version: "2026.3"
-  planned: true
-  vsphere: Labs/Templates/tpl-kali-2026.3
+  version: "2026.2"
+  # Built by Packer (packer/build.sh kali) on 2026-10-16.
+  vsphere: Labs/Templates/tpl-kali-2026.2-20261016
   cpu: 2
   memoryGB: 4
   diskGB: 60

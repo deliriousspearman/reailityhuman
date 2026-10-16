@@ -478,13 +478,13 @@ with the same scripts. The differences:
   a machine of its own.
 - **Never sleeps:** suspend is turned off, so an idle machine stays reachable.
 
-These steps build `tpl-kali-2026.3` and `tpl-parrot-7`. Kali is a rolling distribution with a
+These steps build `tpl-kali-2026.2` and `tpl-parrot-7`. Kali is a rolling distribution with a
 release every few months: build a new template for a new release rather than updating an old one.
 
 ### What you need
 
 - The installer ISO, uploaded to the datastore's `ISO` folder: Kali's **Installer** image
-  (`kali-linux-2026.3-installer-amd64.iso`, not the Live one), or Parrot's **Security Edition**
+  (`kali-linux-2026.2-installer-amd64.iso`, not the Live one), or Parrot's **Security Edition**
   (`Parrot-security-7.x_amd64.iso`).
 - **Their package repositories**, reachable from the VM while you build it: `prepare.sh` updates
   every package and installs cloud-init, xrdp and the extras' packages. That means a LAN mirror
@@ -498,7 +498,7 @@ release every few months: build a new template for a new release rather than upd
 
 ### Create the VM
 
-1. **Create the VM** in `Labs/Templates`, named `tpl-kali-2026.3` (or `tpl-parrot-7`):
+1. **Create the VM** in `Labs/Templates`, named `tpl-kali-2026.2` (or `tpl-parrot-7`):
    - Guest OS: Linux, the newest **Debian GNU/Linux (64-bit)** listed
    - 2 vCPU, **4 GB** memory, **60 GB** disk for Kali (40 GB for Parrot), **thin provisioned**
    - Network adapter: **VMXNET3**, on the LAN port group

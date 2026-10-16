@@ -187,7 +187,8 @@ def test_deploy_waits_for_setup_then_forgets_the_password(queued, windows, guest
     values = {o.key: o.value for o in config}
     assert values.get("guestinfo.userdata", "") == ""
     assert values["guestinfo.metadata"]  # the instance and name stay
-    assert client.get("/api/config").json()["templates"][-1]["family"] == "windows"
+    listed = {(x["template"], x["version"]): x for x in client.get("/api/config").json()["templates"]}
+    assert listed[KEY]["family"] == "windows"
 
 
 def test_windows_waits_even_without_extras(queued, windows, guest):

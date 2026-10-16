@@ -199,7 +199,7 @@ export const templates: MachineTemplate[] = [
 		category: 'Security',
 		os: 'Linux',
 		description: 'Attack box with the usual tools, and a desktop you can reach over RDP.',
-		versions: [{ version: '2026.3' }],
+		versions: [{ version: '2026.2' }],
 		resources: { cpu: 2, memoryGB: 4, diskGB: 60 },
 		access: ['ssh', 'rdp', 'console'],
 		credentials: 'kali / set on first deploy',

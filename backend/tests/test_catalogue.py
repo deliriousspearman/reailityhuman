@@ -27,15 +27,14 @@ def test_every_deployable_version_is_in_the_frontend_catalogue():
 
 
 def test_planned_templates_are_listed_but_not_deployable():
-    """Entries waiting for their template to be built (e.g. Kali) load with their extras, are in the
+    """Entries waiting for their template to be built (e.g. Parrot) load with their extras, are in the
     frontend's catalogue, and can't be deployed."""
     planned = {(t.template, t.version): t for t in catalogue.planned()}
     windows = catalogue.find("windows-server", "2025 Core")
     assert windows.family == "windows" and windows.admin_group == "Administrators"
     assert windows.extras == ("iis", "mssql") and windows.access == ("rdp", "ssh", "console")
     assert "outlook" in catalogue.find("windows-server", "2025").extras  # not on Core: it needs the desktop
-    for key in (("kali", "2026.3"), ("parrot", "7")):
-        box = planned[key]
+    for box in (catalogue.find("kali", "2026.2"), planned[("parrot", "7")]):
         assert box.family == "debian" and "rdp" in box.access
         assert "desktop" not in box.extras  # they have their own, over RDP
         assert "mysql" not in box.extras and "mariadb" in box.extras  # Debian has only MariaDB
@@ -53,7 +52,7 @@ def test_offered_by_says_what_is_ready(monkeypatch):
     monkeypatch.setitem(catalogue.catalogue(), ("ubuntu", "26.04"), replace(ubuntu, extras=("nginx",), planned_extras=("ftp",)))
     nginx = catalogue.offered_by("nginx")
     assert {"template": "ubuntu", "version": "26.04", "ready": True} in nginx
-    assert {"template": "kali", "version": "2026.3", "ready": False} in nginx
+    assert {"template": "parrot", "version": "7", "ready": False} in nginx
     assert {"template": "ubuntu", "version": "26.04", "ready": False} in catalogue.offered_by("ftp")
     assert catalogue.offered_by("iis") == [
         {"template": "windows-server", "version": "2025", "ready": True},
