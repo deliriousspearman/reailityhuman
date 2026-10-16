@@ -276,7 +276,7 @@ def test_config_lists_every_service_and_where_it_runs(offered):
     assert {"template": "ubuntu", "version": "26.04", "ready": True} in services["nginx"]["offeredBy"]
     iis = services["iis"]["offeredBy"]
     assert {"template": "windows-server", "version": "2025", "ready": True} in iis
-    assert {"template": "windows-server", "version": "2025 Core", "ready": False} in iis  # not built yet
+    assert {"template": "windows-server", "version": "2025 Core", "ready": True} in iis
 
 
 def test_planned_templates_cant_be_deployed():

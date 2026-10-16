@@ -27,10 +27,10 @@ def test_every_deployable_version_is_in_the_frontend_catalogue():
 
 
 def test_planned_templates_are_listed_but_not_deployable():
-    """Entries waiting for their template to be built (e.g. Windows Server Core) load with their extras,
-    are in the frontend's catalogue, and can't be deployed."""
+    """Entries waiting for their template to be built (e.g. Kali) load with their extras, are in the
+    frontend's catalogue, and can't be deployed."""
     planned = {(t.template, t.version): t for t in catalogue.planned()}
-    windows = planned[("windows-server", "2025 Core")]
+    windows = catalogue.find("windows-server", "2025 Core")
     assert windows.family == "windows" and windows.admin_group == "Administrators"
     assert windows.extras == ("iis", "mssql") and windows.access == ("rdp", "ssh", "console")
     assert "outlook" in catalogue.find("windows-server", "2025").extras  # not on Core: it needs the desktop
@@ -57,7 +57,7 @@ def test_offered_by_says_what_is_ready(monkeypatch):
     assert {"template": "ubuntu", "version": "26.04", "ready": False} in catalogue.offered_by("ftp")
     assert catalogue.offered_by("iis") == [
         {"template": "windows-server", "version": "2025", "ready": True},
-        {"template": "windows-server", "version": "2025 Core", "ready": False},
+        {"template": "windows-server", "version": "2025 Core", "ready": True},
     ]
 
 
