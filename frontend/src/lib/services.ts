@@ -49,6 +49,54 @@ const planned: Planned[] = [
 		category: 'Network services',
 		description: 'DNS server that blocks ads and trackers. Handy as the DNS server for your other machines.',
 	},
+	{
+		id: 'zimbra',
+		name: 'Zimbra',
+		category: 'Mail',
+		description: 'Mail and collaboration server with webmail.',
+	},
+	{
+		id: 'docker',
+		name: 'Docker',
+		category: 'Developer tools',
+		description: 'Docker Engine and Compose, ready for your own containers.',
+	},
+	{
+		id: 'gitlab',
+		name: 'GitLab CE',
+		category: 'Developer tools',
+		description: 'Git hosting with CI/CD. Build servers and their secrets are a common target.',
+	},
+	{
+		id: 'gitea',
+		name: 'Gitea',
+		category: 'Developer tools',
+		description: 'Lightweight Git hosting with issues, pull requests and Actions.',
+	},
+	{
+		id: 'jenkins',
+		name: 'Jenkins',
+		category: 'Developer tools',
+		description: 'Automation server for builds and deployments, with its plugin ecosystem.',
+	},
+	{
+		id: 'wazuh',
+		name: 'Wazuh',
+		category: 'Security',
+		description: 'Open-source SIEM and endpoint monitoring. Install its agent on your other machines to watch them.',
+	},
+	{
+		id: 'juice-shop',
+		name: 'OWASP Juice Shop',
+		category: 'Practice targets',
+		description: 'Modern vulnerable web shop covering the OWASP Top 10, with a built-in scoreboard of challenges.',
+	},
+	{
+		id: 'dvwa',
+		name: 'DVWA',
+		category: 'Practice targets',
+		description: 'Damn Vulnerable Web Application: classic PHP web flaws with adjustable difficulty.',
+	},
 ];
 
 /** Planned services, shaped like the API's (no template offers them yet). */
