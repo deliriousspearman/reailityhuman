@@ -27,11 +27,12 @@ from alembic.config import Config  # noqa: E402
 from pyVmomi import vim  # noqa: E402
 from sqlalchemy import text  # noqa: E402
 
-from app import jobs  # noqa: E402
+from app import catalogue, jobs  # noqa: E402
 from app.db import engine  # noqa: E402
 from app.vsphere import connect, wait  # noqa: E402
 
-TEMPLATE = "Labs/Templates/tpl-ubuntu-26.04"
+# The Ubuntu template, as templates.yaml names it (builds are date-stamped: tpl-ubuntu-26.04-<date>).
+TEMPLATE = catalogue.find("ubuntu", "26.04").vsphere
 
 
 def _wait_for_vcsim(timeout: float = 30) -> None:
@@ -48,19 +49,23 @@ def _wait_for_vcsim(timeout: float = 30) -> None:
 
 @pytest.fixture(scope="session", autouse=True)
 def inventory():
-    """Labs/Templates/tpl-ubuntu-26.04 (one of vcsim's VMs, with a "clean" snapshot) and
+    """The Ubuntu template in Labs/Templates (one of vcsim's VMs, with a "clean" snapshot) and
     Labs/Machines, as docs/setup-vsphere.md has people set up."""
     _wait_for_vcsim()
     with connect() as vc:
         if vc._path(f"DC0/vm/{TEMPLATE}"):
             return
-        root = vc.datacenter.vmFolder
-        labs = root.CreateFolder("Labs")
-        templates = labs.CreateFolder("Templates")
-        labs.CreateFolder("Machines")
+        def folder(parent, name):
+            """The folder, made if it isn't there (vcsim can outlive a test run)."""
+            found = [f for f in parent.childEntity if isinstance(f, vim.Folder) and f.name == name]
+            return found[0] if found else parent.CreateFolder(name)
+
+        labs = folder(vc.datacenter.vmFolder, "Labs")
+        templates = folder(labs, "Templates")
+        folder(labs, "Machines")
         vm = vc._path("DC0/vm/DC0_C0_RP0_VM0")
         vc.power_off(vm)
-        wait(vm.Rename_Task("tpl-ubuntu-26.04"), "Rename")
+        wait(vm.Rename_Task(TEMPLATE.rsplit("/", 1)[-1]), "Rename")
         wait(vm.CreateSnapshot_Task(name="clean", description="", memory=False, quiesce=False), "Snapshot")
         wait(templates.MoveIntoFolder_Task([vm]), "Move")
         vm.MarkAsTemplate()
