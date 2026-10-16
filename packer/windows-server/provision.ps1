@@ -1,6 +1,7 @@
 # Prepares the Windows Server template build (windows-server.pkr.hcl runs it over WinRM): gathers what
 # prepare.ps1 needs, then runs it. From the build's CD (this script's own, with prepare.ps1 and
-# clean.ps1, and an optional media folder for offline builds) and SQL Server's ISO.
+# clean.ps1, and for offline builds the media folder's windows\ from scripts/isos/fetch-media.sh) and
+# SQL Server's ISO; otherwise downloaded.
 #
 # Environment (set by Packer): LAB_EDITION desktop or core; LAB_OFFICE yes/no (desktop only);
 # LAB_SQLSERVER yes/no.
@@ -28,8 +29,8 @@ $prepare = Find-OnCd 'prepare.ps1'
 if (-not $prepare) { throw "The build's CD (prepare.ps1) isn't attached." }
 $cd = Split-Path -Parent $prepare
 Copy-Item -Path (Join-Path $cd '*.ps1') -Destination $Build -Force
-# Offline builds: what would otherwise be downloaded, from the CD's media folder.
-$media = Join-Path $cd 'media'
+# Offline builds: what would otherwise be downloaded, from the CD's windows folder (fetch-media.sh's).
+$media = Join-Path $cd 'windows'
 # By name, as a hashtable: an array of '-Name' strings would reach a script as positional values.
 $prepareArgs = @{}
 
@@ -37,6 +38,9 @@ $prepareArgs = @{}
 $msi = Join-Path $Build 'CloudbaseInitSetup_x64.msi'
 if (Test-Path (Join-Path $media 'cloudbase-init\CloudbaseInitSetup_x64.msi')) {
     Copy-Item (Join-Path $media 'cloudbase-init\CloudbaseInitSetup_x64.msi') $msi
+    if ((Get-FileHash -Path $msi -Algorithm SHA256).Hash -ne $CloudbaseSha256) {
+        throw "The media folder's Cloudbase-Init isn't version 1.1.9 (its SHA-256 differs): run fetch-media.sh again."
+    }
 } else {
     Write-Host '==> Downloading Cloudbase-Init'
     Get-Checked $CloudbaseUrl $msi $CloudbaseSha256
@@ -64,6 +68,8 @@ if ($env:LAB_SQLSERVER -eq 'yes') {
     $sql = Get-PSDrive -PSProvider FileSystem | Where-Object { Test-Path (Join-Path $_.Root 'x64\setup') } | ForEach-Object { $_.Root } | Select-Object -First 1
     if (-not $sql) { throw "SQL Server's ISO isn't attached." }
     $prepareArgs.SqlServer = $sql
+    $chinook = Join-Path $media 'chinook\Chinook_SqlServer.sql'
+    if (Test-Path $chinook) { $prepareArgs.Chinook = $chinook }
 }
 
 Write-Host "==> prepare.ps1 $(($prepareArgs.GetEnumerator() | ForEach-Object { "-$($_.Key) $($_.Value)" }) -join ' ')"

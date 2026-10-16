@@ -84,8 +84,8 @@ variable "sql_server" {
   type    = bool
   default = true
 }
-# Offline builds: a folder with what's otherwise downloaded (scripts/isos/fetch-media.sh), put on the
-# build's CD as media\.
+# Offline builds: the media folder scripts/isos/fetch-media.sh makes (its windows\ part goes on the
+# build's CD): Cloudbase-Init, Office's files, Chinook. Empty: downloaded during the build.
 variable "media_dir" {
   type    = string
   default = ""
@@ -151,7 +151,7 @@ source "vsphere-iso" "windows" {
       "${path.root}/../../scripts/template/clean.ps1",
       "${path.root}/../../scripts/template/office/download.xml",
     ],
-    var.media_dir != "" ? ["${var.media_dir}/"] : [],
+    var.media_dir != "" ? ["${var.media_dir}/windows"] : [],
   )
   cd_content = {
     "autounattend.xml" = templatefile("${path.root}/autounattend.pkrtpl.xml", {

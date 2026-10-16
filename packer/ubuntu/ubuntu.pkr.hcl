@@ -60,6 +60,14 @@ variable "iso" {
   default = "ubuntu-26.04.1-live-server-amd64.iso"
 }
 # --extras= for prepare.sh: "" bakes in every extra for Debian-family templates; "none" none.
+# Offline: where the media folder from scripts/isos/fetch-media.sh is served on the LAN (its linux/
+# part), e.g. http://mirror.lab.example/lab-media. prepare.sh then downloads WordPress, WP-CLI,
+# Nextcloud and Chinook from there. Empty: from their own sites. (The Nextcloud snap needs the Snap
+# Store: leave it out of offline builds with -var extras=… .)
+variable "media_url" {
+  type    = string
+  default = ""
+}
 variable "extras" {
   type    = string
   default = ""
@@ -77,6 +85,14 @@ variable "ssh_public_key" { type = string }
 locals {
   vm_name     = var.vm_name != "" ? var.vm_name : "tpl-ubuntu-${var.version}-${formatdate("YYYYMMDD", timestamp())}"
   extras_flag = var.extras == "" ? "" : (var.extras == "none" ? "--no-extras" : "--extras=${var.extras}")
+  media       = trimsuffix(var.media_url, "/")
+  # prepare.sh reads these from its environment (sudo would drop Packer's, hence env).
+  media_env = local.media == "" ? "" : join(" ", [
+    "WORDPRESS_URL=${local.media}/linux/wordpress/latest.tar.gz",
+    "WP_CLI_URL=${local.media}/linux/wp-cli/wp-cli.phar",
+    "NEXTCLOUD_URL=${local.media}/linux/nextcloud/latest.tar.bz2",
+    "CHINOOK_URL=${local.media}/linux/chinook",
+  ])
 }
 
 source "vsphere-iso" "ubuntu" {
@@ -148,7 +164,7 @@ build {
   }
 
   provisioner "shell" {
-    inline = ["sudo bash /tmp/prepare.sh ${local.extras_flag}"]
+    inline = ["sudo env ${local.media_env} bash /tmp/prepare.sh ${local.extras_flag}"]
   }
 
   post-processor "manifest" {

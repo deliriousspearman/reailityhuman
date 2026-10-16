@@ -33,8 +33,14 @@ and clones install Outlook from there when it's chosen. Not for Server Core: Out
 .PARAMETER SqlServer
 SQL Server 2025 Developer edition's install media: the folder with its setup.exe, e.g. the mounted
 ISO's drive (docs/setup-vsphere.md says where to get it). It's copied to C:\LabDeploy\sqlserver,
-with the Chinook sample database's script (downloaded, so it needs the internet), and clones install
+with the Chinook sample database's script (downloaded, so it needs the internet, unless -Chinook gives
+it), and clones install
 SQL Server from there when it's chosen. Works on Server Core too.
+
+.PARAMETER Chinook
+Offline: Chinook_SqlServer.sql (the SQL Server extra's dummy data), already downloaded, e.g. from the
+media folder scripts/isos/fetch-media.sh makes. It's checked against the pinned SHA-256 and copied in;
+without it, it's downloaded.
 
 .PARAMETER DryRun
 Only say what it found and what it would do.
@@ -54,6 +60,7 @@ param(
     [switch]$NoSsh,
     [string]$Office,
     [string]$SqlServer,
+    [string]$Chinook,
     [switch]$DryRun
 )
 
@@ -253,14 +260,21 @@ if ($SqlServer) {
     if ($LASTEXITCODE -ge 8) {
         throw "Copying $SqlServer to $SqlServerDir failed (robocopy exit code $LASTEXITCODE)."
     }
-    Step "Downloading the Chinook sample database to $ChinookDir"
     New-Item -ItemType Directory -Force -Path $ChinookDir | Out-Null
-    $chinook = Join-Path $ChinookDir 'Chinook_SqlServer.sql'
-    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-    Invoke-WebRequest -Uri $ChinookUrl -OutFile $chinook -UseBasicParsing
-    if ((Get-FileHash -Path $chinook -Algorithm SHA256).Hash -ne $ChinookSha256) {
-        Remove-Item -Path $chinook
-        throw "$ChinookUrl isn't the file expected (its SHA-256 differs)."
+    $chinookFile = Join-Path $ChinookDir 'Chinook_SqlServer.sql'
+    if ($Chinook) {
+        Step "Copying the Chinook sample database to $ChinookDir"
+        Copy-Item -Path $Chinook -Destination $chinookFile -Force
+        $from = $Chinook
+    } else {
+        Step "Downloading the Chinook sample database to $ChinookDir"
+        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+        Invoke-WebRequest -Uri $ChinookUrl -OutFile $chinookFile -UseBasicParsing
+        $from = $ChinookUrl
+    }
+    if ((Get-FileHash -Path $chinookFile -Algorithm SHA256).Hash -ne $ChinookSha256) {
+        Remove-Item -Path $chinookFile
+        throw "$from isn't the file expected (its SHA-256 differs)."
     }
 }
 
