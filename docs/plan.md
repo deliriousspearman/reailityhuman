@@ -207,7 +207,7 @@ Added after the first design pass. Alongside Pro Labs, people can deploy **one m
 - **Later:** let people add extra private segments, so a pfSense can sit *between* networks rather than beside them.
 
 ### Templates
-- **Catalogue:** 39 templates in 11 categories: firewalls and routers, Linux, Windows, Windows Server (including a ready-made Active Directory domain), hypervisors, mail, storage, self-hosted apps (such as Vaultwarden, MinIO, WordPress and Keycloak), developer tools, security tools and practice targets.
+- **Catalogue:** 30 templates in 10 categories: firewalls and routers, Linux, Windows, Windows Server (including a ready-made Active Directory domain), hypervisors, mail, storage, developer tools, security tools and practice targets. Self-hosted apps (WordPress, Nextcloud, and planned ones such as Vaultwarden, MinIO and Keycloak) are services, chosen under "By service" and installed on an OS template as extras.
   - The catalogue (names, descriptions, categories, versions) is `frontend/src/lib/templates.ts`. What can actually be deployed, and how, is `backend/templates.yaml`, which the API serves; a test checks every entry there is in the catalogue too.
   - Practice targets (Metasploitable, Juice Shop, DVWA) are vulnerable on purpose. Like everything else, they're only reachable inside their owner's personal network.
 - **Apps:** app templates are Ubuntu with the app installed. The machine page separates the app's own sign-in from the SSH user, and knows each app's web address (e.g. MinIO's console on port 9001).

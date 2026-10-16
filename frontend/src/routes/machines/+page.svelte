@@ -5,6 +5,7 @@
 	import { store } from '$lib/store.svelte';
 	import { categories, findTemplate, flagNotes, templates } from '$lib/templates';
 	import { categorySlug } from '$lib/nav';
+	import { withPlanned } from '$lib/services';
 	import type { Service } from '$lib/types';
 
 	let query = $state('');
@@ -45,8 +46,9 @@
 		goto(service ? '?by=service' : page.url.pathname, { keepFocus: true, noScroll: true });
 	}
 
-	const services = $derived(store.config?.services ?? []);
-	/** Service categories, in the order extras.yaml first uses them. */
+	/** The API's services, then those planned but not built (lib/services.ts), greyed out as "soon". */
+	const services = $derived(store.config ? withPlanned(store.config.services) : []);
+	/** Service categories, in the order extras.yaml first uses them, then the planned ones'. */
 	const serviceCategories = $derived([...new Set(services.map((x) => x.category))]);
 	/** "Ubuntu Server 26.04": a template version as people know it. */
 	const osName = (template: string, version: string) => `${findTemplate(template)?.name ?? template} ${version}`;
@@ -164,7 +166,7 @@
 									{/if}
 								</li>
 							{:else}
-								<li><span class="planned">No template offers it yet</span></li>
+								<li><span class="planned">Planned</span> <span class="soon-tag">Soon</span></li>
 							{/each}
 						</ul>
 						{#if x.minMemoryGB}<footer><span>Needs {x.minMemoryGB} GB of memory</span></footer>{/if}

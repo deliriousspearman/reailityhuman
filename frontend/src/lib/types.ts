@@ -121,7 +121,6 @@ export type TemplateCategory =
 	| 'Hypervisors'
 	| 'Mail'
 	| 'Storage'
-	| 'Self-hosted apps'
 	| 'Developer tools'
 	| 'Security'
 	| 'Practice targets';
