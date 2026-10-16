@@ -269,11 +269,16 @@ class Runner:
         m = self.panel.deploy(t.template, t.version, new_name(), extras, self.wait_room)
         r.steps.append(f"deploying {m['name']} ({m['id']})")
         say(r.name, "→ deploying", m["name"])
-        m = self.panel.settle(m["id"], t.deploy_timeout)
-        if m["state"] != "running":
-            raise Failed(f"deploy ended {m['state']}: {self.panel.job_detail(m['id'])}")
-        if not m["ip"]:
-            raise Failed("running, but no address")
+        try:
+            m = self.panel.settle(m["id"], t.deploy_timeout)
+            if m["state"] != "running":
+                raise Failed(f"deploy ended {m['state']}: {self.panel.job_detail(m['id'])}")
+            if not m["ip"]:
+                raise Failed("running, but no address")
+        except Exception:
+            # The caller never gets it to clean up: destroy it here, as the failure is recorded already.
+            self.panel.destroy(m["id"])
+            raise
         r.steps.append(f"running at {m['ip']}")
         return m
 

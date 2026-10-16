@@ -123,8 +123,12 @@ bake_nextcloud() {
 }
 
 bake_nextcloud_snap() {
-	# Where snapd was only just installed, it hasn't been started (see policy-rc.d below).
+	# Where snapd was only just installed, it hasn't been started (see policy-rc.d below). Its AppArmor
+	# profiles too: Ubuntu loads them by default, Kali and Parrot don't, and the snap can't start without.
 	systemctl enable --now snapd.socket snapd.service
+	if systemctl cat snapd.apparmor.service >/dev/null 2>&1; then
+		systemctl enable --now snapd.apparmor.service
+	fi
 	snap wait system seed.loaded
 	snap install nextcloud
 	# Off until a machine is deployed with it, and not updated behind the template's back.

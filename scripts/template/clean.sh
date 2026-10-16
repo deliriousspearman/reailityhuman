@@ -119,6 +119,21 @@ echo "==> User $BUILD_USER"
 rm -f "/etc/sudoers.d/$BUILD_USER"
 # -f: the build user is the one logged in, running this.
 userdel -r -f "$BUILD_USER" 2>&1 | grep -v -e "mail spool" -e "currently used by process" || true
+# A desktop signing the build user in automatically (Parrot's image does) would loop on a user
+# that's gone: take that out, so the console shows the sign-in screen.
+for conf in /etc/lightdm/lightdm.conf /etc/lightdm/lightdm.conf.d/*.conf; do
+	[[ -f $conf ]] && grep -q "^autologin-user=$BUILD_USER\$" "$conf" &&
+		sed -i -e "/^autologin-user=$BUILD_USER\$/d" -e '/^autologin-user-timeout=/d' -e '/^autologin-session=/d' "$conf" &&
+		echo "  automatic sign-in removed from $conf"
+done
+for conf in /etc/sddm.conf /etc/sddm.conf.d/*.conf; do
+	[[ -f $conf ]] && grep -q "^User=$BUILD_USER\$" "$conf" && sed -i "/^User=$BUILD_USER\$/d" "$conf" &&
+		echo "  automatic sign-in removed from $conf"
+done
+if [[ -f /etc/gdm3/daemon.conf ]] && grep -q "^AutomaticLogin=$BUILD_USER\$" /etc/gdm3/daemon.conf; then
+	sed -i -e "/^AutomaticLogin=$BUILD_USER\$/d" -e 's/^AutomaticLoginEnable=.*/AutomaticLoginEnable=false/' /etc/gdm3/daemon.conf
+	echo "  automatic sign-in removed from /etc/gdm3/daemon.conf"
+fi
 
 echo "==> Powering off. Next, in vCenter: CD/DVD to Client Device, snapshot 'clean', convert to template."
 sync
