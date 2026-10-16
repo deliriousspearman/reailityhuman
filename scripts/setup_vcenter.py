@@ -22,13 +22,25 @@ datacenter, cluster, datastore and port group, then:
 
 Safe to re-run: existing folders are kept, roles are brought up to date, permissions are replaced.
 
+Every question can be answered with an option instead, to run it unattended (e.g. after restoring
+vCenter); --help lists them. Passwords come from files, never the command line:
+
+    setup_vcenter.py --host vcenter.lab.example --insecure --admin claude-build@vsphere.local \
+        --admin-password-file ~/keys/vcenter-admin --datacenter Datacenter --cluster Cluster \
+        --datastore datastore1 --network "VM Network" --account svc-labdeploy@vsphere.local \
+        --account-password-file ~/keys/vcenter-svc --yes
+
+An admin password file may hold the user name on its first line and the password on its second.
+
 The account itself can't be created through this API: add it first in the vSphere Client under
 Administration → Single Sign On → Users and Groups (e.g. svc-labdeploy in vsphere.local).
 """
 
+import argparse
 import getpass
 import ssl
 import sys
+from pathlib import Path
 
 try:
     from pyVim.connect import Disconnect, SmartConnect
@@ -85,11 +97,18 @@ def yes(question, default=True):
     return answer.startswith("y")
 
 
-def choose(what, items, label=lambda x: x.name):
-    """Picks one of `items`: automatically if there's only one, otherwise by number."""
+def choose(what, items, label=lambda x: x.name, wanted=None):
+    """Picks one of `items`: the one named `wanted` if given, automatically if there's only one,
+    otherwise by number."""
     if not items:
-        sys.exit(f"No {what} found. Check part 0 of docs/setup-vsphere.md (datacenter, cluster, host).")
+        sys.exit(f"No {what} found. Check part 1 of docs/setup-vsphere.md (datacenter, cluster, host).")
     title = what[0].upper() + what[1:]
+    if wanted is not None:
+        for item in items:
+            if item.name == wanted:
+                print(f"{title}: {label(item)}")
+                return item
+        sys.exit(f"No {what} named {wanted!r}. There's: {', '.join(i.name for i in items)}.")
     if len(items) == 1:
         print(f"{title}: {label(items[0])}")
         return items[0]
@@ -183,12 +202,38 @@ def all_of(content, kind, root):
         view.Destroy()
 
 
-def main():
+def parse_args(argv=None):
+    p = argparse.ArgumentParser(description="Prepares vCenter for the lab panel. Options answer its questions.")
+    p.add_argument("--host", help="vCenter address (IP or hostname)")
+    p.add_argument("--insecure", action="store_true", default=None, help="accept vCenter's self-signed certificate")
+    p.add_argument("--admin", help="administrator account (default: administrator@vsphere.local)")
+    p.add_argument("--admin-password-file", type=Path, help="file with the administrator's password (or user, then password)")
+    p.add_argument("--datacenter")
+    p.add_argument("--cluster", help="cluster, or standalone host")
+    p.add_argument("--datastore")
+    p.add_argument("--network", help="the LAN port group")
+    p.add_argument("--account", help="the panel's account (default: svc-labdeploy@vsphere.local)")
+    p.add_argument("--account-password-file", type=Path, help="file with the panel account's password, to test signing in as it")
+    p.add_argument("--yes", action="store_true", help="don't ask before changing anything")
+    return p.parse_args(argv)
+
+
+def read_secret(path):
+    """(user or None, password) from a file: one line, the password; two, the user then the password."""
+    lines = path.expanduser().read_text().splitlines()
+    if not lines:
+        sys.exit(f"{path} is empty.")
+    return (lines[0].strip(), lines[1]) if len(lines) > 1 else (None, lines[0])
+
+
+def main(args):
     print("Prepares vCenter for the lab panel. Nothing changes until you confirm.\n")
-    host = ask("vCenter address (IP or hostname)")
-    insecure = yes("Accept vCenter's self-signed certificate?", True)
-    admin = ask("Administrator account", "administrator@vsphere.local")
-    password = getpass.getpass(f"Password for {admin}: ")
+    host = args.host or ask("vCenter address (IP or hostname)")
+    insecure = args.insecure if args.insecure is not None else yes("Accept vCenter's self-signed certificate?", True)
+    file_user, password = read_secret(args.admin_password_file) if args.admin_password_file else (None, None)
+    admin = args.admin or file_user or ask("Administrator account", "administrator@vsphere.local")
+    if password is None:
+        password = getpass.getpass(f"Password for {admin}: ")
 
     si = connect(host, admin, password, insecure)
     try:
@@ -196,21 +241,25 @@ def main():
         auth = content.authorizationManager
 
         datacenters = [e for e in content.rootFolder.childEntity if isinstance(e, vim.Datacenter)]
-        dc = choose("datacenter", datacenters)
+        dc = choose("datacenter", datacenters, wanted=args.datacenter)
         computes = all_of(content, vim.ComputeResource, dc.hostFolder)
         compute = choose(
             "cluster or host",
             computes,
             lambda c: f"{c.name} ({'cluster' if isinstance(c, vim.ClusterComputeResource) else 'standalone host'})",
+            wanted=args.cluster,
         )
         datastores = sorted(compute.datastore, key=lambda d: d.name)
         datastore = choose(
-            "datastore", datastores, lambda d: f"{d.name} ({d.summary.freeSpace // 2**30} GB free of {d.summary.capacity // 2**30} GB)"
+            "datastore",
+            datastores,
+            lambda d: f"{d.name} ({d.summary.freeSpace // 2**30} GB free of {d.summary.capacity // 2**30} GB)",
+            wanted=args.datastore,
         )
         networks = sorted((n for n in compute.network if not _is_uplink(n)), key=lambda n: n.name)
-        network = choose("LAN port group (machines join it and get an address by DHCP)", networks)
+        network = choose("LAN port group (machines join it and get an address by DHCP)", networks, wanted=args.network)
 
-        account = ask("\nThe panel's account (create it first in Single Sign On)", "svc-labdeploy@vsphere.local")
+        account = args.account or ask("\nThe panel's account (create it first in Single Sign On)", "svc-labdeploy@vsphere.local")
         if "@" not in account and "\\" not in account:
             account += "@vsphere.local"
         who = principal(account)
@@ -222,7 +271,9 @@ def main():
                 "carry on: vCenter refuses permissions for an account that doesn't exist, so nothing is "
                 "granted to the wrong one."
             )
-            if not yes("Carry on anyway?", False):
+            if args.yes:
+                print("Carrying on (--yes).")
+            elif not yes("Carry on anyway?", False):
                 sys.exit("Nothing changed.")
 
         print(f"""
@@ -234,7 +285,7 @@ About to:
       {ROLE:<24} on folder {FOLDER}, datastore {datastore.name}, port group {network.name}
       {PLACEMENT_ROLE:<24} on {compute.name}
     (replacing any permissions it already has on those objects)""")
-        if not yes("\nGo ahead?", True):
+        if not args.yes and not yes("\nGo ahead?", True):
             sys.exit("Nothing changed.")
 
         # Check the privileges exist before changing anything. (vcsim lists none, so skip it there.)
@@ -267,7 +318,7 @@ About to:
         # Checks only: the changes are made, so a check that fails says so rather than stopping.
         for check in (
             lambda: check_privileges(auth, who, labs, datastore, network, compute),
-            lambda: check_sign_in(host, insecure, account, dc, compute, datastore, network),
+            lambda: check_sign_in(host, insecure, account, dc, compute, datastore, network, args.account_password_file),
         ):
             try:
                 check()
@@ -335,9 +386,12 @@ def _is_uplink(network):
     return bool(getattr(network.config, "uplink", False)) or "SYSTEM/DVS.UPLINKPG" in tags or "DVUplinks" in network.name
 
 
-def check_sign_in(host, insecure, account, dc, compute, datastore, network):
+def check_sign_in(host, insecure, account, dc, compute, datastore, network, password_file=None):
     """Optionally signs in as the panel's account and finds everything the way the panel does."""
-    password = getpass.getpass(f"\nTo test signing in as {account}, enter its password (or press Enter to skip): ")
+    if password_file:
+        password = read_secret(password_file)[1]
+    else:
+        password = getpass.getpass(f"\nTo test signing in as {account}, enter its password (or press Enter to skip): ")
     if not password:
         return
     si = connect(host, account, password, insecure)
@@ -366,7 +420,7 @@ def check_sign_in(host, insecure, account, dc, compute, datastore, network):
 
 if __name__ == "__main__":
     try:
-        main()
+        main(parse_args())
     except KeyboardInterrupt:
         sys.exit("\nStopped.")
     except vim.fault.UserNotFound as e:
