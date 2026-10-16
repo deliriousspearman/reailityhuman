@@ -205,7 +205,8 @@ with HTTPS and no domain name of its own gets a certificate for `<name>.lab.exam
 and switched on at first boot. The panel then reads, through VMware Tools, whether they worked. For
 that it needs the **Guest operation queries** privilege (`setup_vcenter.py` adds it: re-run it after
 upgrading), and the panel's server must reach the **ESXi hosts** on port 443, not just vCenter.
-Which extras a template offers is set by `extras:` in `backend/templates.yaml`.
+Which extras a template offers is set by `extras:` in `backend/templates.yaml`; those prepped but
+not in it yet (it was built before them) go under `plannedExtras:`, and show as *Soon*.
 
 On a small host where vCenter itself holds most of the memory (vCenter 8 "Tiny" takes 14 GB), the
 panel would see almost no memory free. `MEMORY_OVERCOMMIT=1.5` lets machines be given 1.5× the
@@ -402,8 +403,8 @@ With the VM powered off:
 
 ### Tell the panel
 
-In `backend/templates.yaml`, uncomment the Windows Server 2025 entry (or the Core one), commit and
-push. The 2025 entry lists `extras: [iis, outlook]`: if you built it without `-Office`, take
+In `backend/templates.yaml`, take `planned: true` out of the Windows Server 2025 entry (or the Core
+one), commit and push. Until then it's listed under the services it will offer, as *Soon*. The 2025 entry lists `extras: [iis, outlook]`: if you built it without `-Office`, take
 `outlook` out, or machines that tick it fail to set it up. Then deploy one from
 **Machines → Windows Server**. Its activity log shows *Windows is setting
 up…*, then *Ready. Sign in as labadmin.* Connect with **Remote Desktop** (the machine page has the
@@ -509,7 +510,7 @@ template**, as in part 2.
 
 ### Tell the panel
 
-In `backend/templates.yaml`, uncomment the Kali or Parrot entry. Its `version` must match a
+In `backend/templates.yaml`, take `planned: true` out of the Kali or Parrot entry. Its `version` must match a
 version in the frontend's catalogue (`frontend/src/lib/templates.ts`, the `kali` and `parrot`
 entries): for a newer Kali, change it in both, and `vsphere:` to the new template's name. A test
 fails if they don't match. If you built it with `--extras=…`, list only those under `extras:`.

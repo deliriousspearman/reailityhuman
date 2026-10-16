@@ -56,7 +56,8 @@ and Nextcloud while building and checks their checksums; set `WORDPRESS_URL`, `W
 now.
 
 - After building a template with them, list them under its `extras:` in
-  `backend/templates.yaml`. Until then the panel doesn't offer them for it.
+  `backend/templates.yaml`. Until then the panel doesn't offer them for it; list them under
+  `plannedExtras:` meanwhile, so people browsing by service see them coming.
 - To add an extra: add it to `extras.yaml`, and to `prepare.sh`: its packages under its id in
   `EXTRA_PACKAGES_<FAMILY>`, the services they bring in `EXTRA_SERVICES`, and, if it needs more than
   packages (an archive to download, an installer's questions answered), a `bake_<id>` function.

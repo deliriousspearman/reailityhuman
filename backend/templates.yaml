@@ -1,5 +1,5 @@
-# Template versions the panel can deploy. Everything else in the frontend's catalogue
-# (frontend/src/lib/templates.ts) shows as "coming soon".
+# Template versions the panel can deploy, and those planned (prepped, the template not built yet).
+# Everything else in the frontend's catalogue (frontend/src/lib/templates.ts) shows as "coming soon".
 #
 #   vsphere     the vSphere template, under the datacenter's VM folder. It needs a snapshot named
 #               "clean" (machines are linked clones of it), cloud-init and open-vm-tools. How to
@@ -16,6 +16,10 @@
 #               frontend's catalogue (frontend/src/lib/templates.ts) says for the template.
 #   webUrl      optional: its web interface, with {ip} for its address. Default: the catalogue's,
 #               else https://{ip}/
+#   planned     optional: true while its template isn't built yet. It can't be deployed, but shows
+#               under each service it will offer ("Soon"). Once built, take this out.
+#   plannedExtras  optional: extras prepped in prepare.sh but not in this template yet, as it was built
+#               before them; shown as "Soon" under those services. Once rebuilt, move them to extras.
 #
 # Each template and version here must also be in the frontend's catalogue, which has its name,
 # description and category (a test checks).
@@ -28,55 +32,58 @@
   diskGB: 25
   username: ubuntu
   family: debian
-  # Built 2026-10-14, before the web apps, mail, FTP and desktop extras existed. Once rebuilt with
-  # today's prepare.sh: extras: [nginx, apache, apache-https, wordpress, nextcloud, nextcloud-snap,
-  # mail, ftp, desktop]
+  # Built 2026-10-14, before the extras below existed.
   extras: [nginx, apache, apache-https]
+  plannedExtras: [wordpress, nextcloud, nextcloud-snap, mail, ftp, desktop]
 
-# Windows Server 2025, with Desktop Experience and as Server Core. Uncomment each once its template
-# is built (docs/setup-vsphere.md, "Windows Server templates"). Windows needs more memory: Core runs
-# in 2 GB, the desktop wants 4.
-# - template: windows-server
-#   version: "2025"
-#   vsphere: Labs/Templates/tpl-windows-server-2025
-#   cpu: 2
-#   memoryGB: 4
-#   diskGB: 60
-#   username: labadmin
-#   family: windows
-#   access: [rdp, ssh, console]
-#   extras: [iis, outlook]   # Outlook: built with prepare.ps1 -Office
-# - template: windows-server
-#   version: "2025 Core"
-#   vsphere: Labs/Templates/tpl-windows-server-2025-core
-#   cpu: 2
-#   memoryGB: 2
-#   diskGB: 40
-#   username: labadmin
-#   family: windows
-#   access: [rdp, ssh, console]
-#   extras: [iis]   # not Outlook: it needs the desktop
+# Windows Server 2025, with Desktop Experience and as Server Core: planned until each template is
+# built (docs/setup-vsphere.md, "Windows Server templates"). Windows needs more memory: Core runs in
+# 2 GB, the desktop wants 4.
+- template: windows-server
+  version: "2025"
+  planned: true
+  vsphere: Labs/Templates/tpl-windows-server-2025
+  cpu: 2
+  memoryGB: 4
+  diskGB: 60
+  username: labadmin
+  family: windows
+  access: [rdp, ssh, console]
+  extras: [iis, outlook]   # Outlook: built with prepare.ps1 -Office
+- template: windows-server
+  version: "2025 Core"
+  planned: true
+  vsphere: Labs/Templates/tpl-windows-server-2025-core
+  cpu: 2
+  memoryGB: 2
+  diskGB: 40
+  username: labadmin
+  family: windows
+  access: [rdp, ssh, console]
+  extras: [iis]   # not Outlook: it needs the desktop
 
 # Kali Linux and Parrot Security: attack boxes, reached over Remote Desktop to their own desktop.
-# Uncomment each once its template is built (docs/setup-vsphere.md, "Kali Linux and Parrot Security
+# Planned until each template is built (docs/setup-vsphere.md, "Kali Linux and Parrot Security
 # templates"). Not the desktop extra: they have their own.
-# - template: kali
-#   version: "2026.3"
-#   vsphere: Labs/Templates/tpl-kali-2026.3
-#   cpu: 2
-#   memoryGB: 4
-#   diskGB: 60
-#   username: kali
-#   family: debian
-#   access: [ssh, rdp, console]
-#   extras: [nginx, apache, apache-https, wordpress, nextcloud, nextcloud-snap, mail, ftp]
-# - template: parrot
-#   version: "7"
-#   vsphere: Labs/Templates/tpl-parrot-7
-#   cpu: 2
-#   memoryGB: 4
-#   diskGB: 40
-#   username: labuser
-#   family: debian
-#   access: [ssh, rdp, console]
-#   extras: [nginx, apache, apache-https, wordpress, nextcloud, nextcloud-snap, mail, ftp]
+- template: kali
+  version: "2026.3"
+  planned: true
+  vsphere: Labs/Templates/tpl-kali-2026.3
+  cpu: 2
+  memoryGB: 4
+  diskGB: 60
+  username: kali
+  family: debian
+  access: [ssh, rdp, console]
+  extras: [nginx, apache, apache-https, wordpress, nextcloud, nextcloud-snap, mail, ftp]
+- template: parrot
+  version: "7"
+  planned: true
+  vsphere: Labs/Templates/tpl-parrot-7
+  cpu: 2
+  memoryGB: 4
+  diskGB: 40
+  username: labuser
+  family: debian
+  access: [ssh, rdp, console]
+  extras: [nginx, apache, apache-https, wordpress, nextcloud, nextcloud-snap, mail, ftp]

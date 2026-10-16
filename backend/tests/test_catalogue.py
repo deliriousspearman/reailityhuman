@@ -2,6 +2,7 @@
 template's name, description and category: every deployable version must be listed there too."""
 
 import re
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -25,33 +26,62 @@ def test_every_deployable_version_is_in_the_frontend_catalogue():
         assert f"version: '{t.version}'" in blocks[t.template], f"{t.template} {t.version} is in templates.yaml but not in templates.ts"
 
 
-def test_commented_out_templates_are_ready_to_uncomment(tmp_path, monkeypatch):
-    """Entries in templates.yaml waiting for their template to be built (e.g. Windows Server) load,
-    with their extras, once uncommented, and are in the frontend's catalogue."""
-    import shutil
+def test_planned_templates_are_listed_but_not_deployable():
+    """Entries waiting for their template to be built (e.g. Windows Server) load with their extras,
+    are in the frontend's catalogue, and can't be deployed."""
+    planned = {(t.template, t.version): t for t in catalogue.planned()}
+    windows = planned[("windows-server", "2025 Core")]
+    assert windows.family == "windows" and windows.admin_group == "Administrators"
+    assert windows.extras == ("iis",) and windows.access == ("rdp", "ssh", "console")
+    assert planned[("windows-server", "2025")].extras[:2] == ("iis", "outlook")  # not on Core
+    for key in (("kali", "2026.3"), ("parrot", "7")):
+        box = planned[key]
+        assert box.family == "debian" and "rdp" in box.access
+        assert "desktop" not in box.extras  # they have their own, over RDP
+    for key in planned:
+        assert catalogue.find(*key) is None
+    source = _frontend_catalogue()
+    blocks = dict(re.findall(r"\bid: '([^']+)',(.*?)(?=\bid: '|\Z)", source, re.S))
+    for t in planned.values():
+        assert f"version: '{t.version}'" in blocks.get(t.template, ""), f"{t.template} {t.version} isn't in templates.ts"
 
-    from app import extras
+
+def test_offered_by_says_what_is_ready(monkeypatch):
+    """Ready: deployable and built with the extra. Not yet: planned extras, and planned templates."""
+    ubuntu = catalogue.find("ubuntu", "26.04")
+    monkeypatch.setitem(catalogue.catalogue(), ("ubuntu", "26.04"), replace(ubuntu, extras=("nginx",), planned_extras=("ftp",)))
+    nginx = catalogue.offered_by("nginx")
+    assert {"template": "ubuntu", "version": "26.04", "ready": True} in nginx
+    assert {"template": "kali", "version": "2026.3", "ready": False} in nginx
+    assert {"template": "ubuntu", "version": "26.04", "ready": False} in catalogue.offered_by("ftp")
+    assert catalogue.offered_by("iis") == [
+        {"template": "windows-server", "version": "2025", "ready": False},
+        {"template": "windows-server", "version": "2025 Core", "ready": False},
+    ]
+
+
+def test_bad_planned_entries_are_refused(tmp_path, monkeypatch):
     from app.config import settings
 
-    source = settings().catalogue_path.read_text()
-    lines = source.splitlines()
-    first = next(i for i, line in enumerate(lines) if line.startswith("# - template:"))
-    entries = [line[2:] for line in lines[first:] if line.startswith(("# - ", "#   "))]
-    (tmp_path / "templates.yaml").write_text("\n".join(lines[:first] + entries))
-    shutil.copy(settings().catalogue_path.with_name("extras.yaml"), tmp_path / "extras.yaml")
-    monkeypatch.setattr(settings(), "catalogue_path", tmp_path / "templates.yaml")
-    catalogue.catalogue.cache_clear()
-    extras.extras.cache_clear()
-    try:
-        windows = catalogue.find("windows-server", "2025 Core")
-        assert windows is not None and windows.family == "windows" and windows.admin_group == "Administrators"
-        assert windows.extras == ("iis",) and windows.access == ("rdp", "ssh", "console")
-        assert catalogue.find("windows-server", "2025").extras == ("iis", "outlook")  # not on Core
-        for key in (("kali", "2026.3"), ("parrot", "7")):
-            box = catalogue.find(*key)
-            assert box is not None and box.family == "debian" and "rdp" in box.access
-            assert "desktop" not in box.extras  # they have their own, over RDP
-        test_every_deployable_version_is_in_the_frontend_catalogue()
-    finally:
+    def load(text: str):
+        (tmp_path / "templates.yaml").write_text(text)
+        monkeypatch.setattr(settings(), "catalogue_path", tmp_path / "templates.yaml")
         catalogue.catalogue.cache_clear()
-        extras.extras.cache_clear()
+        catalogue.planned.cache_clear()
+        try:
+            return catalogue.planned()
+        finally:
+            catalogue.catalogue.cache_clear()
+            catalogue.planned.cache_clear()
+
+    import shutil
+
+    shutil.copy(settings().catalogue_path.with_name("extras.yaml"), tmp_path / "extras.yaml")
+    entry = "- {template: x, version: '1', cpu: 1, memoryGB: 1, diskGB: 1, username: u"
+    assert load(entry + ", planned: true}\n")[0].vsphere == ""
+    with pytest.raises(ValueError, match="no vsphere template"):
+        load(entry + "}\n")
+    with pytest.raises(ValueError, match="both extras and plannedExtras"):
+        load(entry + ", vsphere: a/b, extras: [nginx], plannedExtras: [nginx]}\n")
+    with pytest.raises(ValueError, match="no debian steps"):
+        load(entry + ", vsphere: a/b, plannedExtras: [iis]}\n")

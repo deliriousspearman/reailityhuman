@@ -1,4 +1,5 @@
-"""Which template versions can be deployed, and where they are in vCenter (templates.yaml).
+"""Which template versions can be deployed, and where they are in vCenter (templates.yaml); also
+those still to be built ("planned"), so people can see what's coming.
 
 The frontend has the full catalogue (descriptions, categories, flags) in src/lib/templates.ts; only
 the versions listed here can be deployed, and the rest show as "coming soon".
@@ -33,24 +34,30 @@ class LiveTemplate:
     # frontend catalogue's (src/lib/templates.ts).
     access: tuple[str, ...] = ()
     web_url: str = ""
+    # Not built yet: listed (e.g. under each service it will offer) but can't be deployed.
+    planned: bool = False
+    # Extras it will offer once rebuilt with today's prepare.sh: prepped, but not in it yet.
+    planned_extras: tuple[str, ...] = ()
 
 
 ACCESS = ("ssh", "rdp", "web", "console")
 
 
-@lru_cache
-def catalogue() -> dict[tuple[str, str], LiveTemplate]:
+def _load() -> list[LiveTemplate]:
     with open(settings().catalogue_path) as f:
         entries = yaml.safe_load(f) or []
-    out = {}
+    out = []
     for e in entries:
         family = e.get("family", "debian")
         if family not in extras.FAMILIES:
             raise ValueError(f"templates.yaml: {e['template']} {e['version']}: unknown family '{family}'")
+        planned = bool(e.get("planned", False))
+        if not planned and not e.get("vsphere"):
+            raise ValueError(f"templates.yaml: {e['template']} {e['version']}: no vsphere template (or mark it planned)")
         t = LiveTemplate(
             template=e["template"],
             version=str(e["version"]),
-            vsphere=e["vsphere"],
+            vsphere=e.get("vsphere", ""),
             cpu=int(e["cpu"]),
             memory_gb=int(e["memoryGB"]),
             disk_gb=int(e["diskGB"]),
@@ -60,14 +67,41 @@ def catalogue() -> dict[tuple[str, str], LiveTemplate]:
             extras=tuple(e.get("extras", [])),
             access=tuple(e.get("access", [])),
             web_url=e.get("webUrl", ""),
+            planned=planned,
+            planned_extras=tuple(e.get("plannedExtras", [])),
         )
         if unknown := [a for a in t.access if a not in ACCESS]:
             raise ValueError(f"templates.yaml: {t.template} {t.version}: unknown access {', '.join(unknown)}")
-        for extra_id in t.extras:
+        if both := set(t.extras) & set(t.planned_extras):
+            raise ValueError(f"templates.yaml: {t.template} {t.version}: {', '.join(sorted(both))} in both extras and plannedExtras")
+        for extra_id in t.extras + t.planned_extras:
             x = extras.find(extra_id)
             if x is None or family not in x.families:
                 raise ValueError(f"templates.yaml: {t.template} {t.version} lists extra '{extra_id}', which extras.yaml has no {family} steps for")
-        out[(t.template, t.version)] = t
+        out.append(t)
+    return out
+
+
+@lru_cache
+def catalogue() -> dict[tuple[str, str], LiveTemplate]:
+    """The templates that can be deployed, by (template, version)."""
+    return {(t.template, t.version): t for t in _load() if not t.planned}
+
+
+@lru_cache
+def planned() -> tuple[LiveTemplate, ...]:
+    """Templates not built yet, listed so people can see what's coming."""
+    return tuple(t for t in _load() if t.planned)
+
+
+def offered_by(extra_id: str) -> list[dict]:
+    """The templates offering an extra: ready (deployable and built with it), or not yet (planned, or
+    waiting to be rebuilt with it)."""
+    out = []
+    for t in (*catalogue().values(), *planned()):
+        if extra_id in t.extras or extra_id in t.planned_extras:
+            ready = not t.planned and extra_id in t.extras
+            out.append({"template": t.template, "version": t.version, "ready": ready})
     return out
 
 

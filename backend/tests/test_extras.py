@@ -213,6 +213,21 @@ def test_config_lists_extras_for_templates_that_have_them(offered):
     assert https["options"][0]["id"] == "domain" and https["options"][0]["default"] == "{fqdn}"
 
 
+def test_config_lists_every_service_and_where_it_runs(offered):
+    services = {s["id"]: s for s in client.get("/api/config").json()["services"]}
+    assert set(services) == set(extras.extras())
+    assert services["nginx"]["category"] == "Web servers" and services["nginx"]["ports"] == [80]
+    assert {"template": "ubuntu", "version": "26.04", "ready": True} in services["nginx"]["offeredBy"]
+    assert all(not o["ready"] for o in services["iis"]["offeredBy"])  # Windows isn't built yet
+
+
+def test_planned_templates_cant_be_deployed():
+    r = client.post(
+        "/api/machines", json={"template": "kali", "version": "2026.3", "owner": "jo", "name": "kali01", "hours": 2}
+    )
+    assert r.status_code in (400, 404, 422), r.text
+
+
 def test_deploy_rejects_bad_extras(offered):
     r = deploy(chosen=[{"id": "apache-https", "options": {"domain": "x.example && reboot"}}])
     assert r.status_code == 422 and "isn't a valid" in r.json()["detail"]

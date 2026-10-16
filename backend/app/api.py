@@ -176,6 +176,9 @@ def config() -> dict:
             }
             for t in catalogue.catalogue().values()
         ],
+        # Every extra, with the templates that offer it (ready) or will (once built or rebuilt), for
+        # choosing a service first and then where to run it.
+        "services": [{**extra_out(x), "offeredBy": catalogue.offered_by(x.id)} for x in extras.extras().values()],
         # Fills {fqdn} in option defaults: "<name>.<machineDomain>", or just the name when empty.
         "machineDomain": cfg.machine_domain.strip("."),
         "graceMs": cfg.grace_minutes * 60_000,
