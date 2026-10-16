@@ -226,7 +226,9 @@ if ($sshCapability) {
     if (-not (Get-NetFirewallRule -Name 'OpenSSH-Server-In-TCP' -ErrorAction SilentlyContinue)) {
         New-NetFirewallRule -Name 'OpenSSH-Server-In-TCP' -DisplayName 'OpenSSH Server (sshd)' -Direction Inbound -Protocol TCP -LocalPort 22 -Action Allow | Out-Null
     }
-    Enable-NetFirewallRule -Name 'OpenSSH-Server-In-TCP'
+    # Every network profile: Windows' own rule only covers private networks, and a new machine's
+    # network is public.
+    Set-NetFirewallRule -Name 'OpenSSH-Server-In-TCP' -Profile Any -Enabled True
     New-Item -Path 'HKLM:\SOFTWARE\OpenSSH' -Force | Out-Null
     Set-ItemProperty -Path 'HKLM:\SOFTWARE\OpenSSH' -Name DefaultShell -Value (Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe')
     # Started on each clone by the panel's first-boot script, once it has its own host keys.

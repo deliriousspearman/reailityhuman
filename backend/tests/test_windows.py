@@ -79,6 +79,8 @@ def test_userdata_is_a_powershell_script_carrying_values_encoded():
     assert "administrators_authorized_keys" in script
     assert "-500' -and $_.Name -ne $user } | Disable-LocalUser" in script  # the built-in Administrator
     assert "Start-Service -Name sshd" in script
+    # Windows' own sshd rule only covers private networks; a new machine's network is public.
+    assert "Set-NetFirewallRule -Name 'OpenSSH-Server-In-TCP' -Profile Any" in script
     # The extras: the runner and IIS's script written, then run; failures still write the status file.
     files = {v.splitlines()[0]: v for v in values if v.startswith("#")}
     assert any("applies the extras" in line for line in files)
@@ -244,7 +246,7 @@ def test_timeout_says_when_the_user_cant_sign_in(queued, windows, guest, monkeyp
 
 def test_no_ssh_where_the_template_doesnt_offer_it():
     script = cloudinit.windows_userdata("labadmin", "Pass-word1", "ssh-ed25519 AAAA test", [], "win01", ssh=False)
-    assert "sshd" not in script and "administrators_authorized_keys" not in script
+    assert "sshd" not in script and "administrators_authorized_keys" not in script and "OpenSSH-Server-In-TCP" not in script
     assert "Start-Service -Name sshd" in cloudinit.windows_userdata("labadmin", "Pass-word1", None, [], "win01")
 
 

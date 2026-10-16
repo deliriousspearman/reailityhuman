@@ -197,6 +197,12 @@ def windows_userdata(
             "        if (Get-Service -Name sshd -ErrorAction SilentlyContinue) {",
             "            Set-Service -Name sshd -StartupType Automatic",
             "            Start-Service -Name sshd",
+            "            # Windows' own rule for it only covers private networks, and a new machine's is public.",
+            "            if (Get-NetFirewallRule -Name 'OpenSSH-Server-In-TCP' -ErrorAction SilentlyContinue) {",
+            "                Set-NetFirewallRule -Name 'OpenSSH-Server-In-TCP' -Profile Any -Enabled True",
+            "            } else {",
+            "                New-NetFirewallRule -Name 'OpenSSH-Server-In-TCP' -DisplayName 'OpenSSH Server (sshd)' -Direction Inbound -Protocol TCP -LocalPort 22 -Action Allow | Out-Null",
+            "            }",
         ]
         if key:
             lines += [
