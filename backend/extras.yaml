@@ -345,11 +345,10 @@
         apt-get install -yq -o Dir::Cache::archives=/opt/lab-deploy/mysql -o Dpkg::Options::=--force-confold mysql-server
         if has_my_cnf; then update-alternatives --quiet --set my.cnf /etc/mysql/mysql.cnf; fi
       fi
-      cat >/etc/mysql/mysql.conf.d/99-lab.cnf <<EOF
-      # Written by the lab panel's MySQL extra: reachable from the network.
-      [mysqld]
-      bind-address = 0.0.0.0
-      EOF
+      # Reachable from the network. In Ubuntu's own settings, as they're read after any file of ours.
+      sed -i -E 's/^(\s*bind-address\s*=).*/\1 0.0.0.0/' /etc/mysql/mysql.conf.d/mysqld.cnf
+      grep -Eq '^\s*bind-address\s*=\s*0\.0\.0\.0' /etc/mysql/mysql.conf.d/mysqld.cnf ||
+        printf '[mysqld]\nbind-address = 0.0.0.0\n' >>/etc/mysql/mysql.conf.d/mysqld.cnf
       systemctl enable -q mysql
       systemctl restart mysql
       pw=$(lab_sql_string "$password" mysql)
