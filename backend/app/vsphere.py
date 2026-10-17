@@ -221,6 +221,18 @@ class VCenter:
             for name, (_, p) in found.items()
         }
 
+    def infrastructure_addresses(self) -> set[str]:
+        """vCenter's address and the hosts' management addresses: a machine must never get one of these
+        (a DHCP pool overlapping them hands it out, and the host or vCenter drops off the network)."""
+        addresses = {self.cfg.vcenter_host.partition(":")[0]}
+        for _, p in self.collect(self.datacenter.hostFolder, vim.HostSystem, ("name", "config.network.vnic")):
+            addresses.add(p.get("name", ""))
+            for vnic in p.get("config.network.vnic") or []:
+                ip = getattr(getattr(vnic.spec, "ip", None), "ipAddress", None)
+                if ip:
+                    addresses.add(ip)
+        return {a for a in addresses if a}
+
     def require_vm(self, name: str) -> vim.VirtualMachine:
         vm = self.vm(name)
         if vm is None:

@@ -394,3 +394,29 @@ def test_the_list_leaves_logs_out(queued):
     m = deploy(queued, "list01")
     assert "log" not in client.get("/api/machines").json()[0]
     assert client.get(f"/api/machines/{m['id']}").json()["log"]
+
+
+def test_a_machine_given_the_hosts_address_is_powered_off(queued, monkeypatch):
+    """A DHCP pool overlapping the lab's fixed addresses can hand a machine the ESXi host's (or
+    vCenter's): then both drop off the network. The machine is powered off at once instead."""
+    from app.vsphere import VCenter
+
+    with connect() as vc:
+        taken = sorted(vc.infrastructure_addresses())[0]
+    monkeypatch.setattr(VCenter, "wait_for_ip", lambda self, vm, timeout: taken)
+    r = client.post("/api/machines", json={"template": "ubuntu", "version": "26.04", "owner": "jo", "name": "clash01", "hours": 2})
+    run_queued(queued)
+    m = client.get(f"/api/machines/{r.json()['id']}").json()
+    assert m["state"] == "error"
+    assert f"It got {taken} from DHCP" in m["log"][-1]["text"]
+    with connect() as vc:
+        assert not vc.powered_on(vc.require_vm(m["vmName"]))
+
+
+def test_infrastructure_addresses_include_vcenter_and_the_hosts():
+    from app.config import settings
+
+    with connect() as vc:
+        addresses = vc.infrastructure_addresses()
+    assert settings().vcenter_host.partition(":")[0] in addresses
+    assert len(addresses) >= 2, addresses  # vCenter, and at least one host

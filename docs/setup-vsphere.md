@@ -231,6 +231,12 @@ Re-running the pipeline does the same.
 The server must be able to reach vCenter on port 443. Machines' addresses come from the DHCP server
 on the port group; the panel reads them from VMware Tools.
 
+**The DHCP pool must not include any fixed address on that network:** the ESXi hosts', vCenter's, and
+anything else set by hand. Every machine (and every template build) asks for a new lease, so a pool
+that overlaps them sooner or later hands one out, and the host or vCenter drops off the network with
+every machine on it. Start the pool above them, or reserve them on the DHCP server. Should it happen
+anyway, the panel powers the machine off as soon as it sees the address, and says why.
+
 ## 4. Check it
 
 1. Open the panel, go to **Machines → Ubuntu Server**, and deploy `ubuntu01` for 2 hours.

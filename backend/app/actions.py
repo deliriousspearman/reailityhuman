@@ -135,6 +135,14 @@ def destroy(vc: VCenter, m: Machine) -> None:
 
 def _record_ip(vc: VCenter, vm, machine_id: str, timeout: float) -> None:
     ip = vc.wait_for_ip(vm, timeout)
+    if ip and ip in vc.infrastructure_addresses():
+        # Two devices on one address: the host or vCenter drops off the network, and every machine
+        # with it. Off with this one, at once.
+        vc.power_off(vm)
+        raise VSphereError(
+            f"It got {ip} from DHCP, which is the address of the ESXi host or vCenter, so it was powered off "
+            "to keep them reachable. Take the lab's fixed addresses out of the DHCP server's pool, then redeploy it."
+        )
     if ip:
         set_machine(machine_id, ip=ip)
         add_log(machine_id, f"Address on the LAN: {ip}")

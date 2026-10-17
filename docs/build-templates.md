@@ -61,6 +61,13 @@ Set `CHECKPOINT_DISABLE=1` in your shell so Packer doesn't look for updates (`bu
   and fill in vCenter's address, datacenter, cluster, datastore and LAN port group. It isn't
   committed.
 
+### Addresses
+
+Every build and every test machine takes a new DHCP lease on the LAN port group. The DHCP pool must
+not include the ESXi hosts', vCenter's or any other fixed address there, or a build VM can take one and
+cut the host off ([setup-vsphere.md](setup-vsphere.md), part 3). With many test runs, also make sure
+the pool is big enough for the leases still held (they last as long as the DHCP server says).
+
 ### Room
 
 Each template takes 5–30 GB of the datastore (Windows with Office and SQL Server the most), and
