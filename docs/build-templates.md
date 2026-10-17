@@ -170,7 +170,8 @@ In `backend/templates.yaml`, for the template's entry:
 Run the backend's tests (`docker compose -f backend/compose.test.yaml run --rm --build tests`), then
 commit and push: the pipeline deploys the panel. Machines that already exist keep using their old
 template; delete it in vCenter once none are left (Admin → Leftover VMs lists stray VMs, not
-templates).
+templates). vCenter may refuse to delete a template outright ("Invalid virtual machine state"):
+right-click it → Template → Convert to Virtual Machine first, then Delete from Disk.
 
 ## 6. Acceptance: the end-to-end tests
 
