@@ -69,14 +69,16 @@ declare -A EXTRA_PACKAGES_RHEL=(
 EXTRA_NO_RECOMMENDS=(desktop)
 # The services those packages bring, either family's name: switched off here, and started by the
 # extra on a machine deployed with it.
+# "mysql" too, where MariaDB has it: older MariaDB (10.1, Ubuntu 18.04) also ships /etc/init.d/mysql, and
+# once mariadb.service is off (and with it its mysql alias) systemd starts that at boot instead.
 declare -A EXTRA_SERVICES=(
 	[nginx]="nginx"
 	[apache]="apache2 httpd"
 	[apache-https]="apache2 httpd"
-	[wordpress]="apache2 mariadb"
-	[nextcloud]="apache2 mariadb"
+	[wordpress]="apache2 mariadb mysql"
+	[nextcloud]="apache2 mariadb mysql"
 	[postgresql]="postgresql"
-	[mariadb]="mariadb"
+	[mariadb]="mariadb mysql"
 	[mail]="postfix dovecot apache2"
 	[ftp]="vsftpd"
 	[desktop]="xrdp xrdp-sesman"
