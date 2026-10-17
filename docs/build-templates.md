@@ -14,7 +14,21 @@ as building by hand ([setup-vsphere.md](setup-vsphere.md), parts 2, 5 and 6), wh
 | Windows Server 2025 (Desktop Experience) | `packer/build.sh windows-server` | ~22 min |
 | Windows Server 2025 Core | `packer/build.sh windows-server -var edition=core` | ~10 min |
 | Kali Linux 2026.2 | `packer/build.sh kali` | ~31 min |
-| Parrot Security 7.4 | `packer/parrot/import-base.sh <ova>` once, then `packer/build.sh parrot` | |
+| Parrot Security 7.4 | `packer/parrot/import-base.sh <ova>` once, then `packer/build.sh parrot` | ~11 min |
+| Rocky Linux 9 | `packer/build.sh rhel -var distro=rocky` | ~15–20 min |
+| AlmaLinux 9 | `packer/build.sh rhel -var distro=alma` | ~15 min |
+| CentOS Stream 9 | `packer/build.sh rhel -var distro=centos-stream` | ~15 min |
+| Ubuntu 20.04 (legacy) | `packer/build.sh ubuntu -var version=20.04 -var iso=ubuntu-20.04.6-live-server-amd64.iso -var extras=…` | ~9 min |
+| Ubuntu 18.04 (legacy) | `packer/build.sh ubuntu-di -var extras=…` | ~13 min |
+| CentOS 7 (legacy) | `packer/build.sh centos-legacy` | ~8 min |
+
+**Legacy targets** are old releases for practising on, with no security updates (keep them off
+networks that matter). Ubuntu 18.04 and 20.04 still use cloud-init; give them only the extras that
+work on their packages (`extras` in templates.yaml, and the same list as `-var extras=`). CentOS 7's
+cloud-init is too old for the panel, so its template is the `legacy` family: it gets
+`scripts/template/legacy/lab-firstboot`, which reads the machine's settings through VMware Tools
+instead (`prepare-legacy.sh` and `clean-legacy.sh` replace prepare.sh and clean.sh), and no extras.
+Its packages come from vault.centos.org.
 
 ## 1. Before the first build
 
@@ -122,7 +136,9 @@ Then, offline:
   `http://<server>/lab-media/linux/...` works.
 - **Linux builds:** add `-var media_url=http://<server>/lab-media` and the mirror:
   `-var apt_mirror=http://<mirror>/ubuntu` (Ubuntu), `-var kali_mirror_host=<mirror> -var kali_mirror_dir=/kali`
-  (Kali). Parrot's mirror goes in the base VM's `/etc/apt/sources.list.d/parrot.list` before building.
+  (Kali), `-var repo_mirror=http://<mirror>/rocky/9` (RHEL family: the folder holding BaseOS/ and
+  AppStream/), `-var vault=http://<mirror>/centos/7.9.2009` (CentOS 7). Parrot's mirror goes in the
+  base VM's `/etc/apt/sources.list.d/parrot.list` before building.
   Leave out the Nextcloud snap (it needs the Snap Store): e.g. `-var extras=nginx,apache,apache-https,wordpress,nextcloud,postgresql,mariadb,mysql,sqlite,mail,ftp,desktop`,
   and list the same in `templates.yaml`.
 - **Windows build:** add `-var media_dir=/path/to/lab-media`: its `windows/` part goes on the build's CD.
@@ -138,6 +154,11 @@ packer/build.sh windows-server -var edition=core      # Server Core: SQL Server,
 packer/build.sh kali
 packer/parrot/import-base.sh ~/Parrot-security-7.4_amd64.ova --credentials ~/.config/lab-deploy/vcenter-build
 packer/build.sh parrot
+packer/build.sh rhel -var distro=rocky                # or alma, centos-stream
+packer/build.sh ubuntu -var version=20.04 -var iso=ubuntu-20.04.6-live-server-amd64.iso \
+    -var extras=nginx,apache,apache-https,wordpress,postgresql,mariadb,sqlite,ftp
+packer/build.sh ubuntu-di -var extras=nginx,apache,apache-https,wordpress,postgresql,mariadb,sqlite,ftp
+packer/build.sh centos-legacy
 ```
 
 (`import-base.sh` needs `GOVC_URL` and `GOVC_INSECURE=1` set as in part 2. It imports the image's
