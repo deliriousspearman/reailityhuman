@@ -90,8 +90,10 @@ lab_cert() {
 
 # lab_apache: Apache turned on and (re)started, with whatever configuration it has now.
 lab_apache() {
+	# By the service that exists: some Debian-family systems (Parrot) have an /etc/httpd folder from
+	# other packages, though Apache there is apache2.
 	local unit=apache2
-	[ -d /etc/httpd ] && unit=httpd
+	systemctl cat apache2.service >/dev/null 2>&1 || unit=httpd
 	systemctl enable -q "$unit"
 	systemctl restart "$unit"
 }
