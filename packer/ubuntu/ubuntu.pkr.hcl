@@ -129,6 +129,8 @@ source "vsphere-iso" "ubuntu" {
     "user-data" = templatefile("${path.root}/user-data.pkrtpl.hcl", {
       ssh_public_key = var.ssh_public_key
       apt_mirror     = var.apt_mirror
+      # Older installers (20.04's) don't know the option; prepare.sh grows the root volume anyway.
+      sizing_all = !contains(["18", "20"], split(".", var.version)[0])
     })
   }
   remove_cdrom = true

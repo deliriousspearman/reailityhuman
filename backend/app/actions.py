@@ -57,6 +57,8 @@ def deploy(vc: VCenter, m: Machine) -> None:
         # SSH only where the template offers it: Windows may have OpenSSH installed but meant to be off.
         ssh = not tpl.access or "ssh" in tpl.access
         extra = cloudinit.windows_guestinfo(m.id, m.name, m.username, m.password, m.ssh_key, chosen, ssh)
+    elif tpl.family == "legacy":
+        extra = cloudinit.legacy_guestinfo(m.id, m.name, m.username, m.password, m.ssh_key, tpl.admin_group)
     else:
         extra = cloudinit.guestinfo(
             m.id, m.name, m.username, m.password, m.ssh_key, tpl.admin_group, extras.cloud_config(chosen, tpl.family, m.name, m.username, m.password)

@@ -1,0 +1,14 @@
+[Unit]
+Description=Lab panel first boot (legacy templates): hostname, user, SSH
+After=network-online.target vmtoolsd.service
+Wants=network-online.target
+# Not "Before=sshd": it restarts sshd itself, once its own host keys and settings are in place.
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/lab-firstboot
+RemainAfterExit=yes
+TimeoutStartSec=10min
+
+[Install]
+WantedBy=multi-user.target

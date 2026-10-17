@@ -255,6 +255,20 @@ def windows_guestinfo(
     return _encode(windows_metadata(instance_id, hostname), userdata_text)
 
 
+def legacy_guestinfo(instance_id: str, hostname: str, username: str, password: str, ssh_key: str | None, admin_group: str) -> dict[str, str]:
+    """extraConfig keys for a legacy Linux VM (family "legacy"), whose cloud-init is too old for the
+    VMware datasource: scripts/template/legacy/lab-firstboot reads these through VMware Tools instead.
+    The password goes as a SHA-512 crypt hash, which these systems all take (glibc 2.7+)."""
+    return {
+        "guestinfo.lab.instance": instance_id,
+        "guestinfo.lab.hostname": hostname,
+        "guestinfo.lab.username": username,
+        "guestinfo.lab.password": hash_password(password),
+        "guestinfo.lab.group": admin_group,
+        "guestinfo.lab.sshkey": base64.b64encode((ssh_key or "").encode()).decode(),
+    }
+
+
 def guestinfo(
     instance_id: str,
     hostname: str,

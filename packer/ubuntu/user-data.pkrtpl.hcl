@@ -19,7 +19,9 @@ autoinstall:
   storage:
     layout:
       name: lvm
+%{ if sizing_all ~}
       sizing-policy: all
+%{ endif ~}
 %{ if apt_mirror != "" ~}
   apt:
     geoip: false

@@ -18,7 +18,8 @@ from .config import settings
 
 import base64
 
-FAMILIES = ("debian", "rhel", "windows")
+# "legacy": old Linux practice targets, set up by lab-firstboot rather than cloud-init (no extras).
+FAMILIES = ("debian", "rhel", "windows", "legacy")
 DIR = "/var/lib/lab-deploy"
 STATUS_FILE = f"{DIR}/extras.status"
 LOG_DIR = "/var/log/lab-deploy"

@@ -19,3 +19,10 @@ vyos-2026.03     https://community-downloads.vyos.dev/stream/2026.03/vyos-2026.0
 centos-stream-9  https://mirror.stream.centos.org/9-stream/BaseOS/x86_64/iso/CentOS-Stream-9-20261013.0-x86_64-boot.iso    https://mirror.stream.centos.org/9-stream/BaseOS/x86_64/iso/CentOS-Stream-9-20261013.0-x86_64-boot.iso.SHA256SUM
 rocky-9          https://download.rockylinux.org/pub/rocky/9/isos/x86_64/Rocky-9.8-x86_64-boot.iso    https://download.rockylinux.org/pub/rocky/9/isos/x86_64/CHECKSUM
 alma-9           https://repo.almalinux.org/almalinux/9/isos/x86_64/AlmaLinux-9.8-x86_64-boot.iso    https://repo.almalinux.org/almalinux/9/isos/x86_64/CHECKSUM
+# Older Ubuntu (legacy practice targets): 20.04's live server (autoinstall, as packer/ubuntu), and
+# 18.04's "alternative" server ISO, the debian-installer one, as its live server can't install
+# unattended (packer/ubuntu-di, with a preseed).
+ubuntu-20.04     https://releases.ubuntu.com/20.04/ubuntu-20.04.6-live-server-amd64.iso    https://releases.ubuntu.com/20.04/SHA256SUMS
+ubuntu-18.04     https://cdimage.ubuntu.com/releases/18.04/release/ubuntu-18.04.6-server-amd64.iso    https://cdimage.ubuntu.com/releases/18.04/release/SHA256SUMS
+# CentOS 7 (legacy practice target, packer/centos-legacy): the final Minimal ISO, from the vault.
+centos-7         https://vault.centos.org/7.9.2009/isos/x86_64/CentOS-7-x86_64-Minimal-2207-02.iso    https://vault.centos.org/7.9.2009/isos/x86_64/sha256sum.txt

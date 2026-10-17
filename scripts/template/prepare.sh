@@ -34,7 +34,7 @@ set -euo pipefail
 # Oldest version of each OS this is written and tested for. cloud-init 21.3+ is the real limit;
 # older releases (Ubuntu 18.04, Debian 11, CentOS 7) don't ship it. Kali and Parrot: their releases
 # on Debian 13's packages (Dovecot 2.4, PHP 8.4), which the extras are written for.
-declare -A MIN_VERSION=([ubuntu]=22.04 [debian]=12 [kali]=2025.3 [parrot]=7 [centos]=9 [rocky]=9 [almalinux]=9)
+declare -A MIN_VERSION=([ubuntu]=18.04 [debian]=12 [kali]=2025.3 [parrot]=7 [centos]=9 [rocky]=9 [almalinux]=9)
 MIN_CLOUD_INIT=21.3
 
 # >>> extras: everything the panel's extras need in a template. Keep this in step with

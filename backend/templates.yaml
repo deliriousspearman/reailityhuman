@@ -119,3 +119,40 @@
   username: labuser
   family: rhel
   extras: [nginx, apache, apache-https]
+
+# Legacy practice targets: old releases, no security updates. Ubuntu 18.04 and 20.04 still have a new
+# enough cloud-init (packer/ubuntu-di and packer/ubuntu); their extras are what works on their PHP and
+# packages (not Nextcloud: it needs PHP 8.1+; not mail: written for Dovecot 2.4). CentOS 7's cloud-init
+# is too old, so it's the "legacy" family, set up by lab-firstboot (packer/centos-legacy), with no
+# extras. Planned until each template is built.
+- template: ubuntu
+  version: "20.04"
+  planned: true
+  vsphere: Labs/Templates/tpl-ubuntu-20.04
+  cpu: 2
+  memoryGB: 2
+  diskGB: 25
+  username: ubuntu
+  family: debian
+  extras: [nginx, apache, apache-https, wordpress, postgresql, mariadb, mysql, sqlite, ftp]
+- template: ubuntu
+  version: "18.04"
+  planned: true
+  vsphere: Labs/Templates/tpl-ubuntu-18.04
+  cpu: 2
+  memoryGB: 2
+  diskGB: 25
+  username: ubuntu
+  family: debian
+  extras: [nginx, apache, apache-https, wordpress, postgresql, mariadb, mysql, sqlite, ftp]
+- template: centos
+  version: "7"
+  planned: true
+  vsphere: Labs/Templates/tpl-centos-7
+  cpu: 2
+  memoryGB: 2
+  diskGB: 20
+  username: labuser
+  family: legacy
+  adminGroup: wheel
+  access: [ssh, console]

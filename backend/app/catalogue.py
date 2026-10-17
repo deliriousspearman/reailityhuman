@@ -24,7 +24,8 @@ class LiveTemplate:
     memory_gb: int
     disk_gb: int
     username: str
-    # OS family: "debian" (Debian, Ubuntu), "rhel" (CentOS Stream, Rocky, Alma) or "windows".
+    # OS family: "debian" (Debian, Ubuntu), "rhel" (CentOS Stream, Rocky, Alma), "windows", or "legacy"
+    # (old Linux set up by lab-firstboot: give adminGroup).
     family: str = "debian"
     # The group that gives the user sudo. Default: "sudo" for the debian family, "wheel" for rhel.
     admin_group: str = "sudo"
@@ -63,7 +64,7 @@ def _load() -> list[LiveTemplate]:
             disk_gb=int(e["diskGB"]),
             username=e["username"],
             family=family,
-            admin_group=e.get("adminGroup", {"rhel": "wheel", "windows": "Administrators"}.get(family, "sudo")),
+            admin_group=e.get("adminGroup", {"rhel": "wheel", "windows": "Administrators"}.get(family, "sudo")),  # legacy: set it per entry
             extras=tuple(e.get("extras", [])),
             access=tuple(e.get("access", [])),
             web_url=e.get("webUrl", ""),
