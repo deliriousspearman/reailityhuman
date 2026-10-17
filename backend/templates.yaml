@@ -91,8 +91,8 @@
 # Its extras so far are the web servers. Planned until each template is built.
 - template: centos
   version: "Stream 9"
-  planned: true
-  vsphere: Labs/Templates/tpl-centos-stream-9
+  # Built by Packer (packer/build.sh rhel -var distro=centos-stream) on 2026-10-17.
+  vsphere: Labs/Templates/tpl-centos-stream-9-20261017
   cpu: 2
   memoryGB: 2
   diskGB: 20
@@ -101,8 +101,8 @@
   extras: [nginx, apache, apache-https]
 - template: rocky
   version: "9"
-  planned: true
-  vsphere: Labs/Templates/tpl-rocky-9
+  # Built by Packer (packer/build.sh rhel -var distro=rocky) on 2026-10-17, from Rocky Linux 9.8.
+  vsphere: Labs/Templates/tpl-rocky-9-20261017
   cpu: 2
   memoryGB: 2
   diskGB: 20
@@ -111,8 +111,8 @@
   extras: [nginx, apache, apache-https]
 - template: alma
   version: "9"
-  planned: true
-  vsphere: Labs/Templates/tpl-alma-9
+  # Built by Packer (packer/build.sh rhel -var distro=alma) on 2026-10-17, from AlmaLinux 9.8.
+  vsphere: Labs/Templates/tpl-alma-9-20261017
   cpu: 2
   memoryGB: 2
   diskGB: 20
@@ -147,8 +147,8 @@
   extras: [nginx, apache, apache-https, wordpress, postgresql, mariadb, mysql, sqlite, ftp]
 - template: centos
   version: "7"
-  planned: true
-  vsphere: Labs/Templates/tpl-centos-7
+  # Built by Packer (packer/build.sh centos-legacy) on 2026-10-17, from CentOS 7.9 (2207-02).
+  vsphere: Labs/Templates/tpl-centos-7-20261017
   cpu: 2
   memoryGB: 2
   diskGB: 20
