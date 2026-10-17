@@ -75,7 +75,10 @@ mkdir -p "$STAGING"
 if [[ $sum == - ]]; then
 	sum=""
 elif [[ $sum == http* ]]; then
-	sum=$(curl -fsSL "$sum" | awk -v f="$file" '{ n = $2; sub(/^\*/, "", n) } n == f { print $1; exit }')
+	# "<hash>  <file>" (sha256sum's) or "SHA256 (<file>) = <hash>" (BSD's, as Rocky and AlmaLinux write).
+	sum=$(curl -fsSL "$sum" | awk -v f="$file" '
+		$1 == "SHA256" && $2 == "(" f ")" && $3 == "=" { print $4; exit }
+		{ n = $2; sub(/^\*/, "", n) } n == f { print $1; exit }')
 	[[ -n $sum ]] || die "the checksum list doesn't name $file"
 fi
 echo "Downloading $file…"

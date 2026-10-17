@@ -14,3 +14,8 @@ kali-2026.2      https://cdimage.kali.org/kali-2026.2/kali-linux-2026.2-installe
 # VyOS Stream (free, quarterly): signed with minisign, key RWTR1ty93Oyontk6caB9WqmiQC4fgeyd/ejgRxCRGd2MQej7nqebHneP
 # (vyos.net/get/stream); this SHA-256 is of the file whose signature checked out.
 vyos-2026.03     https://community-downloads.vyos.dev/stream/2026.03/vyos-2026.03-generic-amd64.iso    56151a536e4a70c1a3f9202d8e6e59e7dd308cc84e2c50b633884a1376a39010
+# The RHEL family's boot ISOs (packer/rhel): the installer, with packages from the distribution's
+# repositories (or a mirror: see rhel.pkr.hcl).
+centos-stream-9  https://mirror.stream.centos.org/9-stream/BaseOS/x86_64/iso/CentOS-Stream-9-20261013.0-x86_64-boot.iso    https://mirror.stream.centos.org/9-stream/BaseOS/x86_64/iso/CentOS-Stream-9-20261013.0-x86_64-boot.iso.SHA256SUM
+rocky-9          https://download.rockylinux.org/pub/rocky/9/isos/x86_64/Rocky-9.8-x86_64-boot.iso    https://download.rockylinux.org/pub/rocky/9/isos/x86_64/CHECKSUM
+alma-9           https://repo.almalinux.org/almalinux/9/isos/x86_64/AlmaLinux-9.8-x86_64-boot.iso    https://repo.almalinux.org/almalinux/9/isos/x86_64/CHECKSUM

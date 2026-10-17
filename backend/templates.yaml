@@ -86,3 +86,36 @@
   family: debian
   access: [ssh, rdp, console]
   extras: [nginx, apache, apache-https, wordpress, nextcloud, nextcloud-snap, postgresql, mariadb, sqlite, mail, ftp]
+
+# The RHEL family: CentOS Stream, Rocky Linux, AlmaLinux (packer/rhel, kickstart from the boot ISO).
+# Its extras so far are the web servers. Planned until each template is built.
+- template: centos
+  version: "Stream 9"
+  planned: true
+  vsphere: Labs/Templates/tpl-centos-stream-9
+  cpu: 2
+  memoryGB: 2
+  diskGB: 20
+  username: labuser
+  family: rhel
+  extras: [nginx, apache, apache-https]
+- template: rocky
+  version: "9"
+  planned: true
+  vsphere: Labs/Templates/tpl-rocky-9
+  cpu: 2
+  memoryGB: 2
+  diskGB: 20
+  username: labuser
+  family: rhel
+  extras: [nginx, apache, apache-https]
+- template: alma
+  version: "9"
+  planned: true
+  vsphere: Labs/Templates/tpl-alma-9
+  cpu: 2
+  memoryGB: 2
+  diskGB: 20
+  username: labuser
+  family: rhel
+  extras: [nginx, apache, apache-https]
