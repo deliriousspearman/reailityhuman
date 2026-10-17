@@ -139,7 +139,7 @@
 - template: ubuntu
   version: "18.04"
   # Built by Packer (packer/build.sh ubuntu-di) on 2026-10-17, from the 18.04.6 debian-installer ISO.
-  vsphere: Labs/Templates/tpl-ubuntu-18.04-20261017
+  vsphere: Labs/Templates/tpl-ubuntu-18.04-20261017b
   cpu: 2
   memoryGB: 2
   diskGB: 25
