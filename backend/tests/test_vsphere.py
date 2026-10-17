@@ -146,6 +146,7 @@ def test_bulk_reads_match_reading_each_object():
         assert vc.machine_vms() == {"bulk01-test": True}
 
 
+@pytest.mark.real_guest_files
 def test_reading_a_guest_file_waits_through_tools_restarting():
     """Windows restarts during its first boot; vCenter then reports a "general system error" (VIX
     3016) for guest file reads. That means "not yet", not a failed deploy."""

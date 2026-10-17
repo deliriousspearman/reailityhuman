@@ -26,5 +26,6 @@ build-backend = "setuptools.build_meta"
 packages = ["app"]
 
 [tool.pytest.ini_options]
+markers = ["real_guest_files: use VCenter.read_guest_file itself, not conftest's finished first boot"]
 testpaths = ["tests"]
 filterwarnings = ["ignore:Using `httpx` with `starlette.testclient`"]

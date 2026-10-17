@@ -90,6 +90,18 @@ def clean_tables():
                 vc.destroy(child)
 
 
+@pytest.fixture(autouse=True)
+def first_boot_finished(request, monkeypatch):
+    """vcsim has no guests to write a status file: by default, every machine has finished its first
+    boot with nothing to report. Tests about the wait itself replace this (test_extras's `guest`);
+    those of reading itself are marked real_guest_files."""
+    from app.vsphere import VCenter
+
+    if request.node.get_closest_marker("real_guest_files"):
+        return
+    monkeypatch.setattr(VCenter, "read_guest_file", lambda self, vm, username, password, path: "")
+
+
 @pytest.fixture
 def queued(monkeypatch):
     """Captures deferred jobs instead of sending them to the queue; run them with run_queued()."""

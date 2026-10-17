@@ -244,7 +244,10 @@ def test_cloud_config_quotes_values_and_runs_each_extra():
     assert script.index("domain=") < script.index(f". {extras.DIR}/extras/lib.sh") < script.index('lab_cert "$domain"')
     assert "a2ensite" in script
     assert config["runcmd"] == [["bash", f"{extras.DIR}/extras/run.sh", "apache-https"]]
-    assert extras.cloud_config([], "debian", "web01") == {}
+    # None chosen: the runner alone, which writes an empty status file (the sign first boot is done).
+    none = extras.cloud_config([], "debian", "web01")
+    assert none["runcmd"] == [["bash", f"{extras.DIR}/extras/run.sh"]]
+    assert [f["path"] for f in none["write_files"]] == [f"{extras.DIR}/extras/run.sh"]
 
     data = yaml.safe_load(cloudinit.userdata("web01", "ubuntu", "pw", None, extra=config).removeprefix("#cloud-config\n"))
     assert data["runcmd"] == config["runcmd"]
@@ -338,11 +341,25 @@ def test_extras_that_never_finish_time_out(queued, offered, guest, monkeypatch):
     assert "didn't finish setting up within" in m["log"][-1]["text"]
 
 
-def test_no_extras_no_waiting(queued, guest):
+def test_no_extras_still_waits_for_first_boot(queued, guest):
+    """Without extras too: ready means its user and SSH are set up, not just that it has an address
+    (Parrot's desktop gets one a few minutes before)."""
+    guest["status"] = ""
     r = deploy()
     run_queued(queued)
-    assert client.get(f"/api/machines/{r.json()['id']}").json()["state"] == "running"
-    assert guest["reads"] == []
+    m = client.get(f"/api/machines/{r.json()['id']}").json()
+    assert m["state"] == "running"
+    assert guest["reads"] == [("ubuntu", extras.STATUS_FILE)]
+    assert "Finishing setting up (its user and SSH)…" in [line["text"] for line in m["log"]]
+
+
+def test_first_boot_that_never_finishes_times_out(queued, guest, monkeypatch):
+    monkeypatch.setattr(settings(), "extras_timeout_seconds", 0)
+    r = deploy()
+    run_queued(queued)
+    m = client.get(f"/api/machines/{r.json()['id']}").json()
+    assert m["state"] == "error"
+    assert m["log"][-1]["text"].startswith("Deploy failed: It didn't finish setting up within")
 
 
 def test_choice_and_boolean_options(monkeypatch):

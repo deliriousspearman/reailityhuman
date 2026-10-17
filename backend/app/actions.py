@@ -185,7 +185,7 @@ def _wait_for_status(vc: VCenter, vm, m: Machine, family: str, timeout: float) -
                 )
             where = CLOUDBASE_LOG if windows else "/var/log/cloud-init-output.log"
             raise SetupError(
-                f"{'It' if windows else 'The extras'} didn't finish setting up within {timeout // 60} minutes. "
+                f"{'The extras' if m.extras and not windows else 'It'} didn't finish setting up within {timeout // 60} minutes. "
                 f"On the machine, {where} shows how far it got.",
                 _log_tail(vc, vm, m, CLOUDBASE_LOG) if windows else None,
             )
@@ -195,19 +195,18 @@ def _wait_for_status(vc: VCenter, vm, m: Machine, family: str, timeout: float) -
 
 def _await_setup(vc: VCenter, vm, m: Machine) -> None:
     """Waits for the machine to finish setting up on first boot, and fails the job if any part
-    didn't. Linux machines are waited for only when they have extras; Windows machines always, as
-    sysprep and a restart come first. Each extra's own log is on the machine (extras.log_file)."""
+    didn't. Every machine writes its status file last (Linux: once cloud-init has set up the user, its
+    password and SSH, then any extras; Windows: after sysprep, a restart and its first-boot script), so
+    "ready" means people can sign in. Each extra's own log is on the machine (extras.log_file)."""
     family = m.family
     windows = family == "windows"
     chosen = m.extras or []
-    if not chosen and not windows:
-        return
     names = ", ".join(x.name if (x := extras.find(c["id"])) else c["id"] for c in chosen)
     if windows:
         add_log(m.id, f"Windows is setting up{f', with {names}' if chosen else ''}. This takes a few minutes…", "muted")
         timeout = settings().windows_setup_timeout_seconds
     else:
-        add_log(m.id, f"Installing extras: {names}…", "muted")
+        add_log(m.id, f"Installing extras: {names}…" if chosen else "Finishing setting up (its user and SSH)…", "muted")
         timeout = settings().extras_timeout_seconds
     try:
         text = _wait_for_status(vc, vm, m, family, timeout)

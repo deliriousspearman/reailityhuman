@@ -357,13 +357,13 @@ def script(x: Extra, family: str, hostname: str, options: dict[str, str], userna
 
 
 def cloud_config(chosen: list[dict], family: str, hostname: str, username: str = "", password: str = "") -> dict:
-    """write_files and runcmd entries that apply these (resolved) extras on first boot."""
-    if not chosen:
-        return {}
-    files = [
-        {"path": f"{DIR}/extras/run.sh", "permissions": "0755", "content": RUNNER},
-        {"path": f"{DIR}/extras/lib.sh", "permissions": "0644", "content": LIB},
-    ]
+    """write_files and runcmd entries that apply these (resolved) extras on first boot. With none, the
+    runner still runs and writes an empty status file: cloud-init runs it last, once the user, its
+    password and SSH are set up, so the panel waits for it as the sign the machine is ready (a desktop
+    distribution can have its address well before that)."""
+    files = [{"path": f"{DIR}/extras/run.sh", "permissions": "0755", "content": RUNNER}]
+    if chosen:
+        files.append({"path": f"{DIR}/extras/lib.sh", "permissions": "0644", "content": LIB})
     for c in chosen:
         x = extras()[c["id"]]
         content = script(x, family, hostname, c["options"], username, password)
