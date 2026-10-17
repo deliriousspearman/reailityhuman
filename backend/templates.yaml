@@ -145,7 +145,8 @@
   diskGB: 25
   username: ubuntu
   family: debian
-  extras: [nginx, apache, apache-https, wordpress, postgresql, mariadb, sqlite, ftp]
+  # No WordPress: it needs PHP 7.4, and 18.04 has 7.2.
+  extras: [nginx, apache, apache-https, postgresql, mariadb, sqlite, ftp]
 - template: centos
   version: "7"
   # Built by Packer (packer/build.sh centos-legacy) on 2026-10-17, from CentOS 7.9 (2207-02).
