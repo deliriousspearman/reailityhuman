@@ -259,6 +259,11 @@
   debian:
     packages: [postgresql]
     script: |
+      # Debian and Ubuntu set PostgreSQL up with SSL on ssl-cert's snakeoil certificate, which clean.sh
+      # deletes from templates (no two machines share one): this machine's own, or it won't start.
+      if [ ! -e /etc/ssl/private/ssl-cert-snakeoil.key ] && command -v make-ssl-cert >/dev/null; then
+        make-ssl-cert generate-default-snakeoil --force-overwrite
+      fi
       hba=$(find /etc/postgresql -mindepth 3 -maxdepth 3 -path '*/main/pg_hba.conf' | sort -V | tail -n 1)
       if ! grep -q '^# Lab panel' "$hba"; then
         printf '# Lab panel: sign-ins with a password from anywhere.\nhost all all 0.0.0.0/0 scram-sha-256\nhost all all ::/0 scram-sha-256\n' >>"$hba"
