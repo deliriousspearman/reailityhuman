@@ -77,10 +77,11 @@ variable "image_user" {
   type    = string
   default = "user"
 }
+# Not marked sensitive: it's the image's published default, and Packer would mask every "parrot" in
+# its output.
 variable "image_password" {
-  type      = string
-  default   = "parrot"
-  sensitive = true
+  type    = string
+  default = "parrot"
 }
 variable "extras" {
   type    = string

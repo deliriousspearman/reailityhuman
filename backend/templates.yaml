@@ -77,11 +77,11 @@
   extras: [nginx, apache, apache-https, wordpress, nextcloud, nextcloud-snap, postgresql, mariadb, sqlite, mail, ftp]
 - template: parrot
   version: "7"
-  planned: true
-  vsphere: Labs/Templates/tpl-parrot-7
+  # Built by Packer (packer/parrot) on 2026-10-17, from Parrot Security 7.4's own image.
+  vsphere: Labs/Templates/tpl-parrot-7.4-20261017
   cpu: 2
   memoryGB: 4
-  diskGB: 40
+  diskGB: 64
   username: labuser
   family: debian
   access: [ssh, rdp, console]

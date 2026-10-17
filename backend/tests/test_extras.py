@@ -279,9 +279,15 @@ def test_config_lists_every_service_and_where_it_runs(offered):
     assert {"template": "windows-server", "version": "2025 Core", "ready": True} in iis
 
 
-def test_planned_templates_cant_be_deployed():
+def test_planned_templates_cant_be_deployed(monkeypatch):
+    from dataclasses import replace
+
+    from app import catalogue
+
+    future = replace(catalogue.find("kali", "2026.2"), version="2027.1", vsphere="", planned=True)
+    monkeypatch.setattr(catalogue, "planned", lambda: (future,))
     r = client.post(
-        "/api/machines", json={"template": "parrot", "version": "7", "owner": "jo", "name": "parrot01", "hours": 2}
+        "/api/machines", json={"template": "kali", "version": "2027.1", "owner": "jo", "name": "kali01", "hours": 2}
     )
     assert r.status_code in (400, 404, 422), r.text
 
