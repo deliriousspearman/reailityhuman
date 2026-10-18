@@ -5,8 +5,11 @@
 #               "clean" (machines are linked clones of it), cloud-init and open-vm-tools. How to
 #               build one: docs/setup-vsphere.md and scripts/template/.
 #   username    the account cloud-init creates; its password is generated for each machine.
-#   family      debian (Debian, Ubuntu; the default), rhel (CentOS Stream, Rocky, Alma) or windows
-#               (sysprepped with Cloudbase-Init: scripts/template/prepare.ps1 and clean.ps1).
+#   family      debian (Debian, Ubuntu; the default), rhel (CentOS Stream, Rocky, Alma), windows
+#               (sysprepped with Cloudbase-Init: scripts/template/prepare.ps1 and clean.ps1), legacy
+#               (no usable cloud-init: lab-firstboot reads the machine's settings through VMware Tools;
+#               old Linux, and OPNsense with its own lab-firstboot) or vyos (VyOS's cloud-init, which
+#               takes configuration commands).
 #   adminGroup  optional: the group that gives that account sudo. Default: "sudo" for the debian
 #               family, "wheel" for rhel. (Windows users always go in Administrators.)
 #   extras      optional: extras (extras.yaml) people can tick at deploy. Only list those whose
@@ -76,6 +79,22 @@
   family: windows
   access: [rdp, ssh, console]
   extras: [iis, mssql, outlook]
+
+# OPNsense: a firewall (packer/opnsense). No cloud-init: scripts/template/opnsense/lab-firstboot sets
+# root's password, SSH key and the host name in its config.xml at first boot (family legacy). Both
+# adapters are DHCP clients on the lab network for now, with no DHCP server; WAN lets in the web UI,
+# SSH and ping.
+- template: opnsense
+  version: "26.7"
+  # Built by Packer (packer/build.sh opnsense) on 2026-10-18.
+  vsphere: Labs/Templates/tpl-opnsense-26.7-20261018
+  cpu: 2
+  memoryGB: 2
+  diskGB: 20
+  username: root
+  family: legacy
+  adminGroup: admins
+  access: [web, ssh, console]
 
 # Kali Linux and Parrot Security: attack boxes, reached over Remote Desktop to their own desktop
 # (packer/kali, or by hand: docs/setup-vsphere.md, "Kali Linux and Parrot Security templates"). Not

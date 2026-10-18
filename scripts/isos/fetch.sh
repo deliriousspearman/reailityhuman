@@ -8,7 +8,8 @@
 #
 # It downloads the ISO, checks its SHA-256, uploads it, then deletes the local copy (--keep keeps
 # it, e.g. to carry it to an offline network). Already on the datastore: nothing to do. The file is
-# saved under the name in isos.txt's URL, or the name given after it (for links that redirect).
+# saved under the name in isos.txt's URL, or the name given after it (for links that redirect). A
+# compressed one (.bz2 or .xz, as OPNsense publishes it) is checked as downloaded, then unpacked.
 #
 # vCenter comes from the environment: GOVC_URL (vCenter's address), GOVC_DATACENTER and
 # GOVC_DATASTORE (default: Datacenter and datastore1); GOVC_INSECURE=1 for a self-signed
@@ -45,6 +46,8 @@ done
 [[ -n $name ]] || die "which ISO? (--list shows them)"
 read -r _ url sum file < <(entries | awk -v n="$name" '$1 == n') || die "no ISO called $name in isos.txt"
 file=${file:-${url##*/}}
+iso=${file%.bz2}
+iso=${iso%.xz}
 
 if ((upload)); then
 if [[ -n $credentials ]]; then
@@ -64,8 +67,8 @@ govc() {
 	fi
 }
 
-if govc datastore.ls "ISO/$file" >/dev/null 2>&1; then
-	echo "[$GOVC_DATASTORE] ISO/$file is already there."
+if govc datastore.ls "ISO/$iso" >/dev/null 2>&1; then
+	echo "[$GOVC_DATASTORE] ISO/$iso is already there."
 	exit 0
 fi
 fi
@@ -92,12 +95,16 @@ elif ! echo "$sum  $STAGING/$file" | sha256sum -c --quiet; then
 else
 	echo "Checksum OK."
 fi
+case $file in
+	*.bz2) echo "Unpacking $file…"; bunzip2 -f "$STAGING/$file" ;;
+	*.xz) echo "Unpacking $file…"; xz -d -f "$STAGING/$file" ;;
+esac
 if ! ((upload)); then
-	echo "Done: $STAGING/$file"
+	echo "Done: $STAGING/$iso"
 	exit 0
 fi
-echo "Uploading to [$GOVC_DATASTORE] ISO/$file…"
+echo "Uploading to [$GOVC_DATASTORE] ISO/$iso…"
 govc datastore.mkdir -p ISO
-govc datastore.upload "$STAGING/$file" "ISO/$file"
-((keep)) || rm -f "$STAGING/$file"
-echo "Done: [$GOVC_DATASTORE] ISO/$file"
+govc datastore.upload "$STAGING/$iso" "ISO/$iso"
+((keep)) || rm -f "$STAGING/$iso"
+echo "Done: [$GOVC_DATASTORE] ISO/$iso"

@@ -27,3 +27,5 @@ ubuntu-20.04     https://releases.ubuntu.com/20.04/ubuntu-20.04.6-live-server-am
 ubuntu-18.04     https://cdimage.ubuntu.com/releases/18.04/release/ubuntu-18.04.6-server-amd64.iso    https://cdimage.ubuntu.com/releases/18.04/release/SHA256SUMS
 # CentOS 7 (legacy practice target, packer/centos-legacy): the final Minimal ISO, from the vault.
 centos-7         https://vault.centos.org/7.9.2009/isos/x86_64/CentOS-7-x86_64-Minimal-2207-02.iso    https://vault.centos.org/7.9.2009/isos/x86_64/sha256sum.txt
+# OPNsense: published bzip2-compressed; fetch.sh checks then unpacks it.
+opnsense-26.7  https://pkg.opnsense.org/releases/26.7/OPNsense-26.7-dvd-amd64.iso.bz2  https://pkg.opnsense.org/releases/26.7/OPNsense-26.7-checksums-amd64.sha256

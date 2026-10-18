@@ -1,0 +1,81 @@
+#!/bin/sh
+# The lab panel's first boot for OPNsense templates (installed by prepare-opnsense.sh), which have no
+# cloud-init: like ../legacy/lab-firstboot, it reads the guestinfo.lab.* keys the panel sets
+# (backend/app/cloudinit.py: legacy_guestinfo) through VMware Tools. Run by OPNsense's boot hooks:
+#
+#   lab-firstboot early   # before the configuration is applied: the hostname, and root's password
+#                         # (the machine's, as a SHA-512 hash) and SSH key, written into config.xml
+#   lab-firstboot start   # at the end of boot: /var/lib/lab-deploy/extras.status, which the panel
+#                         # waits for as the sign the machine is ready
+#
+# It acts once per machine (guestinfo.lab.instance); a reset reverts the disk to before the first boot,
+# so it runs again. The panel's user is root: OPNsense's administrator.
+set -u
+
+DIR=/var/lib/lab-deploy
+LOG_DIR=/var/log/lab-deploy
+CONFIG=/conf/config.xml
+
+mkdir -p "$DIR" "$LOG_DIR"
+exec >>"$LOG_DIR/firstboot.log" 2>&1
+echo "== $(date -u '+%Y-%m-%d %H:%M:%S') lab-firstboot ${1:-}"
+
+rpc() { /usr/local/bin/vmware-rpctool "info-get guestinfo.lab.$1" 2>/dev/null; }
+
+instance=$(rpc instance)
+if [ -z "$instance" ]; then
+	echo "No panel data (guestinfo.lab.instance): nothing to do."
+	exit 0
+fi
+
+case ${1:-} in
+early)
+	if [ "$(cat "$DIR/instance" 2>/dev/null)" = "$instance" ]; then
+		echo "Already set up for $instance."
+		exit 0
+	fi
+	LAB_HOST=$(rpc hostname)
+	LAB_HASH=$(rpc password)
+	LAB_KEY64=$(rpc sshkey)
+	user=$(rpc username)
+	export LAB_HOST LAB_HASH LAB_KEY64
+	echo "Setting up $instance: host $LAB_HOST"
+	[ "$user" = root ] || echo "The panel's user is $user, but OPNsense's administrator is root: setting up root."
+	# OPNsense's configuration is the source of truth: it writes the hostname, the account and its keys
+	# out from there as it boots. (PHP reads the hash's "$" signs from the environment as they are.)
+	# shellcheck disable=SC2016 # PHP's variables, not the shell's
+	/usr/local/bin/php -r '
+		$file = "/conf/config.xml";
+		$doc = new DOMDocument();
+		$doc->load($file);
+		$xpath = new DOMXPath($doc);
+		$xpath->query("/opnsense/system/hostname")->item(0)->nodeValue = getenv("LAB_HOST");
+		$root = $xpath->query("/opnsense/system/user[name=\"root\"]")->item(0);
+		foreach (["password" => getenv("LAB_HASH"), "authorizedkeys" => getenv("LAB_KEY64")] as $name => $value) {
+			$node = $xpath->query($name, $root)->item(0);
+			if ($node === null) {
+				$node = $root->appendChild($doc->createElement($name));
+			}
+			$node->nodeValue = $value;
+		}
+		$doc->save($file);
+	' || { echo "Couldn't update $CONFIG."; exit 1; }
+	# And the system account now, in case OPNsense only syncs it from the configuration later.
+	printf '%s\n' "$LAB_HASH" | pw usermod root -H 0
+	echo "$instance" >"$DIR/instance"
+	rm -f "$DIR/extras.status"
+	;;
+start)
+	[ "$(cat "$DIR/instance" 2>/dev/null)" = "$instance" ] || { echo "Not set up for $instance yet."; exit 0; }
+	[ -f "$DIR/extras.status" ] && exit 0
+	# Empty: no extras on OPNsense. Written last, in one go, readable by the panel.
+	tmp=$(mktemp "$DIR/status.XXXXXX")
+	chmod 644 "$tmp"
+	mv "$tmp" "$DIR/extras.status"
+	echo "Done."
+	;;
+*)
+	echo "usage: lab-firstboot early|start" >&2
+	exit 2
+	;;
+esac

@@ -27,10 +27,11 @@ export const templates: MachineTemplate[] = [
 		category: 'Firewalls and routers',
 		os: 'FreeBSD',
 		description: 'Firewall and router forked from pfSense, with a newer web interface and a REST API.',
-		versions: [{ version: '26.7' }, { version: '26.1' }],
-		resources: { cpu: 2, memoryGB: 4, diskGB: 20 },
+		versions: [{ version: '26.7' }],
+		resources: { cpu: 2, memoryGB: 2, diskGB: 20 },
 		access: ['web', 'ssh', 'console'],
-		credentials: 'root / opnsense',
+		webUrl: 'https://{ip}/',
+		credentials: 'root / set on first deploy',
 	},
 	{
 		id: 'vyos',
@@ -38,10 +39,10 @@ export const templates: MachineTemplate[] = [
 		category: 'Firewalls and routers',
 		os: 'Linux',
 		description: 'Command-line router: routing protocols, VPNs and firewalling configured like network gear.',
-		versions: [{ version: '1.5 rolling' }, { version: '1.4 LTS' }],
-		resources: { cpu: 1, memoryGB: 1, diskGB: 8 },
+		versions: [{ version: '1.5 rolling' }],
+		resources: { cpu: 2, memoryGB: 1, diskGB: 10 },
 		access: ['ssh', 'console'],
-		credentials: 'vyos / vyos',
+		credentials: 'vyos / set on first deploy',
 	},
 
 	// Linux
