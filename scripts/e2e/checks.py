@@ -57,6 +57,31 @@ CASES: dict[str, list[dict]] = {
     "ftp": [{"options": {}, "checks": [("tcp", 21)]}],
     "desktop": [{"options": {}, "checks": [("tcp", 3389)]}],
     "iis": [{"options": {}, "checks": [("http", "http", 80, "/", None)]}],
+    # Docker and the container apps (their images are in the template; nothing is pulled).
+    "docker": [{"options": {}, "checks": [("ssh", "docker info >/dev/null && echo docker-ok", "docker-ok")]}],
+    "juice-shop": [{"options": {}, "checks": [("http", "http", 80, "/", "OWASP Juice Shop")]}],
+    "dvwa": [{"options": {}, "checks": [("http", "http", 80, "/login.php", "Damn Vulnerable Web Application")]}],
+    "uptime-kuma": [{"options": {}, "checks": [("http", "http", 80, "/", "Uptime Kuma")]}],
+    "grafana": [
+        {
+            "options": {},
+            "checks": [
+                ("http", "http", 80, "/login", "Grafana"),
+                ("ssh", "curl -s -u {username}:{password} http://127.0.0.1/api/user", '"isGrafanaAdmin":true'),
+            ],
+        }
+    ],
+    "vaultwarden": [{"options": {}, "checks": [("http", "https", 443, "/", "Vaultwarden")]}],
+    "gitea": [
+        {
+            "options": {},
+            "checks": [
+                ("http", "http", 80, "/", "Gitea"),
+                ("tcp", 2222),
+                ("ssh", "curl -s -u {username}:{password} http://127.0.0.1/api/v1/user", '"is_admin":true'),
+            ],
+        }
+    ],
     "mssql": [
         {
             "options": {"sample_data": "yes"},

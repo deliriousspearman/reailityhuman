@@ -14,6 +14,8 @@ as building by hand ([setup-vsphere.md](setup-vsphere.md), parts 2, 5 and 6), wh
 | Windows Server 2025 (Desktop Experience) | `packer/build.sh windows-server` | ~22 min |
 | Windows Server 2025 Core | `packer/build.sh windows-server -var edition=core` | ~10 min |
 | Windows 11 Enterprise (evaluation) | `packer/build.sh windows` | ~37 min |
+| OPNsense 26.7 | `packer/build.sh opnsense` | ~14 min |
+| VyOS 1.5 rolling | `packer/vyos/build-iso.sh` once, then `packer/build.sh vyos` | ~8 min |
 | Kali Linux 2026.2 | `packer/build.sh kali` | ~31 min |
 | Parrot Security 7.4 | `packer/parrot/import-base.sh <ova>` once, then `packer/build.sh parrot` | ~11 min |
 | Rocky Linux 9 | `packer/build.sh rhel -var distro=rocky` | ~15–20 min |
@@ -37,6 +39,22 @@ Boot, CPU and RAM checks, so vCenter needs no key provider. Machines can't use B
 Guard or Windows Hello for Business. The build also switches the built-in Administrator on (client
 Windows has it off) and stops the Store installing or updating apps, which would make sysprep fail.
 Rebuild it before the evaluation runs out (the date is on the desktop).
+
+**OPNsense** has no cloud-init, so it's the `legacy` family with its own `lab-firstboot`
+(`scripts/template/opnsense/`), which writes each machine's host name, root password and SSH key
+into its `config.xml` at first boot. Its build types the installer's answers, and first switches the
+network adapters off for the live system at the boot loader: OPNsense's default would serve DHCP on
+the lab network. If `live.sh` ever finds an adapter in the live system, it powers the VM off.
+
+**VyOS** builds from our own ISO (part 2), whose cloud-init takes the panel's settings from vCenter
+(the `vyos` family): the user through cloud-config `users` (with none there, VyOS adds `vyos` /
+`vyos`), the rest as configuration commands. The template uses BIOS, not EFI: on EFI the installed
+disk's fallback loader reset the VM onto the CD.
+
+**Container apps** (Juice Shop, DVWA, Uptime Kuma, Grafana, Vaultwarden, Gitea): `prepare.sh` pulls
+their pinned images (`DOCKER_IMAGES`) into the template's Docker, so machines start them without
+internet. Offline, `fetch-media.sh` saves them in the media folder's `linux/docker`, and the Linux
+builds load them from there (`media_url`).
 
 ## 1. Before the first build
 
@@ -112,6 +130,12 @@ scripts/isos/fetch.sh ubuntu-26.04 --credentials ~/.config/lab-deploy/vcenter-bu
 
 It downloads, checks, uploads and deletes its copy. Without internet, see part 3.
 
+VyOS's own ISO lacks VMware Tools and cloud-init, so build one with both, once per VyOS release, on a
+Linux machine with internet, Docker and about 10 GB free (not in an LXC container: the build needs
+loop devices): `packer/vyos/build-iso.sh <folder>`. Upload the ISO it prints to the datastore's `ISO`
+folder and set `packer/vyos`'s `iso` variable to its name. VyOS rolling is GPL; its name and logos
+are trademarks, so use the image in your own lab and don't redistribute it as "VyOS".
+
 Parrot's comes as a VM image (an OVA, 10 GB), not an ISO: download `Parrot-security-<version>_amd64.ova`
 from <https://deb.parrot.sh/parrot/iso/>, check it against `signed-hashes.txt` there, and keep it for
 part 4.
@@ -127,7 +151,8 @@ internet, gather them first on a machine with internet, and carry them across:
    scripts/isos/fetch-media.sh /path/to/lab-media
    ```
 
-   About 400 MB: WordPress, WP-CLI, Nextcloud and Chinook (`linux/`); Cloudbase-Init and Chinook for
+   About 3 GB: WordPress, WP-CLI, Nextcloud, Chinook and the container apps' Docker images
+   (`linux/`, the images only if the machine running it has Docker); Cloudbase-Init and Chinook for
    SQL Server (`windows/`); Packer and its plugin (`packer/`); and `SHA256SUMS` of all of it. Check
    the copy on arrival with `cd lab-media && sha256sum -c SHA256SUMS`.
 2. **Office's files**, for the Outlook extra: on a Windows PC with internet, as in
@@ -160,6 +185,8 @@ packer/build.sh ubuntu
 packer/build.sh windows-server                        # Desktop Experience: with Office and SQL Server
 packer/build.sh windows-server -var edition=core      # Server Core: SQL Server, no Office
 packer/build.sh windows                               # Windows 11: with Office and SQL Server
+packer/build.sh opnsense
+packer/build.sh vyos                                  # after build-iso.sh (part 2)
 packer/build.sh kali
 packer/parrot/import-base.sh ~/Parrot-security-7.4_amd64.ova --credentials ~/.config/lab-deploy/vcenter-build
 packer/build.sh parrot

@@ -57,6 +57,13 @@ declare -A EXTRA_PACKAGES_DEBIAN=(
 	[mail]="postfix dovecot-imapd dovecot-pop3d roundcube roundcube-sqlite3 apache2 libapache2-mod-php openssl"
 	[ftp]="vsftpd openssl"
 	[desktop]="xfce4-session xfwm4 xfce4-panel xfdesktop4 xfce4-terminal thunar xfce4-settings xfce4-notifyd dbus-x11 xrdp xorgxrdp tigervnc-standalone-server tigervnc-tools ssl-cert fonts-dejavu-core adwaita-icon-theme"
+	[docker]="docker.io"
+	[juice-shop]="docker.io"
+	[dvwa]="docker.io"
+	[uptime-kuma]="docker.io"
+	[grafana]="docker.io"
+	[vaultwarden]="docker.io"
+	[gitea]="docker.io"
 )
 # shellcheck disable=SC2034 # used through EXTRA_PACKAGES, a reference to the family's list
 declare -A EXTRA_PACKAGES_RHEL=(
@@ -82,11 +89,35 @@ declare -A EXTRA_SERVICES=(
 	[mail]="postfix dovecot apache2"
 	[ftp]="vsftpd"
 	[desktop]="xrdp xrdp-sesman"
+	[docker]="docker containerd"
+	[juice-shop]="docker containerd"
+	[dvwa]="docker containerd"
+	[uptime-kuma]="docker containerd"
+	[grafana]="docker containerd"
+	[vaultwarden]="docker containerd"
+	[gitea]="docker containerd"
 )
 # Where web apps come from, to bake into the template; point these at a mirror if you have one.
 WORDPRESS_URL=${WORDPRESS_URL:-https://wordpress.org/latest.tar.gz}
 WP_CLI_URL=${WP_CLI_URL:-https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar}
 NEXTCLOUD_URL=${NEXTCLOUD_URL:-https://download.nextcloud.com/server/releases/latest.tar.bz2}
+# The container apps' images (backend/extras.yaml runs them by these exact names; a backend test
+# checks), pulled into the template's Docker. Offline: DOCKER_IMAGES_FROM=<URL or folder> holding
+# each as <extra id>.tar (docker save; scripts/isos/fetch-media.sh makes them in linux/docker),
+# loaded instead of pulled.
+declare -A DOCKER_IMAGES=(
+	[juice-shop]="bkimminich/juice-shop:v20.3.0"
+	[dvwa]="vulnerables/web-dvwa:latest"
+	[uptime-kuma]="louislam/uptime-kuma:2.5.6"
+	[grafana]="grafana/grafana:13.2.4"
+	[vaultwarden]="vaultwarden/server:1.37.4-alpine"
+	[gitea]="gitea/gitea:28.1.0"
+)
+# Images whose tag isn't a version: the digest they must have when pulled (DVWA's last build, 2018).
+declare -A DOCKER_DIGESTS=(
+	[dvwa]="sha256:dae203fe11646a86937bf04db0079adef295f426da68a92b40e3b181f337daa7"
+)
+DOCKER_IMAGES_FROM=${DOCKER_IMAGES_FROM:-}
 # The Chinook sample database, the databases' dummy data: a pinned release (checksums below).
 CHINOOK_URL=${CHINOOK_URL:-https://github.com/lerocha/chinook-database/releases/download/v1.4.5}
 
@@ -118,6 +149,32 @@ bake_wordpress() {
 	fetch "$WP_CLI_URL" /usr/local/bin/wp "$WP_CLI_URL.sha512" sha512
 	chmod 755 /usr/local/bin/wp
 }
+
+# docker_image <extra id>: its image into Docker's store (pulled, or loaded from DOCKER_IMAGES_FROM).
+# Docker only runs for this; the socket that would start it on demand is switched off too.
+docker_image() {
+	local image=${DOCKER_IMAGES[$1]}
+	systemctl start docker
+	if [[ $DOCKER_IMAGES_FROM == http* ]]; then
+		curl -fsSL "$DOCKER_IMAGES_FROM/$1.tar" | docker load -q
+	elif [[ -n $DOCKER_IMAGES_FROM ]]; then
+		docker load -q -i "$DOCKER_IMAGES_FROM/$1.tar"
+	else
+		docker pull -q "$image"
+		if [[ -n ${DOCKER_DIGESTS[$1]:-} ]] && ! docker image inspect -f '{{join .RepoDigests " "}}' "$image" | grep -q "@${DOCKER_DIGESTS[$1]}"; then
+			echo "$image isn't the image expected (its digest differs)." >&2
+			return 1
+		fi
+	fi
+	docker image inspect "$image" >/dev/null
+	systemctl disable -q docker.socket 2>/dev/null || true
+}
+bake_juice_shop() { docker_image juice-shop; }
+bake_dvwa() { docker_image dvwa; }
+bake_uptime_kuma() { docker_image uptime-kuma; }
+bake_grafana() { docker_image grafana; }
+bake_vaultwarden() { docker_image vaultwarden; }
+bake_gitea() { docker_image gitea; }
 
 bake_nextcloud() {
 	mkdir -p /opt/lab-deploy

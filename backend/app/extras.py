@@ -135,6 +135,28 @@ lab_sql_string() {
 	printf "'%s'" "$value"
 }
 
+# lab_docker <name> <docker run options and image...>: Docker turned on, then the container (re)made
+# from an image already in the template (prepare.sh's DOCKER_IMAGES), restarting with the machine.
+lab_docker() {
+	local name=$1
+	shift
+	systemctl enable -q --now docker
+	docker rm -f "$name" >/dev/null 2>&1 || true
+	docker run -d --name "$name" --restart unless-stopped --pull never "$@" >/dev/null
+}
+
+# lab_wait_http <url> [seconds]: waits for a web app to answer (any HTTP status), 180 s by default;
+# fails if it never does.
+lab_wait_http() {
+	local i
+	for i in $(seq "${2:-180}"); do
+		curl -ksS -o /dev/null --max-time 5 "$1" 2>/dev/null && return 0
+		sleep 1
+	done
+	echo "$1 didn't answer" >&2
+	return 1
+}
+
 # lab_open <port/proto>...: opens ports in firewalld, where it's running (RHEL family).
 lab_open() {
 	systemctl is-active -q firewalld || return 0

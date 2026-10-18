@@ -92,6 +92,7 @@ locals {
     "WP_CLI_URL=${local.media}/linux/wp-cli/wp-cli.phar",
     "NEXTCLOUD_URL=${local.media}/linux/nextcloud/latest.tar.bz2",
     "CHINOOK_URL=${local.media}/linux/chinook",
+    "DOCKER_IMAGES_FROM=${local.media}/linux/docker",
   ])
 }
 

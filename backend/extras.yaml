@@ -585,6 +585,117 @@
         lab_open 5901/tcp
       fi
 
+# Container apps: Docker images already in the template (prepare.sh's DOCKER_IMAGES, pinned), each run
+# by lab_docker as the machine's whole website, so they work offline. Debian family.
+
+- id: docker
+  name: Docker
+  category: Developer tools
+  description: Docker Engine, with the machine's user allowed to use it (the docker group). No images; pull or build your own.
+  notes:
+    - "Sign in again after the first sign-in for {username} to be in the docker group, e.g. docker run hello-world."
+  debian:
+    packages: [docker.io]
+    script: |
+      systemctl enable -q --now docker
+      usermod -aG docker "$username"
+
+- id: juice-shop
+  name: OWASP Juice Shop
+  category: Practice targets
+  description: OWASP Juice Shop, a deliberately insecure web shop for practising web attacks, as the machine's website (in Docker).
+  ports: [80]
+  links: ["http://{ip}/"]
+  notes:
+    - "Its score board is at http://{ip}/#/score-board once you've found how to reach it."
+  debian:
+    packages: [docker.io]
+    script: |
+      lab_docker juice-shop -p 80:3000 bkimminich/juice-shop:v20.3.0
+      lab_wait_http http://127.0.0.1/
+
+- id: dvwa
+  name: DVWA
+  category: Practice targets
+  description: Damn Vulnerable Web Application, PHP and MySQL with security levels to step through, as the machine's website (in Docker).
+  ports: [80]
+  links: ["http://{ip}/"]
+  notes:
+    - "Sign in as admin with the password password, then Create / Reset Database on the setup page."
+  debian:
+    packages: [docker.io]
+    script: |
+      lab_docker dvwa -p 80:80 vulnerables/web-dvwa:latest
+      lab_wait_http http://127.0.0.1/
+
+- id: uptime-kuma
+  name: Uptime Kuma
+  category: Monitoring
+  description: Uptime Kuma, a monitoring dashboard for websites and services, as the machine's website (in Docker).
+  ports: [80]
+  links: ["http://{ip}/"]
+  notes:
+    - "On the first visit, create its administrator account."
+  debian:
+    packages: [docker.io]
+    script: |
+      lab_docker uptime-kuma -p 80:3001 -v uptime-kuma:/app/data louislam/uptime-kuma:2.5.6
+      lab_wait_http http://127.0.0.1/
+
+- id: grafana
+  name: Grafana
+  category: Monitoring
+  description: Grafana dashboards as the machine's website (in Docker), with its user as the administrator.
+  ports: [80]
+  password: true
+  links: ["http://{ip}/"]
+  notes:
+    - "Sign in as {username}, with the machine's password."
+  debian:
+    packages: [docker.io]
+    script: |
+      lab_docker grafana -p 80:3000 -v grafana:/var/lib/grafana \
+        -e GF_SECURITY_ADMIN_USER="$username" -e GF_SECURITY_ADMIN_PASSWORD="$password" grafana/grafana:13.2.4
+      lab_wait_http http://127.0.0.1/
+
+- id: vaultwarden
+  name: Vaultwarden
+  category: Web apps
+  description: Vaultwarden, a Bitwarden-compatible password manager, as the machine's website over HTTPS (in Docker; its web vault needs HTTPS).
+  ports: [443]
+  links: ["https://{ip}/"]
+  notes:
+    - "Create an account on the first visit; the certificate is self-signed. Bitwarden's apps and browser extensions sign in with https://{ip} as a self-hosted server."
+  debian:
+    packages: [docker.io]
+    script: |
+      lab_cert
+      lab_docker vaultwarden -p 443:80 -v vaultwarden:/data -v /etc/ssl/lab-deploy:/ssl:ro \
+        -e ROCKET_TLS="{certs=\"/ssl/${LAB_CERT##*/}\",key=\"/ssl/${LAB_KEY##*/}\"}" \
+        -e DOMAIN="https://$(lab_ip)" vaultwarden/server:1.37.4-alpine
+      lab_wait_http https://127.0.0.1/
+
+- id: gitea
+  name: Gitea
+  category: Developer tools
+  description: Gitea, self-hosted Git with a web interface, as the machine's website (in Docker), with its user as the administrator. Git over SSH on port 2222.
+  ports: [80, 2222]
+  password: true
+  links: ["http://{ip}/"]
+  notes:
+    - "Sign in as {username}, with the machine's password. Clone over SSH with ssh://git@{ip}:2222/<owner>/<repository>.git."
+  debian:
+    packages: [docker.io]
+    script: |
+      ip=$(lab_ip)
+      lab_docker gitea -p 80:3000 -p 2222:22 -v gitea:/data \
+        -e GITEA__database__DB_TYPE=sqlite3 -e GITEA__security__INSTALL_LOCK=true \
+        -e GITEA__server__ROOT_URL="http://$ip/" -e GITEA__server__SSH_DOMAIN="$ip" -e GITEA__server__SSH_PORT=2222 \
+        gitea/gitea:28.1.0
+      lab_wait_http http://127.0.0.1/
+      docker exec -u git gitea gitea admin user create --admin --username "$username" --password "$password" \
+        --email "$username@$hostname.lab.example" --must-change-password=false
+
 - id: iis
   name: IIS
   category: Web servers

@@ -88,6 +88,26 @@ def test_prepare_sh_installs_every_extras_packages():
                 assert not missing, f"prepare.sh doesn't install {missing} for {x.id} ({family})"
 
 
+def test_container_extras_run_the_images_prepare_sh_bakes():
+    """Each image an extra runs (lab_docker ... <image>) is the one prepare.sh pulls for that extra, by
+    the same name, as clones can't pull (--pull never), and every image there has its bake step."""
+    text = _prepare_sh().read_text()
+    block = re.search(r"^declare -A DOCKER_IMAGES=\(\n(.*?)^\)", text, re.M | re.S)
+    assert block, "prepare.sh has no DOCKER_IMAGES"
+    images = dict(re.findall(r'^\s*\[([\w-]+)\]="([^"]*)"', block.group(1), re.M))
+    run = {}
+    for x in extras.extras().values():
+        script = x.families.get("debian", ("", ""))[1]
+        if "lab_docker" in script:
+            # The image is the last word of the lab_docker command (continued over "\" lines).
+            command = re.search(r"lab_docker .*?(?<!\\)\n", script, re.S).group(0)
+            run[x.id] = command.split()[-1]
+    assert run, "no extra runs a container"
+    assert run == images
+    for extra_id in images:
+        assert f"bake_{extra_id.replace('-', '_')}()" in text, f"prepare.sh has no bake step for {extra_id}"
+
+
 # Choosing ---------------------------------------------------------------------------------------------
 
 
@@ -105,15 +125,19 @@ def test_clashes_come_from_shared_ports():
 
 
 def test_catalogue_conflicts_are_worked_out():
-    """One web service per machine; FTP and the desktop go with anything. MariaDB and MySQL take
-    port 3306, as do WordPress and Nextcloud's own MariaDB."""
+    """One web service per machine; FTP, the desktop and Docker itself go with anything. MariaDB and
+    MySQL take port 3306, as do WordPress and Nextcloud's own MariaDB. Vaultwarden is HTTPS only, so
+    it only clashes with what uses 443."""
     found = {i: set(x.conflicts) for i, x in extras.extras().items()}
-    web = {"nginx", "apache", "apache-https", "wordpress", "nextcloud", "nextcloud-snap", "mail", "iis"}
+    web = {"nginx", "apache", "apache-https", "wordpress", "nextcloud", "nextcloud-snap", "mail", "iis",
+           "juice-shop", "dvwa", "uptime-kuma", "grafana", "gitea"}
+    https = {"apache-https", "wordpress", "nextcloud", "nextcloud-snap", "mail", "vaultwarden"}
     mysql_port = {"wordpress", "nextcloud", "mariadb", "mysql"}
     for i in web | mysql_port:
-        expected = (web if i in web else set()) | (mysql_port if i in mysql_port else set())
+        expected = (web if i in web else set()) | (mysql_port if i in mysql_port else set()) | (https if i in https else set())
         assert found[i] == expected - {i}, i
-    for i in ("ftp", "desktop", "outlook", "postgresql", "sqlite", "mssql"):
+    assert found["vaultwarden"] == https - {"vaultwarden"}
+    for i in ("ftp", "desktop", "outlook", "postgresql", "sqlite", "mssql", "docker"):
         assert found[i] == set(), i
 
 
@@ -268,7 +292,7 @@ def test_parse_status():
 def test_config_lists_extras_for_templates_that_have_them(offered):
     t = client.get("/api/config").json()["templates"][0]
     https = next(x for x in t["extras"] if x["id"] == "apache-https")
-    assert https["conflicts"] == ["nginx", "apache", "wordpress", "nextcloud", "nextcloud-snap", "mail", "iis"]
+    assert https["conflicts"] == ["nginx", "apache", "wordpress", "nextcloud", "nextcloud-snap", "mail", "juice-shop", "dvwa", "uptime-kuma", "grafana", "vaultwarden", "gitea", "iis"]
     assert https["options"][0]["id"] == "domain" and https["options"][0]["default"] == "{fqdn}"
 
 

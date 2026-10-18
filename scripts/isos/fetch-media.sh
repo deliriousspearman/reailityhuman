@@ -5,8 +5,9 @@
 #   scripts/isos/fetch-media.sh <folder>
 #
 # It fills <folder> with, each checked against its published or pinned checksum:
-#   linux/     WordPress, WP-CLI, Nextcloud and Chinook, for prepare.sh. Serve this folder's parent
-#              on a LAN web server and pass the address to the Linux builds: -var media_url=http://…
+#   linux/     WordPress, WP-CLI, Nextcloud, Chinook and the container apps' Docker images (if this
+#              machine has Docker), for prepare.sh. Serve this folder's parent on a LAN web server
+#              and pass the address to the Linux builds: -var media_url=http://…
 #   windows/   Cloudbase-Init and Chinook's SQL Server script. Pass the folder to the Windows build:
 #              -var media_dir=<folder>. Office's files go in windows/office (see its README.txt).
 #   packer/    Packer itself and its vSphere plugin, to install on the build machine.
@@ -17,7 +18,7 @@ set -euo pipefail
 out=${1:?"usage: fetch-media.sh <folder>"}
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 prepare=$here/../template/prepare.sh
-mkdir -p "$out"/{linux/{wordpress,wp-cli,nextcloud,chinook},windows/{cloudbase-init,chinook,office},packer}
+mkdir -p "$out"/{linux/{wordpress,wp-cli,nextcloud,chinook,docker},windows/{cloudbase-init,chinook,office},packer}
 out=$(cd "$out" && pwd)
 
 # What prepare.sh and the Windows build use: keep in step with them.
@@ -57,6 +58,19 @@ grep -oE 'fetch_chinook [A-Za-z_]+\.[a-z]+ [0-9a-f]{64}' "$prepare" | sort -u | 
 	get "$CHINOOK_URL/$file" "$out/linux/chinook/$file"
 	check "$out/linux/chinook/$file" "$sum" sha256
 done
+
+step "Linux: the container apps' Docker images (prepare.sh's DOCKER_IMAGES)"
+if command -v docker >/dev/null; then
+	sed -n '/^declare -A DOCKER_IMAGES=(/,/^)/p' "$prepare" | grep -oE '\[[a-z-]+\]="[^"]+"' | tr -d '[]"' | tr '=' ' ' |
+		while read -r id image; do
+			[[ -s $out/linux/docker/$id.tar ]] && continue
+			docker pull -q "$image" >/dev/null
+			docker save -o "$out/linux/docker/$id.tar.part" "$image" && mv "$out/linux/docker/$id.tar.part" "$out/linux/docker/$id.tar"
+			echo "  $id: $image"
+		done
+else
+	echo "  skipped: no Docker here (the container apps' extras need these to build offline)" >&2
+fi
 
 step "Windows: Cloudbase-Init 1.1.9, Chinook for SQL Server"
 get "$CLOUDBASE_URL" "$out/windows/cloudbase-init/CloudbaseInitSetup_x64.msi"
