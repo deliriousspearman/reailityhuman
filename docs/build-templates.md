@@ -11,8 +11,11 @@ as building by hand ([setup-vsphere.md](setup-vsphere.md), parts 2, 5 and 6), wh
 | Template | Command | Time (lab, with internet) |
 |---|---|---|
 | Ubuntu 26.04 | `packer/build.sh ubuntu` | ~11 min |
+| Ubuntu 24.04, 22.04 | `packer/build.sh ubuntu -var version=24.04 -var iso=ubuntu-24.04.5-live-server-amd64.iso` (22.04 alike) | ~40 min with every extra |
+| Debian 13, 12 | `packer/build.sh debian` (12: `-var version=12 -var iso=debian-12.15.0-amd64-netinst.iso`) | ~35 min with every extra |
 | Windows Server 2025 (Desktop Experience) | `packer/build.sh windows-server` | ~22 min |
 | Windows Server 2025 Core | `packer/build.sh windows-server -var edition=core` | ~10 min |
+| Windows Server 2022, 2019 | `packer/build.sh windows-server -var version=2022` (or 2019) | ~45–70 min |
 | Windows 11 Enterprise (evaluation) | `packer/build.sh windows` | ~37 min |
 | OPNsense 26.7 | `packer/build.sh opnsense` | ~14 min |
 | VyOS 1.5 rolling | `packer/vyos/build-iso.sh` once, then `packer/build.sh vyos` | ~8 min |
@@ -22,9 +25,11 @@ as building by hand ([setup-vsphere.md](setup-vsphere.md), parts 2, 5 and 6), wh
 | Parrot Security 7.4 | `packer/parrot/import-base.sh <ova>` once, then `packer/build.sh parrot` | ~11 min |
 | Rocky Linux 9 | `packer/build.sh rhel -var distro=rocky` | ~15–20 min |
 | AlmaLinux 9 | `packer/build.sh rhel -var distro=alma` | ~15 min |
+| Rocky Linux, AlmaLinux 10 and 8 | `packer/build.sh rhel -var distro=rocky -var version=10 -var iso=Rocky-10.2-x86_64-boot.iso` (and alike) | ~15 min |
 | CentOS Stream 9 | `packer/build.sh rhel -var distro=centos-stream` | ~15 min |
 | Ubuntu 20.04 (legacy) | `packer/build.sh ubuntu -var version=20.04 -var iso=ubuntu-20.04.6-live-server-amd64.iso -var extras=…` | ~9 min |
 | Ubuntu 18.04 (legacy) | `packer/build.sh ubuntu-di -var extras=…` | ~13 min |
+| Ubuntu 16.04 (legacy) | `packer/build.sh ubuntu-di -var version=16.04 -var iso=ubuntu-16.04.7-server-amd64.iso -var legacy=true` | ~6 min |
 | CentOS 7 (legacy) | `packer/build.sh centos-legacy` | ~8 min |
 
 **Legacy targets** are old releases for practising on, with no security updates (keep them off
@@ -34,6 +39,20 @@ cloud-init is too old for the panel, so its template is the `legacy` family: it 
 `scripts/template/legacy/lab-firstboot`, which reads the machine's settings through VMware Tools
 instead (`prepare-legacy.sh` and `clean-legacy.sh` replace prepare.sh and clean.sh), and no extras.
 Its packages come from vault.centos.org.
+
+**Room:** the datastore holds every template and the ISOs, and a Windows build needs about 30 GB
+more while it runs. Check its free space before building, build Windows one at a time, and delete the
+ISOs of templates already built (`fetch.sh` fetches them again). A full datastore pauses VMs, which
+Packer reports as a lost connection or a shutdown timeout.
+
+**Debian** uses netplan for its network (prepare.sh installs it and tells cloud-init to prefer it):
+the panel's "DHCP on any e* adapter" can't be said in ifupdown's format. Older releases' limits are
+in templates.yaml's comments: no Nextcloud where PHP is older than 8.3 (Ubuntu 22.04, Debian 12), no
+MySQL on Debian.
+
+**Windows Server 2022 and 2019** pick Setup's image by number (their images' inside names differ from
+2025's). `clean.ps1` removes app packages installed for one user only before sysprep (Edge updating
+itself during the build otherwise stops it).
 
 **Windows 11** is the 90-day Enterprise evaluation, built without a virtual TPM: its
 `autounattend.xml` (the Windows Server build's, with `client = true`) has Setup skip the TPM, Secure
