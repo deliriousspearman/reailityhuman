@@ -102,9 +102,9 @@ export const templates: MachineTemplate[] = [
 		description: 'Windows desktop editions, not joined to a domain.',
 		versions: [{ version: '11' }, { version: '10', eol: true }, { version: '7', eol: true }],
 		resources: { cpu: 2, memoryGB: 4, diskGB: 64 },
-		access: ['rdp', 'console'],
+		access: ['rdp', 'ssh', 'console'],
 		credentials: 'labuser / set on first deploy',
-		flags: ['licence', 'vtpm'],
+		flags: ['licence'],
 	},
 	{
 		id: 'windows-server',
@@ -345,6 +345,6 @@ export const categories: MachineTemplate['category'][] = [
 export const flagNotes: Record<NonNullable<MachineTemplate['flags']>[number], { label: string; note: string }> = {
 	nested: { label: 'Nested', note: 'Runs its own VMs inside this one, so they are slower than normal.' },
 	licence: { label: 'Licence', note: 'Uses an evaluation or volume licence that an admin manages.' },
-	vtpm: { label: 'vTPM', note: 'Needs a virtual TPM (Windows 11), which the admin must enable in vCenter.' },
+	vtpm: { label: 'vTPM', note: 'Needs a virtual TPM, which the admin must enable in vCenter.' },
 	domain: { label: '2 machines', note: 'Comes with its own domain controller, which counts towards your machines.' },
 };

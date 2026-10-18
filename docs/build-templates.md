@@ -13,6 +13,7 @@ as building by hand ([setup-vsphere.md](setup-vsphere.md), parts 2, 5 and 6), wh
 | Ubuntu 26.04 | `packer/build.sh ubuntu` | ~11 min |
 | Windows Server 2025 (Desktop Experience) | `packer/build.sh windows-server` | ~22 min |
 | Windows Server 2025 Core | `packer/build.sh windows-server -var edition=core` | ~10 min |
+| Windows 11 Enterprise (evaluation) | `packer/build.sh windows` | ~37 min |
 | Kali Linux 2026.2 | `packer/build.sh kali` | ~31 min |
 | Parrot Security 7.4 | `packer/parrot/import-base.sh <ova>` once, then `packer/build.sh parrot` | ~11 min |
 | Rocky Linux 9 | `packer/build.sh rhel -var distro=rocky` | ~15–20 min |
@@ -29,6 +30,13 @@ cloud-init is too old for the panel, so its template is the `legacy` family: it 
 `scripts/template/legacy/lab-firstboot`, which reads the machine's settings through VMware Tools
 instead (`prepare-legacy.sh` and `clean-legacy.sh` replace prepare.sh and clean.sh), and no extras.
 Its packages come from vault.centos.org.
+
+**Windows 11** is the 90-day Enterprise evaluation, built without a virtual TPM: its
+`autounattend.xml` (the Windows Server build's, with `client = true`) has Setup skip the TPM, Secure
+Boot, CPU and RAM checks, so vCenter needs no key provider. Machines can't use BitLocker, Credential
+Guard or Windows Hello for Business. The build also switches the built-in Administrator on (client
+Windows has it off) and stops the Store installing or updating apps, which would make sysprep fail.
+Rebuild it before the evaluation runs out (the date is on the desktop).
 
 ## 1. Before the first build
 
@@ -151,6 +159,7 @@ From the repo's root on the build machine:
 packer/build.sh ubuntu
 packer/build.sh windows-server                        # Desktop Experience: with Office and SQL Server
 packer/build.sh windows-server -var edition=core      # Server Core: SQL Server, no Office
+packer/build.sh windows                               # Windows 11: with Office and SQL Server
 packer/build.sh kali
 packer/parrot/import-base.sh ~/Parrot-security-7.4_amd64.ova --credentials ~/.config/lab-deploy/vcenter-build
 packer/build.sh parrot

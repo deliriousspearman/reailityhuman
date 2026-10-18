@@ -157,6 +157,7 @@ source "vsphere-iso" "windows" {
     "autounattend.xml" = templatefile("${path.root}/autounattend.pkrtpl.xml", {
       image_name     = local.image_name
       admin_password = var.build_password
+      client         = false
     })
   }
   remove_cdrom = true

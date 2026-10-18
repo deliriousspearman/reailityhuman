@@ -61,6 +61,22 @@
   access: [rdp, ssh, console]
   extras: [iis, mssql]   # not Outlook: it needs the desktop
 
+# Windows 11 Enterprise, the 90-day evaluation (packer/windows): no virtual TPM, Setup's hardware checks
+# skipped, so BitLocker, Credential Guard and Windows Hello for Business aren't available. Rebuild it
+# before the evaluation runs out.
+- template: windows
+  version: "11"
+  # Built by Packer (packer/build.sh windows) on 2026-10-17, from 26H2 (26300.9457), with Office's and
+  # SQL Server's files.
+  vsphere: Labs/Templates/tpl-windows-11-20261017
+  cpu: 2
+  memoryGB: 4
+  diskGB: 64
+  username: labuser
+  family: windows
+  access: [rdp, ssh, console]
+  extras: [iis, mssql, outlook]
+
 # Kali Linux and Parrot Security: attack boxes, reached over Remote Desktop to their own desktop
 # (packer/kali, or by hand: docs/setup-vsphere.md, "Kali Linux and Parrot Security templates"). Not
 # the desktop extra: they have their own; nor MySQL: Debian has only MariaDB.

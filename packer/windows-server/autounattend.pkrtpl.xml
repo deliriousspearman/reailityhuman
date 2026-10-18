@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Windows Setup's answers for the Windows Server template build (windows-server.pkr.hcl), read from
-     a CD. It installs ${image_name} on the one disk (UEFI), signs Administrator in once, and runs
-     bootstrap.ps1 from the same CD: VMware Tools, then WinRM for Packer. -->
+<!-- Windows Setup's answers for the Windows template builds (windows-server.pkr.hcl, and
+     ../windows/windows.pkr.hcl with client = true), read from a CD. It installs ${image_name} on the
+     one disk (UEFI), signs Administrator in once, and runs bootstrap.ps1 from the same CD: VMware
+     Tools, then WinRM for Packer. -->
 <unattend xmlns="urn:schemas-microsoft-com:unattend" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State">
   <settings pass="windowsPE">
     <component name="Microsoft-Windows-International-Core-WinPE" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
@@ -76,6 +77,27 @@
           <WillShowUI>OnError</WillShowUI>
         </ProductKey>
       </UserData>
+%{ if client ~}
+      <!-- Windows 11's hardware checks, which a VM without a virtual TPM fails: skipped (LabConfig). -->
+      <RunSynchronous>
+        <RunSynchronousCommand wcm:action="add">
+          <Order>1</Order>
+          <Path>reg add HKLM\SYSTEM\Setup\LabConfig /v BypassTPMCheck /t REG_DWORD /d 1 /f</Path>
+        </RunSynchronousCommand>
+        <RunSynchronousCommand wcm:action="add">
+          <Order>2</Order>
+          <Path>reg add HKLM\SYSTEM\Setup\LabConfig /v BypassSecureBootCheck /t REG_DWORD /d 1 /f</Path>
+        </RunSynchronousCommand>
+        <RunSynchronousCommand wcm:action="add">
+          <Order>3</Order>
+          <Path>reg add HKLM\SYSTEM\Setup\LabConfig /v BypassCPUCheck /t REG_DWORD /d 1 /f</Path>
+        </RunSynchronousCommand>
+        <RunSynchronousCommand wcm:action="add">
+          <Order>4</Order>
+          <Path>reg add HKLM\SYSTEM\Setup\LabConfig /v BypassRAMCheck /t REG_DWORD /d 1 /f</Path>
+        </RunSynchronousCommand>
+      </RunSynchronous>
+%{ endif ~}
     </component>
   </settings>
   <settings pass="specialize">
@@ -83,6 +105,27 @@
       <ComputerName>tpl-windows</ComputerName>
       <TimeZone>UTC</TimeZone>
     </component>
+%{ if client ~}
+    <!-- Client Windows: the built-in Administrator is off by default (the build signs in with it), and
+         the Store would install and update apps during the build, which then stops sysprep
+         ("installed for a user, but not provisioned for all users"). Clones keep the Store policies. -->
+    <component name="Microsoft-Windows-Deployment" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
+      <RunSynchronous>
+        <RunSynchronousCommand wcm:action="add">
+          <Order>1</Order>
+          <Path>net user Administrator /active:yes</Path>
+        </RunSynchronousCommand>
+        <RunSynchronousCommand wcm:action="add">
+          <Order>2</Order>
+          <Path>reg add HKLM\SOFTWARE\Policies\Microsoft\WindowsStore /v AutoDownload /t REG_DWORD /d 2 /f</Path>
+        </RunSynchronousCommand>
+        <RunSynchronousCommand wcm:action="add">
+          <Order>3</Order>
+          <Path>reg add HKLM\SOFTWARE\Policies\Microsoft\Windows\CloudContent /v DisableWindowsConsumerFeatures /t REG_DWORD /d 1 /f</Path>
+        </RunSynchronousCommand>
+      </RunSynchronous>
+    </component>
+%{ endif ~}
   </settings>
   <settings pass="oobeSystem">
     <component name="Microsoft-Windows-Shell-Setup" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
@@ -104,6 +147,10 @@
       <OOBE>
         <HideEULAPage>true</HideEULAPage>
         <HideOnlineAccountScreens>true</HideOnlineAccountScreens>
+%{ if client ~}
+        <HideLocalAccountScreen>true</HideLocalAccountScreen>
+        <HideWirelessSetupInOOBE>true</HideWirelessSetupInOOBE>
+%{ endif ~}
         <ProtectYourPC>3</ProtectYourPC>
         <SkipMachineOOBE>true</SkipMachineOOBE>
       </OOBE>
