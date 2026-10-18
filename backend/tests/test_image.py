@@ -20,7 +20,7 @@ KEY = ("metasploitable", "2")
 def image(monkeypatch):
     ubuntu = catalogue.catalogue()[("ubuntu", "26.04")]
     tpl = replace(
-        ubuntu, template=KEY[0], version=KEY[1], vsphere=TEMPLATE, username="msfadmin", family="image", extras=(), fixed_password="msfadmin"
+        ubuntu, template=KEY[0], version=KEY[1], vsphere=TEMPLATE, username="vagrant", family="image", extras=(), fixed_password="vagrant"
     )
     monkeypatch.setitem(catalogue.catalogue(), KEY, tpl)
 
@@ -31,13 +31,13 @@ def deploy(**fields):
 
 def test_config_shows_the_fixed_sign_in(image):
     t = next(t for t in client.get("/api/config").json()["templates"] if t["template"] == KEY[0])
-    assert t["family"] == "image" and t["username"] == "msfadmin" and t["fixedPassword"] == "msfadmin"
+    assert t["family"] == "image" and t["username"] == "vagrant" and t["fixedPassword"] == "vagrant"
 
 
 def test_an_image_takes_no_password_or_key(image):
     for fields in ({"password": "something-else"}, {"sshKey": "ssh-ed25519 AAAA me"}):
         r = deploy(**fields)
-        assert r.status_code == 422 and "msfadmin / msfadmin" in r.json()["detail"]
+        assert r.status_code == 422 and "vagrant / vagrant" in r.json()["detail"]
 
 
 def test_an_image_is_deployed_as_it_is(queued, image):
@@ -46,7 +46,8 @@ def test_an_image_is_deployed_as_it_is(queued, image):
     run_queued(queued)
     m = client.get(f"/api/machines/{r.json()['id']}").json()
     assert m["state"] == "running", m["log"]
-    assert m["password"] == "msfadmin"
+    # Shorter than the panel's minimum for chosen passwords (Metasploitable 3's), and still taken.
+    assert m["password"] == "vagrant"
     assert "A complete image, as it is: nothing to set up." in [line["text"] for line in m["log"]]
     with connect() as vc:
         config = vc.props(vc.require_vm(m["vmName"]), "config.extraConfig")["config.extraConfig"]

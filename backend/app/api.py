@@ -302,18 +302,18 @@ def deploy_machine(req: DeployRequest, db: Db) -> dict:
     if not OWNER_RULE.match(owner):
         raise HTTPException(422, OWNER_PROBLEM)
     password = req.password or None
-    if tpl.fixed_password:
-        if password or (req.sshKey or "").strip():
-            raise HTTPException(
-                422,
-                f"{tpl.template} {tpl.version} is a complete image that signs in as {tpl.username} / {tpl.fixed_password}: "
-                "it can't take a password or SSH key.",
-            )
-        password = tpl.fixed_password
+    if tpl.fixed_password and (password or (req.sshKey or "").strip()):
+        raise HTTPException(
+            422,
+            f"{tpl.template} {tpl.version} is a complete image that signs in as {tpl.username} / {tpl.fixed_password}: "
+            "it can't take a password or SSH key.",
+        )
     if password is not None and (len(password) < PASSWORD_MIN or any(not c.isprintable() for c in password)):
         raise HTTPException(422, f"Use a password of at least {PASSWORD_MIN} characters, without line breaks or tabs.")
     if password is not None and tpl.family == "windows" and (problem := cloudinit.windows_password_problem(password, tpl.username)):
         raise HTTPException(422, problem)
+    # A complete image's own password, whatever its length: the rules are for passwords people choose.
+    password = tpl.fixed_password or password
     try:
         chosen = extras.resolve(tpl.extras, [c.model_dump() for c in req.extras], req.name, tpl.memory_gb)
     except extras.ExtraError as e:
