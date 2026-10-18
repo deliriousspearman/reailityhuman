@@ -33,6 +33,7 @@ rm -f /var/lib/dhclient/* /var/lib/dhcp/* /etc/udev/rules.d/70-persistent-net.ru
 
 echo "==> Caches, logs, histories"
 command -v yum >/dev/null && yum -y -q clean all
+command -v apt-get >/dev/null && apt-get -q clean
 find /var/log -type f \( -name '*.log' -o -name 'messages*' -o -name 'secure*' -o -name 'wtmp' -o -name 'lastlog' \) -exec truncate -s 0 {} + 2>/dev/null || true
 rm -rf /var/log/lab-deploy/* /tmp/* /var/tmp/* /root/.bash_history
 echo "cleaned=$(date -u +%Y-%m-%dT%H:%MZ)" >>/etc/lab-template

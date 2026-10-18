@@ -2,6 +2,7 @@
 # ISO, whose live server can't install unattended (docs/build-templates.md):
 #
 #   packer/build.sh ubuntu-di                 # Ubuntu 18.04
+#   packer/build.sh ubuntu-di -var version=16.04 -var iso=ubuntu-16.04.7-server-amd64.iso -var legacy=true
 #
 # A preseed file (preseed.pkrtpl.cfg, served by Packer's web server: the build VM must reach this
 # machine), then scripts/template/prepare.sh and clean.sh as for the other templates. Newer Ubuntu
@@ -74,6 +75,13 @@ variable "media_url" {
 variable "extras" {
   type    = string
   default = ""
+}
+# Ubuntu 16.04: its cloud-init can't read the panel's data from vCenter, so it's the legacy family:
+# scripts/template/legacy/prepare-legacy.sh and clean-legacy.sh instead of prepare.sh and clean.sh
+# (lab-firstboot, no extras).
+variable "legacy" {
+  type    = bool
+  default = false
 }
 variable "vm_name" {
   type    = string
@@ -160,7 +168,7 @@ source "vsphere-iso" "ubuntu_di" {
   ssh_private_key_file = var.ssh_private_key_file
   ssh_timeout          = "120m"
 
-  shutdown_command    = "sudo bash /tmp/clean.sh --yes"
+  shutdown_command    = var.legacy ? "sudo bash /tmp/legacy/clean-legacy.sh --yes" : "sudo bash /tmp/clean.sh --yes"
   shutdown_timeout    = "15m"
   create_snapshot     = true
   snapshot_name       = "clean"
@@ -175,8 +183,13 @@ build {
     destination = "/tmp/"
   }
 
+  provisioner "file" {
+    source      = "${path.root}/../../scripts/template/legacy"
+    destination = "/tmp/"
+  }
+
   provisioner "shell" {
-    inline = ["sudo env ${local.media_env} bash /tmp/prepare.sh ${local.extras_flag}"]
+    inline = [var.legacy ? "sudo bash /tmp/legacy/prepare-legacy.sh" : "sudo env ${local.media_env} bash /tmp/prepare.sh ${local.extras_flag}"]
   }
 
   post-processor "manifest" {

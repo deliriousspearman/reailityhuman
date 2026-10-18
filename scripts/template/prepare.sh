@@ -330,7 +330,8 @@ debian)
 	export DEBIAN_FRONTEND=noninteractive
 	apt-get update -q
 	apt-get full-upgrade -yq -o Dpkg::Options::=--force-confold
-	apt-get install -yq open-vm-tools cloud-init
+	# curl: the extras' downloads (a minimal Debian install has none).
+	apt-get install -yq open-vm-tools cloud-init curl ca-certificates
 	# With a desktop: copy and paste, and the console's screen size follows its window.
 	if ((RDP_DESKTOP)); then apt-get install -yq open-vm-tools-desktop; fi
 	apt-get autoremove -yq

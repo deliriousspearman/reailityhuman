@@ -39,6 +39,29 @@
   family: debian
   extras: [nginx, apache, apache-https, wordpress, nextcloud, nextcloud-snap, postgresql, mariadb, mysql, sqlite, mail, ftp, desktop, docker, juice-shop, dvwa, uptime-kuma, grafana, vaultwarden, gitea]
 
+- template: ubuntu
+  version: "24.04"
+  # Built by Packer (packer/build.sh ubuntu -var version=24.04 -var iso=ubuntu-24.04.5-live-server-amd64.iso) on 2026-10-18, with every
+  # extra baked in.
+  vsphere: Labs/Templates/tpl-ubuntu-24.04-20261018
+  cpu: 2
+  memoryGB: 2
+  diskGB: 25
+  username: ubuntu
+  family: debian
+  extras: [nginx, apache, apache-https, wordpress, nextcloud, nextcloud-snap, postgresql, mariadb, mysql, sqlite, mail, ftp, desktop, docker, juice-shop, dvwa, uptime-kuma, grafana, vaultwarden, gitea]
+- template: ubuntu
+  version: "22.04"
+  # Built by Packer (packer/build.sh ubuntu -var version=22.04 -var iso=ubuntu-22.04.5-live-server-amd64.iso) on 2026-10-18, with every
+  # extra baked in.
+  vsphere: Labs/Templates/tpl-ubuntu-22.04-20261018
+  cpu: 2
+  memoryGB: 2
+  diskGB: 25
+  username: ubuntu
+  family: debian
+  extras: [nginx, apache, apache-https, wordpress, nextcloud, nextcloud-snap, postgresql, mariadb, mysql, sqlite, mail, ftp, desktop, docker, juice-shop, dvwa, uptime-kuma, grafana, vaultwarden, gitea]
+
 # Windows Server 2025, with Desktop Experience and as Server Core (packer/windows-server, or by hand:
 # docs/setup-vsphere.md, "Windows Server templates"). Windows needs more memory: Core runs in 2 GB, the
 # desktop wants 4.
@@ -197,6 +220,18 @@
   family: debian
   # No WordPress: it needs PHP 7.4, and 18.04 has 7.2.
   extras: [nginx, apache, apache-https, postgresql, mariadb, sqlite, ftp]
+- template: ubuntu
+  version: "16.04"
+  # Built by Packer (packer/build.sh ubuntu-di -var version=16.04 -var legacy=true) on 2026-10-18, from
+  # the 16.04.7 server ISO. Its cloud-init can't read vCenter's data: the legacy family (lab-firstboot).
+  vsphere: Labs/Templates/tpl-ubuntu-16.04-20261018
+  cpu: 2
+  memoryGB: 2
+  diskGB: 25
+  username: ubuntu
+  family: legacy
+  adminGroup: sudo
+  access: [ssh, console]
 - template: centos
   version: "7"
   # Built by Packer (packer/build.sh centos-legacy) on 2026-10-17, from CentOS 7.9 (2207-02).

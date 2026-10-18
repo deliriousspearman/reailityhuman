@@ -1,6 +1,6 @@
 [Unit]
 Description=Lab panel first boot (legacy templates): hostname, user, SSH
-After=network-online.target vmtoolsd.service
+After=network-online.target vmtoolsd.service open-vm-tools.service
 Wants=network-online.target
 # Not "Before=sshd": it restarts sshd itself, once its own host keys and settings are in place.
 
