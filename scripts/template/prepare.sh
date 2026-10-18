@@ -34,7 +34,7 @@ set -euo pipefail
 # Oldest version of each OS this is written and tested for. cloud-init 21.3+ is the real limit;
 # older releases (Ubuntu 18.04, Debian 11, CentOS 7) don't ship it. Kali and Parrot: their releases
 # on Debian 13's packages (Dovecot 2.4, PHP 8.4), which the extras are written for.
-declare -A MIN_VERSION=([ubuntu]=18.04 [debian]=12 [kali]=2025.3 [parrot]=7 [centos]=9 [rocky]=9 [almalinux]=9)
+declare -A MIN_VERSION=([ubuntu]=18.04 [debian]=12 [kali]=2025.3 [parrot]=7 [centos]=9 [rocky]=8 [almalinux]=8)
 MIN_CLOUD_INIT=21.3
 
 # >>> extras: everything the panel's extras need in a template. Keep this in step with
@@ -332,6 +332,13 @@ debian)
 	apt-get full-upgrade -yq -o Dpkg::Options::=--force-confold
 	# curl: the extras' downloads (a minimal Debian install has none).
 	apt-get install -yq open-vm-tools cloud-init curl ca-certificates
+	# Debian's network is ifupdown, whose format can't say the panel's "DHCP on any e* adapter": cloud-init
+	# wrote an interface called "nics" and the real one stayed down. With netplan (and systemd-networkd)
+	# it renders that as on Ubuntu.
+	if [[ $ID == debian ]]; then
+		apt-get install -yq netplan.io
+		systemctl enable -q systemd-networkd
+	fi
 	# With a desktop: copy and paste, and the console's screen size follows its window.
 	if ((RDP_DESKTOP)); then apt-get install -yq open-vm-tools-desktop; fi
 	apt-get autoremove -yq

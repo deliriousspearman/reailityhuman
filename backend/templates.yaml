@@ -84,7 +84,8 @@
   diskGB: 25
   username: labuser
   family: debian
-  extras: [nginx, apache, apache-https, wordpress, nextcloud, nextcloud-snap, postgresql, mariadb, sqlite, mail, ftp, desktop, docker, juice-shop, dvwa, uptime-kuma, grafana, vaultwarden, gitea]
+  # Not Nextcloud: it needs PHP 8.3, and 12 has 8.2 (the snap brings its own).
+  extras: [nginx, apache, apache-https, wordpress, nextcloud-snap, postgresql, mariadb, sqlite, mail, ftp, desktop, docker, juice-shop, dvwa, uptime-kuma, grafana, vaultwarden, gitea]
 
 # Windows Server 2025, with Desktop Experience and as Server Core (packer/windows-server, or by hand:
 # docs/setup-vsphere.md, "Windows Server templates"). Windows needs more memory: Core runs in 2 GB, the
@@ -197,9 +198,39 @@
   family: rhel
   extras: [nginx, apache, apache-https]
 - template: rocky
+  version: "10"
+  # Built by Packer (packer/build.sh rhel -var distro=rocky -var version=10 -var iso=…) on 2026-10-18, from Rocky Linux 10.2.
+  vsphere: Labs/Templates/tpl-rocky-10-20261018
+  cpu: 2
+  memoryGB: 2
+  diskGB: 20
+  username: labuser
+  family: rhel
+  extras: [nginx, apache, apache-https]
+- template: rocky
   version: "9"
   # Built by Packer (packer/build.sh rhel -var distro=rocky) on 2026-10-17, from Rocky Linux 9.8.
   vsphere: Labs/Templates/tpl-rocky-9-20261017
+  cpu: 2
+  memoryGB: 2
+  diskGB: 20
+  username: labuser
+  family: rhel
+  extras: [nginx, apache, apache-https]
+- template: rocky
+  version: "8"
+  # Built by Packer (packer/build.sh rhel -var distro=rocky -var version=8 -var iso=…) on 2026-10-18, from Rocky Linux 8.10.
+  vsphere: Labs/Templates/tpl-rocky-8-20261018
+  cpu: 2
+  memoryGB: 2
+  diskGB: 20
+  username: labuser
+  family: rhel
+  extras: [nginx, apache, apache-https]
+- template: alma
+  version: "10"
+  # Built by Packer (packer/build.sh rhel -var distro=alma -var version=10 -var iso=…) on 2026-10-18, from AlmaLinux 10.2.
+  vsphere: Labs/Templates/tpl-alma-10-20261018
   cpu: 2
   memoryGB: 2
   diskGB: 20
@@ -223,6 +254,16 @@
 # can't be fetched alongside MariaDB there, which they have instead). CentOS 7's cloud-init
 # is too old, so it's the "legacy" family, set up by lab-firstboot (packer/centos-legacy), with no
 # extras. Planned until each template is built.
+- template: alma
+  version: "8"
+  # Built by Packer (packer/build.sh rhel -var distro=alma -var version=8 -var iso=…) on 2026-10-18, from AlmaLinux 8.10.
+  vsphere: Labs/Templates/tpl-alma-8-20261018
+  cpu: 2
+  memoryGB: 2
+  diskGB: 20
+  username: labuser
+  family: rhel
+  extras: [nginx, apache, apache-https]
 - template: ubuntu
   version: "20.04"
   # Built by Packer (packer/build.sh ubuntu -var version=20.04 …) on 2026-10-17.

@@ -1,7 +1,8 @@
-# Windows Server 2025 templates for the panel, built unattended (docs/build-templates.md):
+# Windows Server templates for the panel (2025, 2022 or 2019), built unattended (docs/build-templates.md):
 #
 #   packer/build.sh windows-server                       # Desktop Experience, with Outlook and SQL Server
 #   packer/build.sh windows-server -var edition=core     # Server Core, with SQL Server
+#   packer/build.sh windows-server -var version=2022     # 2022 or 2019 (either edition): their evaluations
 #
 # Installs from the evaluation ISO with autounattend.xml, installs VMware Tools and opens WinRM
 # (bootstrap.ps1), runs scripts/template/prepare.ps1 (provision.ps1 gathers Cloudbase-Init, Office's
@@ -67,9 +68,18 @@ variable "edition" {
   }
 }
 # The ISOs' names in the datastore's ISO folder (scripts/isos/isos.txt).
+variable "version" {
+  type    = string
+  default = "2025"
+  validation {
+    condition     = contains(["2025", "2022", "2019"], var.version)
+    error_message = "The version is 2025, 2022 or 2019."
+  }
+}
+# Empty: the version's evaluation ISO, named as in isos.txt.
 variable "iso" {
   type    = string
-  default = "windows-server-2025-eval-26100.1742.iso"
+  default = ""
 }
 variable "sql_server_iso" {
   type    = string
@@ -104,11 +114,21 @@ variable "build_password" {
 locals {
   core       = var.edition == "core"
   suffix     = local.core ? "-core" : ""
-  vm_name    = var.vm_name != "" ? var.vm_name : "tpl-windows-server-2025${local.suffix}-${formatdate("YYYYMMDD", timestamp())}"
-  image_name = local.core ? "Windows Server 2025 Standard Evaluation" : "Windows Server 2025 Standard Evaluation (Desktop Experience)"
-  office     = var.office && !local.core
+  vm_name    = var.vm_name != "" ? var.vm_name : "tpl-windows-server-${var.version}${local.suffix}-${formatdate("YYYYMMDD", timestamp())}"
+  image_name = local.core ? "Windows Server ${var.version} Standard Evaluation" : "Windows Server ${var.version} Standard Evaluation (Desktop Experience)"
+  iso = var.iso != "" ? var.iso : {
+    "2025" = "windows-server-2025-eval-26100.1742.iso"
+    "2022" = "windows-server-2022-eval.iso"
+    "2019" = "windows-server-2019-eval.iso"
+  }[var.version]
+  guest_os_type = {
+    "2025" = "windows2022srvNext_64Guest"
+    "2022" = "windows2019srvNext_64Guest"
+    "2019" = "windows2019srv_64Guest"
+  }[var.version]
+  office = var.office && !local.core
   iso_paths = concat(
-    ["[${var.datastore}] ${var.iso_folder}/${var.iso}", "[] /vmimages/tools-isoimages/windows.iso"],
+    ["[${var.datastore}] ${var.iso_folder}/${local.iso}", "[] /vmimages/tools-isoimages/windows.iso"],
     var.sql_server ? ["[${var.datastore}] ${var.iso_folder}/${var.sql_server_iso}"] : [],
   )
 }
@@ -123,9 +143,9 @@ source "vsphere-iso" "windows" {
   datastore           = var.datastore
   folder              = var.template_folder
   vm_name             = local.vm_name
-  notes               = "Windows Server 2025 (${var.edition}) template for lab-deploy, built by Packer on ${formatdate("YYYY-MM-DD", timestamp())}."
+  notes               = "Windows Server ${var.version} (${var.edition}) template for lab-deploy, built by Packer on ${formatdate("YYYY-MM-DD", timestamp())}."
 
-  guest_os_type        = "windows2022srvNext_64Guest"
+  guest_os_type        = local.guest_os_type
   firmware             = "efi-secure"
   CPUs                 = 2
   RAM                  = local.core ? 2048 : 4096
@@ -199,7 +219,7 @@ build {
   # template itself (and once left WinRM refusing Packer's shutdown command).
 
   post-processor "manifest" {
-    output     = "${path.root}/../output/windows-server-2025${local.suffix}.json"
+    output     = "${path.root}/../output/windows-server-${var.version}${local.suffix}.json"
     strip_path = true
     custom_data = {
       vm_name    = local.vm_name

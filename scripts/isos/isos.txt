@@ -10,6 +10,8 @@ ubuntu-26.04     https://releases.ubuntu.com/26.04/ubuntu-26.04.1-live-server-am
 ubuntu-24.04     https://releases.ubuntu.com/24.04/ubuntu-24.04.5-live-server-amd64.iso    https://releases.ubuntu.com/24.04/SHA256SUMS
 ubuntu-22.04     https://releases.ubuntu.com/22.04/ubuntu-22.04.5-live-server-amd64.iso    https://releases.ubuntu.com/22.04/SHA256SUMS
 windows-server-2025  https://go.microsoft.com/fwlink/?linkid=2293312&clcid=0x409&culture=en-us&country=us  d0ef4502e350e3c6c53c15b1b3020d38a5ded011bf04998e950720ac8579b23d  windows-server-2025-eval-26100.1742.iso
+windows-server-2022  https://go.microsoft.com/fwlink/p/?LinkID=2195280&clcid=0x409&culture=en-us&country=US  3e4fa6d8507b554856fc9ca6079cc402df11a8b79344871669f0251535255325  windows-server-2022-eval.iso
+windows-server-2019  https://go.microsoft.com/fwlink/p/?LinkID=2195167&clcid=0x409&culture=en-us&country=US  -  windows-server-2019-eval.iso
 windows-11-26h2      https://go.microsoft.com/fwlink/?linkid=2382600&clcid=0x409&culture=en-us&country=us  bc3f24086ebadc94489066b5ad78089e2cf5c3491e90e790bb81a2b199c10e38  windows-11-enterprise-eval-26300.9457.iso
 # SQL Server 2025 Enterprise Developer: free for development and testing, not production.
 sql-server-2025  https://download.microsoft.com/download/dea8c210-c44a-4a9d-9d80-0c81578860c5/ENU/SQLServer2025-x64-ENU-EntDev.iso  f78f869d44e8c2cbf93be16ce6ea52dd811636f046ded29e7a74dd1352134851
@@ -22,6 +24,10 @@ vyos-2026.03     https://community-downloads.vyos.dev/stream/2026.03/vyos-2026.0
 centos-stream-9  https://mirror.stream.centos.org/9-stream/BaseOS/x86_64/iso/CentOS-Stream-9-20261013.0-x86_64-boot.iso    https://mirror.stream.centos.org/9-stream/BaseOS/x86_64/iso/CentOS-Stream-9-20261013.0-x86_64-boot.iso.SHA256SUM
 rocky-9          https://download.rockylinux.org/pub/rocky/9/isos/x86_64/Rocky-9.8-x86_64-boot.iso    https://download.rockylinux.org/pub/rocky/9/isos/x86_64/CHECKSUM
 alma-9           https://repo.almalinux.org/almalinux/9/isos/x86_64/AlmaLinux-9.8-x86_64-boot.iso    https://repo.almalinux.org/almalinux/9/isos/x86_64/CHECKSUM
+rocky-10         https://download.rockylinux.org/pub/rocky/10/isos/x86_64/Rocky-10.2-x86_64-boot.iso    https://download.rockylinux.org/pub/rocky/10/isos/x86_64/CHECKSUM
+rocky-8          https://download.rockylinux.org/pub/rocky/8/isos/x86_64/Rocky-8.10-x86_64-boot.iso    https://download.rockylinux.org/pub/rocky/8/isos/x86_64/CHECKSUM
+alma-10          https://repo.almalinux.org/almalinux/10/isos/x86_64/AlmaLinux-10.2-x86_64-boot.iso    https://repo.almalinux.org/almalinux/10/isos/x86_64/CHECKSUM
+alma-8           https://repo.almalinux.org/almalinux/8/isos/x86_64/AlmaLinux-8.10-x86_64-boot.iso    https://repo.almalinux.org/almalinux/8/isos/x86_64/CHECKSUM
 # Older Ubuntu (legacy practice targets): 20.04's live server (autoinstall, as packer/ubuntu), and
 # 18.04's "alternative" server ISO, the debian-installer one, as its live server can't install
 # unattended (packer/ubuntu-di, with a preseed).
