@@ -269,18 +269,6 @@ export const templates: MachineTemplate[] = [
 		access: ['ssh', 'rdp', 'console'],
 		credentials: 'labuser / set on first deploy',
 	},
-	{
-		id: 'security-onion',
-		name: 'Security Onion',
-		category: 'Security',
-		os: 'Linux',
-		description: 'Network security monitoring and log analysis: IDS alerts, packet capture and hunting. Needs a lot of memory.',
-		versions: [{ version: '2.4' }],
-		resources: { cpu: 4, memoryGB: 12, diskGB: 200 },
-		access: ['web', 'ssh', 'console'],
-		credentials: 'set on first deploy',
-		sshUser: 'labuser',
-	},
 
 	// Practice targets: vulnerable on purpose, only ever reachable inside personal networks.
 	{
