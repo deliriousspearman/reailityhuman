@@ -68,7 +68,7 @@
 - template: debian
   version: "13"
   # Built by Packer (packer/build.sh debian) on 2026-10-18.
-  vsphere: Labs/Templates/tpl-debian-13-20261018
+  vsphere: Labs/Templates/tpl-debian-13-20261018b
   cpu: 2
   memoryGB: 2
   diskGB: 25
@@ -78,7 +78,7 @@
 - template: debian
   version: "12"
   # Built by Packer (packer/build.sh debian -var version=12 -var iso=debian-12.15.0-amd64-netinst.iso) on 2026-10-18.
-  vsphere: Labs/Templates/tpl-debian-12-20261018
+  vsphere: Labs/Templates/tpl-debian-12-20261018b
   cpu: 2
   memoryGB: 2
   diskGB: 25
