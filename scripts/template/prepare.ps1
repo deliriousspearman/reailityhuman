@@ -184,15 +184,22 @@ check_latest_version=false
 netbios_host_name_compatibility=true
 first_logon_behaviour=no
 "@
-# During sysprep (specialize): the computer name, which takes effect at the restart that follows.
+# During sysprep (specialize): on Server, the computer name, which takes effect at the restart that
+# follows. Not on client Windows (10, 11): its first-run setup (OOBE), after this, renames a machine
+# whose answer file names no computer to a random DESKTOP-..., and the template's can't name each
+# clone. There the service names it instead, after Setup (and a restart), as the name step would
+# otherwise count as done.
+$unattendPlugins = 'cloudbaseinit.plugins.windows.extendvolumes.ExtendVolumesPlugin'
+if ($server) { $unattendPlugins = "cloudbaseinit.plugins.common.sethostname.SetHostNamePlugin,$unattendPlugins" }
 $unattend = $common + "`r`n" + @"
 log_file=cloudbase-init-unattend.log
-plugins=cloudbaseinit.plugins.common.sethostname.SetHostNamePlugin,cloudbaseinit.plugins.windows.extendvolumes.ExtendVolumesPlugin
+plugins=$unattendPlugins
 allow_reboot=false
 stop_service_on_exit=false
 "@
-# The service, at each boot: the name again (nothing to do once set), then the panel's first-boot
-# script, which it runs once per instance.
+# The service, at each boot (from SetupComplete.cmd on, below): the name (on Server, already set; on
+# client Windows, set here, with a restart), then the panel's first-boot script, which it runs once
+# per instance.
 $service = $common + "`r`n" + @"
 log_file=cloudbase-init.log
 plugins=cloudbaseinit.plugins.common.sethostname.SetHostNamePlugin,cloudbaseinit.plugins.common.userdata.UserDataPlugin
