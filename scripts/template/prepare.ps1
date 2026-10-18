@@ -204,7 +204,19 @@ Set-Content -Path (Join-Path $ConfDir 'cloudbase-init.conf') -Value $service -En
 if (-not (Test-Path (Join-Path $ConfDir 'Unattend.xml'))) {
     throw "Cloudbase-Init's Unattend.xml is missing from $ConfDir; clean.ps1 needs it for sysprep. Reinstall Cloudbase-Init."
 }
-Set-Service -Name cloudbase-init -StartupType Automatic
+# The service starts only once Windows Setup has finished on a clone (SetupComplete.cmd, which Setup
+# runs as its last step). Started any earlier, it can run during Setup itself, as on Windows 11: it
+# set the name and restarted mid-Setup, the unattend stage then skipped the name as done, and Setup
+# gave the machine a random DESKTOP-... one.
+Set-Service -Name cloudbase-init -StartupType Manual
+$setupScripts = Join-Path $env:SystemRoot 'Setup\Scripts'
+New-Item -ItemType Directory -Force -Path $setupScripts | Out-Null
+Set-Content -Path (Join-Path $setupScripts 'SetupComplete.cmd') -Encoding ascii -Value @'
+@echo off
+rem Written by the lab panel's scripts/template/prepare.ps1: Cloudbase-Init's service, from now on.
+sc.exe config cloudbase-init start= auto
+sc.exe start cloudbase-init
+'@
 
 # Remote Desktop -----------------------------------------------------------------------------------------
 

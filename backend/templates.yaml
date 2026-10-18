@@ -66,9 +66,9 @@
 # before the evaluation runs out.
 - template: windows
   version: "11"
-  # Built by Packer (packer/build.sh windows) on 2026-10-17, from 26H2 (26300.9457), with Office's and
+  # Built by Packer (packer/build.sh windows) on 2026-10-18, from 26H2 (26300.9457), with Office's and
   # SQL Server's files.
-  vsphere: Labs/Templates/tpl-windows-11-20261017
+  vsphere: Labs/Templates/tpl-windows-11-20261018
   cpu: 2
   memoryGB: 4
   diskGB: 64
