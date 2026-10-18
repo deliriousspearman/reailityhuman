@@ -333,11 +333,13 @@ debian)
 	# curl: the extras' downloads (a minimal Debian install has none).
 	apt-get install -yq open-vm-tools cloud-init curl ca-certificates
 	# Debian's network is ifupdown, whose format can't say the panel's "DHCP on any e* adapter": cloud-init
-	# wrote an interface called "nics" and the real one stayed down. With netplan (and systemd-networkd)
-	# it renders that as on Ubuntu.
+	# wrote an interface called "nics" and the real one stayed down. With netplan (and systemd-networkd),
+	# and cloud-init told to prefer it (Debian's own list puts ifupdown first), it renders that as on Ubuntu.
 	if [[ $ID == debian ]]; then
 		apt-get install -yq netplan.io
 		systemctl enable -q systemd-networkd
+		printf '%s\n' '# Written by the lab panel'"'"'s prepare.sh: netplan, which takes the panel'"'"'s match on e*.' \
+			'system_info:' '  network:' '    renderers: [netplan, eni]' >/etc/cloud/cloud.cfg.d/90-lab-netplan.cfg
 	fi
 	# With a desktop: copy and paste, and the console's screen size follows its window.
 	if ((RDP_DESKTOP)); then apt-get install -yq open-vm-tools-desktop; fi

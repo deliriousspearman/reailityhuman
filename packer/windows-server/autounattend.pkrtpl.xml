@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Windows Setup's answers for the Windows template builds (windows-server.pkr.hcl, and
-     ../windows/windows.pkr.hcl with client = true), read from a CD. It installs ${image_name} on the
+     ../windows/windows.pkr.hcl with client = true), read from a CD. It installs the image chosen below (by name or number) on the
      one disk (UEFI), signs Administrator in once, and runs bootstrap.ps1 from the same CD: VMware
      Tools, then WinRM for Packer. -->
 <unattend xmlns="urn:schemas-microsoft-com:unattend" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State">
@@ -61,7 +61,7 @@
         <OSImage>
           <InstallFrom>
             <MetaData wcm:action="add">
-              <Key>/IMAGE/NAME</Key>
+              <Key>${image_key}</Key>
               <Value>${image_name}</Value>
             </MetaData>
           </InstallFrom>

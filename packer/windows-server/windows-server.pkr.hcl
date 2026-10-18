@@ -112,10 +112,13 @@ variable "build_password" {
 }
 
 locals {
-  core       = var.edition == "core"
-  suffix     = local.core ? "-core" : ""
-  vm_name    = var.vm_name != "" ? var.vm_name : "tpl-windows-server-${var.version}${local.suffix}-${formatdate("YYYYMMDD", timestamp())}"
-  image_name = local.core ? "Windows Server ${var.version} Standard Evaluation" : "Windows Server ${var.version} Standard Evaluation (Desktop Experience)"
+  core    = var.edition == "core"
+  suffix  = local.core ? "-core" : ""
+  vm_name = var.vm_name != "" ? var.vm_name : "tpl-windows-server-${var.version}${local.suffix}-${formatdate("YYYYMMDD", timestamp())}"
+  # 2025's images go by these names; 2022's and 2019's have other names inside (Setup then asks), so
+  # those go by number: 1 Standard (Core), 2 Standard (Desktop Experience).
+  image_key  = var.version == "2025" ? "/IMAGE/NAME" : "/IMAGE/INDEX"
+  image_name = var.version != "2025" ? (local.core ? "1" : "2") : (local.core ? "Windows Server 2025 Standard Evaluation" : "Windows Server 2025 Standard Evaluation (Desktop Experience)")
   iso = var.iso != "" ? var.iso : {
     "2025" = "windows-server-2025-eval-26100.1742.iso"
     "2022" = "windows-server-2022-eval.iso"
@@ -175,6 +178,7 @@ source "vsphere-iso" "windows" {
   )
   cd_content = {
     "autounattend.xml" = templatefile("${path.root}/autounattend.pkrtpl.xml", {
+      image_key      = local.image_key
       image_name     = local.image_name
       admin_password = var.build_password
       client         = false

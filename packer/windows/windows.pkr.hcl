@@ -156,6 +156,7 @@ source "vsphere-iso" "windows" {
   )
   cd_content = {
     "autounattend.xml" = templatefile("${local.scripts}/autounattend.pkrtpl.xml", {
+      image_key      = "/IMAGE/NAME"
       image_name     = var.image_name
       admin_password = var.build_password
       client         = true
