@@ -70,6 +70,7 @@ def test_offered_by_says_what_is_ready(monkeypatch, a_planned_template):
     assert catalogue.offered_by("iis") == [
         {"template": "windows-server", "version": "2025", "ready": True},
         {"template": "windows-server", "version": "2022", "ready": True},
+        {"template": "windows-server", "version": "2019", "ready": True},
         {"template": "windows-server", "version": "2025 Core", "ready": True},
         {"template": "windows", "version": "11", "ready": True},
     ]
