@@ -225,3 +225,19 @@
   family: image
   access: [ssh, web, console]
   webUrl: http://{ip}/
+
+# Metasploitable 3: a deliberately vulnerable Ubuntu 14.04 (packer/metasploitable/import-ms3.sh:
+# Rapid7's VMware image as it is; it has VMware Tools). Its own sign-in, vagrant / vagrant, is on every
+# machine: keep these on the lab network only.
+- template: metasploitable
+  version: "3"
+  # Imported on 2026-10-18 from Rapid7's metasploitable3-ub1404 0.1.12-weekly.
+  vsphere: Labs/Templates/tpl-metasploitable-3-20261018
+  cpu: 2
+  memoryGB: 2
+  diskGB: 40
+  username: vagrant
+  password: vagrant
+  family: image
+  access: [ssh, web, console]
+  webUrl: http://{ip}/

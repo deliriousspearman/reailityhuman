@@ -17,6 +17,7 @@ as building by hand ([setup-vsphere.md](setup-vsphere.md), parts 2, 5 and 6), wh
 | OPNsense 26.7 | `packer/build.sh opnsense` | ~14 min |
 | VyOS 1.5 rolling | `packer/vyos/build-iso.sh` once, then `packer/build.sh vyos` | ~8 min |
 | Metasploitable 2 | `packer/metasploitable/import-ms2.sh` | ~15 min |
+| Metasploitable 3 (Ubuntu 14.04) | `packer/metasploitable/import-ms3.sh` | ~30 min |
 | Kali Linux 2026.2 | `packer/build.sh kali` | ~31 min |
 | Parrot Security 7.4 | `packer/parrot/import-base.sh <ova>` once, then `packer/build.sh parrot` | ~11 min |
 | Rocky Linux 9 | `packer/build.sh rhel -var distro=rocky` | ~15–20 min |
@@ -58,6 +59,12 @@ and VMware's frozen Tools 10.0.12 (the last for its glibc 2.7), converts its dis
 installs Tools at its console, keeping the image's own initrd (the one Tools' installer makes can't
 find the disk). Settings as for `import-base.sh`; offline, put the two downloads in `MEDIA=<folder>`.
 It's deliberately vulnerable: keep it on the lab network.
+
+**Metasploitable 3** (its Ubuntu 14.04 variant) is imported the same way, but from the VMware image
+Rapid7 published on Vagrant Cloud (`import-ms3.sh`): its own build needs Chef, whose installers now
+need a licence. The image has VMware Tools already, so nothing in it changes. Sign-in: vagrant /
+vagrant. Its Windows Server 2008 R2 variant isn't offered: that image's evaluation licence expired
+long ago.
 
 **Container apps** (Juice Shop, DVWA, Uptime Kuma, Grafana, Vaultwarden, Gitea): `prepare.sh` pulls
 their pinned images (`DOCKER_IMAGES`) into the template's Docker, so machines start them without
