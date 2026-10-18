@@ -5,8 +5,9 @@
 #
 #   lab-firstboot early   # before the configuration is applied: the hostname, and root's password
 #                         # (the machine's, as a SHA-512 hash) and SSH key, written into config.xml
-#   lab-firstboot start   # at the end of boot: /var/lib/lab-deploy/extras.status, which the panel
-#                         # waits for as the sign the machine is ready
+#   lab-firstboot start   # at the end of boot: root's password in the system's own password file
+#                         # too, and /var/lib/lab-deploy/extras.status, which the panel waits for
+#                         # as the sign the machine is ready
 #
 # It acts once per machine (guestinfo.lab.instance); a reset reverts the disk to before the first boot,
 # so it runs again. The panel's user is root: OPNsense's administrator.
@@ -60,13 +61,16 @@ early)
 		}
 		$doc->save($file);
 	' || { echo "Couldn't update $CONFIG."; exit 1; }
-	# And the system account now, in case OPNsense only syncs it from the configuration later.
-	printf '%s\n' "$LAB_HASH" | pw usermod root -H 0
 	echo "$instance" >"$DIR/instance"
 	rm -f "$DIR/extras.status"
 	;;
 start)
 	[ "$(cat "$DIR/instance" 2>/dev/null)" = "$instance" ] || { echo "Not set up for $instance yet."; exit 0; }
+	# OPNsense checks sign-ins against config.xml, and keeps "*" in /etc/master.passwd (its account
+	# sync, at boot, writes it). VMware Tools' guest sign-in, which the panel reads the ready file
+	# with, isn't a service OPNsense knows, so it falls through to that file: give it the hash too,
+	# at every boot, after the sync.
+	rpc password | pw usermod root -H 0
 	[ -f "$DIR/extras.status" ] && exit 0
 	# Empty: no extras on OPNsense. Written last, in one go, readable by the panel.
 	tmp=$(mktemp "$DIR/status.XXXXXX")

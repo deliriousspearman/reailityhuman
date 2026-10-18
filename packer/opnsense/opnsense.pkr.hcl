@@ -6,11 +6,12 @@
 # family legacy): scripts/template/opnsense/lab-firstboot reads the guestinfo.lab.* keys through
 # VMware Tools and writes them into its config.xml at each new machine's first boot.
 #
-# The DVD's installer is a text menu, so boot_command types the answers. Before anything else it
-# makes the live system's one adapter WAN (a DHCP client) with no LAN: by default the live system
-# would make it LAN, with its own address and a DHCP server, on the shared lab network. The live system then
-# installs to disk with config.pkrtpl.xml as the configuration and adds VMware Tools (os-vmware), so
-# Packer finds the installed system's address and signs in as root with its SSH key.
+# The DVD's installer is a text menu, so boot_command types the answers. First, at the loader, it
+# switches the adapters off for the live system: by default the live system would make one of them
+# LAN, with its own address and a DHCP server, on the shared lab network. The live system then
+# installs to disk with config.pkrtpl.xml as the configuration, and live.sh adds a one-time boot hook
+# for VMware Tools (os-vmware), so Packer finds the installed system's address and signs in as root
+# with its SSH key.
 
 packer {
   required_plugins {
