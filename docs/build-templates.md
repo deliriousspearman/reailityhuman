@@ -16,6 +16,7 @@ as building by hand ([setup-vsphere.md](setup-vsphere.md), parts 2, 5 and 6), wh
 | Windows 11 Enterprise (evaluation) | `packer/build.sh windows` | ~37 min |
 | OPNsense 26.7 | `packer/build.sh opnsense` | ~14 min |
 | VyOS 1.5 rolling | `packer/vyos/build-iso.sh` once, then `packer/build.sh vyos` | ~8 min |
+| Metasploitable 2 | `packer/metasploitable/import-ms2.sh` | ~15 min |
 | Kali Linux 2026.2 | `packer/build.sh kali` | ~31 min |
 | Parrot Security 7.4 | `packer/parrot/import-base.sh <ova>` once, then `packer/build.sh parrot` | ~11 min |
 | Rocky Linux 9 | `packer/build.sh rhel -var distro=rocky` | ~15–20 min |
@@ -50,6 +51,13 @@ the lab network. If `live.sh` ever finds an adapter in the live system, it power
 (the `vyos` family): the user through cloud-config `users` (with none there, VyOS adds `vyos` /
 `vyos`), the rest as configuration commands. The template uses BIOS, not EFI: on EFI the installed
 disk's fallback loader reset the VM onto the CD.
+
+**Metasploitable 2** is Rapid7's image, imported as it is (the `image` family: nothing set up on
+each machine, and its own sign-in, msfadmin / msfadmin, on all of them). `import-ms2.sh` downloads it
+and VMware's frozen Tools 10.0.12 (the last for its glibc 2.7), converts its disk for vSphere, and
+installs Tools at its console, keeping the image's own initrd (the one Tools' installer makes can't
+find the disk). Settings as for `import-base.sh`; offline, put the two downloads in `MEDIA=<folder>`.
+It's deliberately vulnerable: keep it on the lab network.
 
 **Container apps** (Juice Shop, DVWA, Uptime Kuma, Grafana, Vaultwarden, Gitea): `prepare.sh` pulls
 their pinned images (`DOCKER_IMAGES`) into the template's Docker, so machines start them without
