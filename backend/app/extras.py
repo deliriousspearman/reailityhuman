@@ -157,12 +157,16 @@ lab_wait_http() {
 	return 1
 }
 
-# lab_open <port/proto>...: opens ports in firewalld, where it's running (RHEL family).
+# lab_open <port/proto>...: opens ports in firewalld, where it's running (RHEL family). In a unit of its
+# own, not waited for: firewalld asks polkit before changing its settings, and on EL8 polkit can't
+# start until cloud-init has finished, which would be waiting for this (a deadlock). The ports open a
+# few seconds after the machine is set up.
 lab_open() {
 	systemctl is-active -q firewalld || return 0
-	local port
-	for port in "$@"; do firewall-cmd -q --permanent --add-port="$port"; done
-	firewall-cmd -q --reload
+	local port args=()
+	for port in "$@"; do args+=("--add-port=$port"); done
+	systemd-run --quiet --no-block --collect --unit="lab-open-$$-$RANDOM" \
+		/bin/sh -c "firewall-cmd -q --permanent ${args[*]} && firewall-cmd -q --reload"
 }
 """
 
