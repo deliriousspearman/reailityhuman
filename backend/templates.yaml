@@ -87,7 +87,7 @@
 - template: opnsense
   version: "26.7"
   # Built by Packer (packer/build.sh opnsense) on 2026-10-18.
-  vsphere: Labs/Templates/tpl-opnsense-26.7-20261018
+  vsphere: Labs/Templates/tpl-opnsense-26.7-20261018b
   cpu: 2
   memoryGB: 2
   diskGB: 20
@@ -95,6 +95,20 @@
   family: legacy
   adminGroup: admins
   access: [web, ssh, console]
+
+# VyOS: a command-line router (packer/vyos, from our own ISO: packer/vyos/build-iso.sh adds VMware Tools
+# and cloud-init). Its cloud-init takes configuration commands (family vyos): the panel sets the host
+# name, the user (vyos) with each machine's password and key, SSH, and DHCP on both adapters.
+- template: vyos
+  version: "1.5 rolling"
+  # Built by Packer (packer/build.sh vyos) on 2026-10-18, from vyos-1.5-rolling-202610180239.
+  vsphere: Labs/Templates/tpl-vyos-rolling-20261018
+  cpu: 2
+  memoryGB: 1
+  diskGB: 10
+  username: vyos
+  family: vyos
+  access: [ssh, console]
 
 # Kali Linux and Parrot Security: attack boxes, reached over Remote Desktop to their own desktop
 # (packer/kali, or by hand: docs/setup-vsphere.md, "Kali Linux and Parrot Security templates"). Not

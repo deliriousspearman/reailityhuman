@@ -32,7 +32,8 @@ scripts-check:
   stage: build
   image: koalaman/shellcheck-alpine:v0.10.0
   script:
-    - shellcheck scripts/template/*.sh scripts/template/legacy/*.sh scripts/template/legacy/lab-firstboot
+    - shellcheck scripts/template/*.sh scripts/template/legacy/*.sh scripts/template/legacy/lab-firstboot scripts/isos/fetch.sh packer/vyos/build-iso.sh
+    - shellcheck -s sh scripts/template/opnsense/*.sh scripts/template/opnsense/lab-firstboot packer/opnsense/live.sh
 
 # The Windows template scripts: parsed with PowerShell's own parser (they run on VMs, so CI only
 # checks they're well-formed). Not required for deploys: it pulls from Microsoft's registry.

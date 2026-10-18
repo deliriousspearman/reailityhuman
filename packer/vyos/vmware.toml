@@ -1,0 +1,16 @@
+# The lab panel's VyOS build flavour (packer/vyos/build-iso.sh copies it into vyos-build's
+# data/build-flavors/): VyOS's generic ISO plus VMware Tools (vyos-1x-vmware brings open-vm-tools) and
+# VyOS's cloud-init, reading the panel's settings from vCenter guestinfo.
+image_format = "iso"
+
+packages = [
+  "vyos-1x-vmware",
+  "cloud-init"
+]
+
+[[includes_chroot]]
+  path = "etc/cloud/cloud.cfg.d/90-lab-datasource.cfg"
+  data = """
+# The lab panel: settings come from vCenter (VMware guestinfo).
+datasource_list: [ VMware, None ]
+"""

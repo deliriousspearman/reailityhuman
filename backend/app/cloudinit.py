@@ -269,6 +269,34 @@ def legacy_guestinfo(instance_id: str, hostname: str, username: str, password: s
     }
 
 
+def vyos_userdata(hostname: str, username: str, password: str, ssh_key: str | None) -> str:
+    """VyOS's cloud-init takes only VyOS configuration commands (vyos_config_commands), applied and
+    saved at first boot: the host name, the user (its password as a SHA-512 crypt hash) and SSH key,
+    SSH, and both adapters on DHCP (the lab LAN, for now)."""
+    def q(value: str) -> str:
+        return "'" + value.replace("'", "") + "'"
+
+    user = f"set system login user {q(username)} authentication"
+    commands = [
+        f"set system host-name {q(hostname)}",
+        f"{user} encrypted-password {q(hash_password(password))}",
+    ]
+    if ssh_key and len(parts := ssh_key.split()) >= 2:
+        commands += [f"{user} public-keys panel type {q(parts[0])}", f"{user} public-keys panel key {q(parts[1])}"]
+    commands += [
+        "set service ssh port '22'",
+        "set interfaces ethernet eth0 address 'dhcp'",
+        "set interfaces ethernet eth1 address 'dhcp'",
+    ]
+    return "#cloud-config\n" + yaml.safe_dump({"vyos_config_commands": commands}, sort_keys=False)
+
+
+def vyos_guestinfo(instance_id: str, hostname: str, username: str, password: str, ssh_key: str | None) -> dict[str, str]:
+    """extraConfig keys for a VyOS VM (family "vyos"): its own cloud-init build reads them from VMware
+    guestinfo (packer/vyos). Metadata without network config: VyOS sets its interfaces itself."""
+    return _encode(windows_metadata(instance_id, hostname), vyos_userdata(hostname, username, password, ssh_key))
+
+
 def guestinfo(
     instance_id: str,
     hostname: str,

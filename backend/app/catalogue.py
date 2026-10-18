@@ -24,8 +24,9 @@ class LiveTemplate:
     memory_gb: int
     disk_gb: int
     username: str
-    # OS family: "debian" (Debian, Ubuntu), "rhel" (CentOS Stream, Rocky, Alma), "windows", or "legacy"
-    # (old Linux set up by lab-firstboot: give adminGroup).
+    # OS family: "debian" (Debian, Ubuntu), "rhel" (CentOS Stream, Rocky, Alma), "windows", "legacy"
+    # (old Linux and OPNsense, set up by lab-firstboot: give adminGroup), or "vyos" (VyOS's own
+    # cloud-init: configuration commands).
     family: str = "debian"
     # The group that gives the user sudo. Default: "sudo" for the debian family, "wheel" for rhel.
     admin_group: str = "sudo"

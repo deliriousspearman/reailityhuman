@@ -59,6 +59,8 @@ def deploy(vc: VCenter, m: Machine) -> None:
         extra = cloudinit.windows_guestinfo(m.id, m.name, m.username, m.password, m.ssh_key, chosen, ssh)
     elif tpl.family == "legacy":
         extra = cloudinit.legacy_guestinfo(m.id, m.name, m.username, m.password, m.ssh_key, tpl.admin_group)
+    elif tpl.family == "vyos":
+        extra = cloudinit.vyos_guestinfo(m.id, m.name, m.username, m.password, m.ssh_key)
     else:
         extra = cloudinit.guestinfo(
             m.id, m.name, m.username, m.password, m.ssh_key, tpl.admin_group, extras.cloud_config(chosen, tpl.family, m.name, m.username, m.password)
@@ -203,12 +205,32 @@ def _wait_for_status(vc: VCenter, vm, m: Machine, family: str, timeout: float) -
     return text
 
 
+def _await_vyos(vc: VCenter, vm, m: Machine) -> None:
+    """VyOS applies the panel's configuration commands at first boot and runs no scripts after, so
+    there's no status file: it's ready once its user can sign in (through VMware Tools), which only
+    the applied configuration makes possible."""
+    add_log(m.id, "Applying its configuration (its user and SSH)…", "muted")
+    deadline = time.monotonic() + settings().extras_timeout_seconds
+    while vc.guest_login_ok(vm, m.username, m.password) is not True:
+        if time.monotonic() >= deadline:
+            raise SetupError(
+                f"{m.username} couldn't sign in within {settings().extras_timeout_seconds // 60} minutes, so its "
+                "configuration wasn't applied. On the machine's console, sign in as the template's user and run "
+                "`show log | match cloud-init` to see why.",
+                None,
+            )
+        time.sleep(5)
+
+
 def _await_setup(vc: VCenter, vm, m: Machine) -> None:
     """Waits for the machine to finish setting up on first boot, and fails the job if any part
     didn't. Every machine writes its status file last (Linux: once cloud-init has set up the user, its
     password and SSH, then any extras; Windows: after sysprep, a restart and its first-boot script), so
     "ready" means people can sign in. Each extra's own log is on the machine (extras.log_file)."""
     family = m.family
+    if family == "vyos":
+        _await_vyos(vc, vm, m)
+        return
     windows = family == "windows"
     chosen = m.extras or []
     names = ", ".join(x.name if (x := extras.find(c["id"])) else c["id"] for c in chosen)
