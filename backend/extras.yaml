@@ -436,15 +436,18 @@
       postconf -M 'submission/inet=submission inet n - y - - smtpd'
       postconf -P 'submission/inet/syslog_name=postfix/submission' 'submission/inet/smtpd_tls_security_level=encrypt' \
         'submission/inet/smtpd_sasl_auth_enable=yes' 'submission/inet/smtpd_client_restrictions=permit_sasl_authenticated,reject'
-      # Dovecot 2.4: the same Maildir, and sign-ins checked for Postfix. Its certificate is where its
-      # own config looks (it opens that file even when told another): this machine's.
+      # Dovecot: the same Maildir, and sign-ins checked for Postfix. Its certificate is where its own
+      # config looks (it opens that file even when told another): this machine's. Where the mail is
+      # is said differently by 2.4 (Ubuntu 26.04, Debian 13) and 2.3 (Ubuntu 22.04 and 24.04, Debian 12).
       ln -sf "$LAB_CERT" /etc/dovecot/private/dovecot.pem
       ln -sf "$LAB_KEY" /etc/dovecot/private/dovecot.key
+      case $(dovecot --version) in
+      2.3*) maildir='mail_location = maildir:~/Maildir' ;;
+      *) maildir=$(printf '%s\n' 'mail_driver = maildir' 'mail_path = %{home}/Maildir' 'mail_inbox_path = %{home}/Maildir') ;;
+      esac
       cat >/etc/dovecot/conf.d/99-lab.conf <<EOF
       # Written by the lab panel's mail extra.
-      mail_driver = maildir
-      mail_path = %{home}/Maildir
-      mail_inbox_path = %{home}/Maildir
+      $maildir
       service auth {
         unix_listener /var/spool/postfix/private/auth {
           mode = 0660
