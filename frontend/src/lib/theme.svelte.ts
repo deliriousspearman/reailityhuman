@@ -19,17 +19,27 @@ function saved(): ThemeChoice {
 
 class Theme {
 	choice = $state<ThemeChoice>(typeof window === 'undefined' ? 'auto' : saved());
+	/** The system's setting, kept up to date. */
+	#systemDark = $state(typeof window === 'undefined' || matchMedia('(prefers-color-scheme: dark)').matches);
 
 	constructor() {
 		if (typeof window === 'undefined') return;
-		matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => this.#apply());
+		matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+			this.#systemDark = e.matches;
+			this.#apply();
+		});
+	}
+
+	/** The palette showing: the one chosen, or Hacklab Night or Day by the system's setting. */
+	get palette(): string {
+		return this.choice === 'auto' ? this.base : this.choice;
 	}
 
 	/** The base showing: what the icon and anything else light/dark goes by. */
 	get base(): 'dark' | 'light' {
 		const palette = paletteById(this.choice);
 		if (palette) return palette.base;
-		return typeof window !== 'undefined' && !matchMedia('(prefers-color-scheme: dark)').matches ? 'light' : 'dark';
+		return this.#systemDark ? 'dark' : 'light';
 	}
 
 	set(choice: ThemeChoice) {

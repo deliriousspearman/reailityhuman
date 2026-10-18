@@ -47,20 +47,19 @@
 
 		<label class="theme-select">
 			<span class="visually-hidden">Theme</span>
-			<Icon name={theme.choice === 'auto' ? 'auto' : theme.base === 'dark' ? 'moon' : 'sun'} />
-			<select value={theme.choice} onchange={(e) => theme.set(e.currentTarget.value as ThemeChoice)}>
-				<option value="auto">System</option>
-				{#each PALETTES.slice(0, 2) as palette (palette.id)}
-					<option value={palette.id}>{palette.label}</option>
-				{/each}
+			<Icon name={theme.base === 'dark' ? 'moon' : 'sun'} />
+			<!-- As on the course site: dark and light palettes, each led by the panel's own. Until one is
+			     chosen, the system's light or dark picks Hacklab Day or Night (theme.palette). -->
+			<select value={theme.palette} onchange={(e) => theme.set(e.currentTarget.value as ThemeChoice)}>
 				{#each [['dark', 'Dark'], ['light', 'Light']] as [base, label] (base)}
 					<optgroup {label}>
-						{#each PALETTES.slice(2).filter((palette) => palette.base === base) as palette (palette.id)}
+						{#each PALETTES.filter((palette) => palette.base === base) as palette (palette.id)}
 							<option value={palette.id}>{palette.label}</option>
 						{/each}
 					</optgroup>
 				{/each}
 			</select>
+			<span class="chevron"><Icon name="chevron" /></span>
 		</label>
 
 	</div>
@@ -181,10 +180,19 @@
 		left: 0.6rem;
 		pointer-events: none;
 	}
+	.theme-select .chevron {
+		position: absolute;
+		right: 0.6rem;
+		display: inline-flex;
+		pointer-events: none;
+	}
+	.theme-select .chevron :global(svg) {
+		position: static;
+	}
 	.theme-select select {
 		appearance: none;
 		min-height: 2.25rem;
-		padding: 0.3rem 0.7rem 0.3rem 2.1rem;
+		padding: 0.3rem 2rem 0.3rem 2.1rem;
 		border: 1px solid transparent;
 		border-radius: var(--lms-radius-sm);
 		background: transparent;
