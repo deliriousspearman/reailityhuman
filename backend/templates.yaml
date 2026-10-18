@@ -63,6 +63,29 @@
   # Not Nextcloud: it needs PHP 8.3, and 22.04 has 8.1 (the snap brings its own).
   extras: [nginx, apache, apache-https, wordpress, nextcloud-snap, postgresql, mariadb, mysql, sqlite, mail, ftp, desktop, docker, juice-shop, dvwa, uptime-kuma, grafana, vaultwarden, gitea]
 
+# Debian (packer/debian, from the netinst ISO): a plain server with every extra baked in, except MySQL
+# (Debian has no mysql-server package).
+- template: debian
+  version: "13"
+  # Built by Packer (packer/build.sh debian) on 2026-10-18.
+  vsphere: Labs/Templates/tpl-debian-13-20261018
+  cpu: 2
+  memoryGB: 2
+  diskGB: 25
+  username: labuser
+  family: debian
+  extras: [nginx, apache, apache-https, wordpress, nextcloud, nextcloud-snap, postgresql, mariadb, sqlite, mail, ftp, desktop, docker, juice-shop, dvwa, uptime-kuma, grafana, vaultwarden, gitea]
+- template: debian
+  version: "12"
+  # Built by Packer (packer/build.sh debian -var version=12 -var iso=debian-12.15.0-amd64-netinst.iso) on 2026-10-18.
+  vsphere: Labs/Templates/tpl-debian-12-20261018
+  cpu: 2
+  memoryGB: 2
+  diskGB: 25
+  username: labuser
+  family: debian
+  extras: [nginx, apache, apache-https, wordpress, nextcloud, nextcloud-snap, postgresql, mariadb, sqlite, mail, ftp, desktop, docker, juice-shop, dvwa, uptime-kuma, grafana, vaultwarden, gitea]
+
 # Windows Server 2025, with Desktop Experience and as Server Core (packer/windows-server, or by hand:
 # docs/setup-vsphere.md, "Windows Server templates"). Windows needs more memory: Core runs in 2 GB, the
 # desktop wants 4.
