@@ -270,25 +270,22 @@ def legacy_guestinfo(instance_id: str, hostname: str, username: str, password: s
 
 
 def vyos_userdata(hostname: str, username: str, password: str, ssh_key: str | None) -> str:
-    """VyOS's cloud-init takes only VyOS configuration commands (vyos_config_commands), applied and
-    saved at first boot: the host name, the user (its password as a SHA-512 crypt hash) and SSH key,
+    """VyOS's cloud-init (its cc_vyos module) writes the user from standard cloud-config `users` (the
+    password as a SHA-512 crypt hash, and the SSH key) into VyOS's configuration. It must come that
+    way: with no user there, the module adds its fallback, vyos with the plaintext password "vyos",
+    which on commit replaces any password set by a configuration command. The rest is VyOS
+    configuration commands (vyos_config_commands), applied and saved at first boot: the host name,
     SSH, and both adapters on DHCP (the lab LAN, for now)."""
-    def q(value: str) -> str:
-        return "'" + value.replace("'", "") + "'"
-
-    user = f"set system login user {q(username)} authentication"
+    user: dict = {"name": username, "passwd": hash_password(password)}
+    if ssh_key:
+        user["ssh_authorized_keys"] = [ssh_key.strip()]
     commands = [
-        f"set system host-name {q(hostname)}",
-        f"{user} encrypted-password {q(hash_password(password))}",
-    ]
-    if ssh_key and len(parts := ssh_key.split()) >= 2:
-        commands += [f"{user} public-keys panel type {q(parts[0])}", f"{user} public-keys panel key {q(parts[1])}"]
-    commands += [
+        f"set system host-name '{hostname}'",
         "set service ssh port '22'",
         "set interfaces ethernet eth0 address 'dhcp'",
         "set interfaces ethernet eth1 address 'dhcp'",
     ]
-    return "#cloud-config\n" + yaml.safe_dump({"vyos_config_commands": commands}, sort_keys=False)
+    return "#cloud-config\n" + yaml.safe_dump({"users": [user], "vyos_config_commands": commands}, sort_keys=False)
 
 
 def vyos_guestinfo(instance_id: str, hostname: str, username: str, password: str, ssh_key: str | None) -> dict[str, str]:

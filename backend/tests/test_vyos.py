@@ -1,4 +1,4 @@
-"""VyOS machines (family "vyos"): cloud-config with only VyOS configuration commands, and a deploy
+"""VyOS machines (family "vyos"): cloud-config with the user and VyOS configuration commands, and a deploy
 that's ready once the user can sign in (faked: vcsim VMs have no guest)."""
 
 import base64
@@ -26,20 +26,21 @@ def vyos(monkeypatch):
     monkeypatch.setitem(catalogue.catalogue(), KEY, tpl)
 
 
-def test_vyos_userdata_is_configuration_commands():
+def test_vyos_userdata_has_the_user_and_configuration_commands():
     text = cloudinit.vyos_userdata("r1", "labuser", "Pass-word1", "ssh-ed25519 AAAAkey me@host")
     assert text.startswith("#cloud-config\n")
-    commands = yaml.safe_load(text)["vyos_config_commands"]
-    assert yaml.safe_load(text).keys() == {"vyos_config_commands"}
-    assert "set system host-name 'r1'" in commands
-    password = next(c for c in commands if "encrypted-password" in c)
-    assert password.startswith("set system login user 'labuser' authentication encrypted-password '$6$")
+    data = yaml.safe_load(text)
+    # The user through cloud-config users, so VyOS's module doesn't add its vyos/vyos fallback.
+    (user,) = data["users"]
+    assert user["name"] == "labuser" and user["passwd"].startswith("$6$")
+    assert user["ssh_authorized_keys"] == ["ssh-ed25519 AAAAkey me@host"]
     assert "Pass-word1" not in text
-    assert "set system login user 'labuser' authentication public-keys panel type 'ssh-ed25519'" in commands
-    assert "set system login user 'labuser' authentication public-keys panel key 'AAAAkey'" in commands
+    commands = data["vyos_config_commands"]
+    assert "set system host-name 'r1'" in commands
     assert "set service ssh port '22'" in commands
     assert {"set interfaces ethernet eth0 address 'dhcp'", "set interfaces ethernet eth1 address 'dhcp'"} <= set(commands)
-    assert not any("public-keys" in c for c in yaml.safe_load(cloudinit.vyos_userdata("r1", "u", "pw", None))["vyos_config_commands"])
+    assert not any("login" in c for c in commands)
+    assert "ssh_authorized_keys" not in yaml.safe_load(cloudinit.vyos_userdata("r1", "u", "pw", None))["users"][0]
 
 
 def test_vyos_metadata_has_no_network_config():
