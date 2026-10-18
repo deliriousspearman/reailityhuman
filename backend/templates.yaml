@@ -102,7 +102,7 @@
 - template: vyos
   version: "1.5 rolling"
   # Built by Packer (packer/build.sh vyos) on 2026-10-18, from vyos-1.5-rolling-202610180239.
-  vsphere: Labs/Templates/tpl-vyos-rolling-20261018
+  vsphere: Labs/Templates/tpl-vyos-rolling-20261018b
   cpu: 2
   memoryGB: 1
   diskGB: 10
