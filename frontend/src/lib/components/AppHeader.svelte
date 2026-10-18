@@ -2,6 +2,7 @@
 	import { page } from '$app/state';
 	import { store } from '$lib/store.svelte';
 	import { sectionFor, sections } from '$lib/nav';
+	import { PALETTES } from '$lib/palettes';
 	import { theme, type ThemeChoice } from '$lib/theme.svelte';
 	import Icon from './Icon.svelte';
 
@@ -46,11 +47,19 @@
 
 		<label class="theme-select">
 			<span class="visually-hidden">Theme</span>
-			<Icon name={theme.choice === 'auto' ? 'auto' : theme.choice === 'dark' ? 'moon' : 'sun'} />
+			<Icon name={theme.choice === 'auto' ? 'auto' : theme.base === 'dark' ? 'moon' : 'sun'} />
 			<select value={theme.choice} onchange={(e) => theme.set(e.currentTarget.value as ThemeChoice)}>
-				<option value="dark">Dark</option>
-				<option value="light">Light</option>
-				<option value="auto">Auto</option>
+				<option value="auto">System</option>
+				{#each PALETTES.slice(0, 2) as palette (palette.id)}
+					<option value={palette.id}>{palette.label}</option>
+				{/each}
+				{#each [['dark', 'Dark'], ['light', 'Light']] as [base, label] (base)}
+					<optgroup {label}>
+						{#each PALETTES.slice(2).filter((palette) => palette.base === base) as palette (palette.id)}
+							<option value={palette.id}>{palette.label}</option>
+						{/each}
+					</optgroup>
+				{/each}
 			</select>
 		</label>
 

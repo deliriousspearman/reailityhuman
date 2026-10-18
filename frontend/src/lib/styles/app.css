@@ -2,6 +2,7 @@
    stat tiles, tables, the terminal window). Component-specific styles live in each component. */
 
 @import './tokens.css';
+@import './palettes.css';
 
 *,
 *::before,

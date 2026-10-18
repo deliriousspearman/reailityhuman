@@ -1,0 +1,291 @@
+/* Colour themes beyond the site's own Hacklab Night (dark) and Hacklab Day (light), from the course
+   site (docu-codex: src/css/site/palettes.css, its src/lib/palettes.ts for the list). Each block sets
+   this panel's colour tokens (tokens.css) for a light or dark base; <html> keeps data-theme='dark' or
+   'light' for the base, so everything written for light and dark mode still applies, and gets
+   data-palette for the palette (src/lib/theme.svelte.ts, app.html). Shapes and fonts stay the
+   panel's.
+
+   Converted from the course site's names to this panel's: --sl-color-* to --lms-*, its --lms-accent
+   fill to --lms-lime (and on-/text/soft alike), --lms-info to --lab-busy. Its terminal, quiz and
+   callout colours have no use here. Keep in step with the course site: re-run the conversion when
+   it changes a palette. */
+
+/* Dracula (draculatheme.com). */
+:root[data-theme][data-palette='dracula'] {
+	--lms-white: #ffffff;
+	--lms-gray-1: #f8f8f2;
+	--lms-gray-2: #d4d5de;
+	--lms-gray-3: #a3abd0;
+	--lms-gray-4: #6272a4;
+	--lms-gray-5: #44475a;
+	--lms-gray-6: #343746;
+	--lms-black: #21222c;
+	--lms-accent-low: #3d3459;
+	--lms-accent: #bd93f9;
+	--lms-accent-high: #d6bcfc;
+	--lms-bg-nav: #282a36;
+	--lms-bg-sidebar: #1e1f29;
+	--lms-bg-code: #343746;
+	--lms-panel: #282a36;
+	--lms-panel-2: #303241;
+	--lms-lime: #bd93f9;
+	--lms-on-lime: #191a21;
+	--lms-lime-text: #bd93f9;
+	--lms-lime-soft: #d6bcfc;
+	--lms-easy: #50fa7b;
+	--lms-medium: #ffb86c;
+	--lms-hard: #ff5555;
+	--lab-busy: #8be9fd;
+}
+
+/* Catppuccin Mocha (catppuccin.com). */
+:root[data-theme][data-palette='mocha'] {
+	--lms-white: #e6e9fb;
+	--lms-gray-1: #cdd6f4;
+	--lms-gray-2: #bac2de;
+	--lms-gray-3: #9399b2;
+	--lms-gray-4: #6c7086;
+	--lms-gray-5: #45475a;
+	--lms-gray-6: #313244;
+	--lms-black: #181825;
+	--lms-accent-low: #3b3352;
+	--lms-accent: #cba6f7;
+	--lms-accent-high: #dcc4fa;
+	--lms-bg-nav: #1e1e2e;
+	--lms-bg-sidebar: #1b1b29;
+	--lms-bg-code: #313244;
+	--lms-panel: #1e1e2e;
+	--lms-panel-2: #262637;
+	--lms-lime: #cba6f7;
+	--lms-on-lime: #11111b;
+	--lms-lime-text: #cba6f7;
+	--lms-lime-soft: #dcc4fa;
+	--lms-easy: #a6e3a1;
+	--lms-medium: #fab387;
+	--lms-hard: #f38ba8;
+	--lab-busy: #89b4fa;
+}
+
+/* Tokyo Night (github.com/enkia/tokyo-night-vscode-theme). */
+:root[data-theme][data-palette='tokyo'] {
+	--lms-white: #e0e6ff;
+	--lms-gray-1: #c0caf5;
+	--lms-gray-2: #a9b1d6;
+	--lms-gray-3: #848cb5;
+	--lms-gray-4: #565f89;
+	--lms-gray-5: #3b4261;
+	--lms-gray-6: #292e42;
+	--lms-black: #16161e;
+	--lms-accent-low: #283457;
+	--lms-accent: #7aa2f7;
+	--lms-accent-high: #a4c0fa;
+	--lms-bg-nav: #1a1b26;
+	--lms-bg-sidebar: #181922;
+	--lms-bg-code: #24283b;
+	--lms-panel: #1a1b26;
+	--lms-panel-2: #1f2335;
+	--lms-lime: #7aa2f7;
+	--lms-on-lime: #16161e;
+	--lms-lime-text: #7aa2f7;
+	--lms-lime-soft: #a4c0fa;
+	--lms-easy: #9ece6a;
+	--lms-medium: #e0af68;
+	--lms-hard: #f7768e;
+	--lab-busy: #7dcfff;
+}
+
+/* Nord (nordtheme.com). */
+:root[data-theme][data-palette='nord'] {
+	--lms-white: #eceff4;
+	--lms-gray-1: #e5e9f0;
+	--lms-gray-2: #d8dee9;
+	--lms-gray-3: #b0bacd;
+	--lms-gray-4: #6c7a96;
+	--lms-gray-5: #4c566a;
+	--lms-gray-6: #434c5e;
+	--lms-black: #2e3440;
+	--lms-accent-low: #3b5361;
+	--lms-accent: #88c0d0;
+	--lms-accent-high: #a9d3df;
+	--lms-bg-nav: #3b4252;
+	--lms-bg-sidebar: #333a48;
+	--lms-bg-code: #434c5e;
+	--lms-panel: #3b4252;
+	--lms-panel-2: #404859;
+	--lms-lime: #88c0d0;
+	--lms-on-lime: #2e3440;
+	--lms-lime-text: #88c0d0;
+	--lms-lime-soft: #a9d3df;
+	--lms-easy: #a3be8c;
+	--lms-medium: #ebcb8b;
+	--lms-hard: #e48a92;
+	--lab-busy: #81a1c1;
+}
+
+/* Gruvbox Dark (github.com/morhetz/gruvbox). */
+:root[data-theme][data-palette='gruvbox'] {
+	--lms-white: #fbf1c7;
+	--lms-gray-1: #ebdbb2;
+	--lms-gray-2: #d5c4a1;
+	--lms-gray-3: #bdae93;
+	--lms-gray-4: #7c6f64;
+	--lms-gray-5: #504945;
+	--lms-gray-6: #3c3836;
+	--lms-black: #282828;
+	--lms-accent-low: #4a3d1a;
+	--lms-accent: #fabd2f;
+	--lms-accent-high: #fcd36b;
+	--lms-bg-nav: #32302f;
+	--lms-bg-sidebar: #2c2a29;
+	--lms-bg-code: #3c3836;
+	--lms-panel: #32302f;
+	--lms-panel-2: #3a3735;
+	--lms-lime: #fabd2f;
+	--lms-on-lime: #282828;
+	--lms-lime-text: #fabd2f;
+	--lms-lime-soft: #fcd36b;
+	--lms-easy: #b8bb26;
+	--lms-medium: #fe8019;
+	--lms-hard: #fb4934;
+	--lab-busy: #83a598;
+}
+
+/* One Dark (Atom's default dark syntax theme). */
+:root[data-theme][data-palette='onedark'] {
+	--lms-white: #e6e9ef;
+	--lms-gray-1: #d7dae0;
+	--lms-gray-2: #abb2bf;
+	--lms-gray-3: #8f96a3;
+	--lms-gray-4: #5c6370;
+	--lms-gray-5: #3e4451;
+	--lms-gray-6: #2c313a;
+	--lms-black: #21252b;
+	--lms-accent-low: #1f3a52;
+	--lms-accent: #61afef;
+	--lms-accent-high: #8cc5f4;
+	--lms-bg-nav: #282c34;
+	--lms-bg-sidebar: #23272e;
+	--lms-bg-code: #2c313c;
+	--lms-panel: #282c34;
+	--lms-panel-2: #2c313a;
+	--lms-lime: #61afef;
+	--lms-on-lime: #21252b;
+	--lms-lime-text: #61afef;
+	--lms-lime-soft: #8cc5f4;
+	--lms-easy: #98c379;
+	--lms-medium: #e5c07b;
+	--lms-hard: #e06c75;
+	--lab-busy: #56b6c2;
+}
+
+/* Solarized Dark (ethanschoonover.com/solarized). */
+:root[data-theme][data-palette='solardark'] {
+	--lms-white: #fdf6e3;
+	--lms-gray-1: #eee8d5;
+	--lms-gray-2: #a3b0b0;
+	--lms-gray-3: #93a1a1;
+	--lms-gray-4: #586e75;
+	--lms-gray-5: #1f4c58;
+	--lms-gray-6: #0d3f4c;
+	--lms-black: #002b36;
+	--lms-accent-low: #0b4560;
+	--lms-accent: #4aa3e3;
+	--lms-accent-high: #7dbcea;
+	--lms-bg-nav: #073642;
+	--lms-bg-sidebar: #01313d;
+	--lms-bg-code: #0a404e;
+	--lms-panel: #073642;
+	--lms-panel-2: #0a3c49;
+	--lms-lime: #4aa3e3;
+	--lms-on-lime: #002b36;
+	--lms-lime-text: #4aa3e3;
+	--lms-lime-soft: #7dbcea;
+	--lms-easy: #a4b800;
+	--lms-medium: #d9a400;
+	--lms-hard: #f0605c;
+	--lab-busy: #4aa3e3;
+}
+
+/* High Contrast: white on black, a yellow accent and strong outlines. */
+:root[data-theme][data-palette='contrast'] {
+	--lms-white: #ffffff;
+	--lms-gray-1: #ffffff;
+	--lms-gray-2: #f2f2f2;
+	--lms-gray-3: #d4d4d4;
+	--lms-gray-4: #a6a6a6;
+	--lms-gray-5: #8c8c8c;
+	--lms-gray-6: #333333;
+	--lms-black: #000000;
+	--lms-accent-low: #3d3300;
+	--lms-accent: #ffd400;
+	--lms-accent-high: #ffe866;
+	--lms-bg-nav: #000000;
+	--lms-bg-sidebar: #000000;
+	--lms-bg-code: #262626;
+	--lms-panel: #0d0d0d;
+	--lms-panel-2: #1a1a1a;
+	--lms-lime: #ffd400;
+	--lms-on-lime: #000000;
+	--lms-lime-text: #ffd400;
+	--lms-lime-soft: #ffe866;
+	--lms-easy: #4dff88;
+	--lms-medium: #ffb000;
+	--lms-hard: #ff7070;
+	--lab-busy: #66c2ff;
+}
+
+/* Catppuccin Latte (catppuccin.com). Terminals stay dark, in Mocha's colours. */
+:root[data-theme][data-palette='latte'] {
+	--lms-white: #303446;
+	--lms-gray-1: #3c3f56;
+	--lms-gray-2: #4c4f69;
+	--lms-gray-3: #5c5f77;
+	--lms-gray-4: #8c8fa1;
+	--lms-gray-5: #ccd0da;
+	--lms-gray-6: #dce0e8;
+	--lms-black: #e6e9ef;
+	--lms-accent-low: #e7dafb;
+	--lms-accent: #7a2ae0;
+	--lms-accent-high: #6420c0;
+	--lms-bg-nav: #eff1f5;
+	--lms-bg-sidebar: #eff1f5;
+	--lms-bg-code: #dce0e8;
+	--lms-panel: #eff1f5;
+	--lms-panel-2: #e6e9ef;
+	--lms-lime: #8839ef;
+	--lms-on-lime: #ffffff;
+	--lms-lime-text: #7a2ae0;
+	--lms-lime-soft: #7a2ae0;
+	--lms-easy: #2e7a1e;
+	--lms-medium: #a85a08;
+	--lms-hard: #c50e36;
+	--lab-busy: #1e66f5;
+}
+
+/* Solarized Light (ethanschoonover.com/solarized). Terminals stay dark, in Solarized Dark. */
+:root[data-theme][data-palette='solarlight'] {
+	--lms-white: #002b36;
+	--lms-gray-1: #073642;
+	--lms-gray-2: #3f555c;
+	--lms-gray-3: #52676e;
+	--lms-gray-4: #93a1a1;
+	--lms-gray-5: #ddd6c1;
+	--lms-gray-6: #eee8d5;
+	--lms-black: #f5efdc;
+	--lms-accent-low: #dcebf5;
+	--lms-accent: #1a6aa3;
+	--lms-accent-high: #12537f;
+	--lms-bg-nav: #fdf6e3;
+	--lms-bg-sidebar: #fdf6e3;
+	--lms-bg-code: #eee8d5;
+	--lms-panel: #fdf6e3;
+	--lms-panel-2: #f5efdc;
+	--lms-lime: #1f74b3;
+	--lms-on-lime: #ffffff;
+	--lms-lime-text: #1a6aa3;
+	--lms-lime-soft: #1a6aa3;
+	--lms-easy: #5c6a00;
+	--lms-medium: #876500;
+	--lms-hard: #bd2926;
+	--lab-busy: #1a6aa3;
+}

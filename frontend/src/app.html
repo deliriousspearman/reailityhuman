@@ -7,12 +7,18 @@
 		<link rel="icon" href="%sveltekit.assets%/favicon.svg" />
 		<script>
 			// Apply the saved theme before the page draws, so it doesn't flash. "auto" (or nothing
-			// saved) follows the system setting. See src/lib/theme.svelte.ts.
+			// saved) follows the system setting. See src/lib/theme.svelte.ts and src/lib/palettes.ts;
+			// LIGHT lists the light palettes (any other saved name is dark).
 			try {
+				const LIGHT = ['light', 'latte', 'solarlight'];
 				const saved = localStorage.getItem('labs-theme');
-				const dark = matchMedia('(prefers-color-scheme: dark)').matches;
-				const theme = saved === 'light' || saved === 'dark' ? saved : dark ? 'dark' : 'light';
-				document.documentElement.dataset.theme = theme;
+				const root = document.documentElement;
+				if (saved && /^[a-z0-9]+$/.test(saved)) {
+					root.dataset.theme = LIGHT.includes(saved) ? 'light' : 'dark';
+					if (saved !== 'light' && saved !== 'dark') root.dataset.palette = saved;
+				} else {
+					root.dataset.theme = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+				}
 			} catch {}
 		</script>
 		%sveltekit.head%
