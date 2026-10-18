@@ -102,6 +102,18 @@
   access: [rdp, ssh, console]
   extras: [iis, mssql, outlook]   # SQL Server and Outlook: built with prepare.ps1 -SqlServer and -Office
 - template: windows-server
+  version: "2022"
+  # Built by Packer (packer/build.sh windows-server -var version=2022) on 2026-10-18, with Office's and
+  # SQL Server's files.
+  vsphere: Labs/Templates/tpl-windows-server-2022-20261018
+  cpu: 2
+  memoryGB: 4
+  diskGB: 60
+  username: labadmin
+  family: windows
+  access: [rdp, ssh, console]
+  extras: [iis, mssql, outlook]
+- template: windows-server
   version: "2025 Core"
   # Built by Packer (packer/build.sh windows-server -var edition=core) on 2026-10-16, with SQL Server's files.
   vsphere: Labs/Templates/tpl-windows-server-2025-core-20261016

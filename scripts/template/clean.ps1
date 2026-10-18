@@ -49,6 +49,7 @@ if (-not (Test-Path $Unattend)) {
 $plan = @(
     "Clear Cloudbase-Init's records and logs",
     "Delete the OpenSSH host keys, administrators' authorized keys and C:\ProgramData\lab-deploy",
+    "Remove apps installed for one user but not provisioned for all (they stop sysprep)",
     "Run sysprep /generalize /oobe /shutdown with $Unattend"
 )
 if (-not $Yes) {
@@ -74,6 +75,20 @@ Get-ChildItem -Path (Join-Path $env:ProgramData 'ssh') -Filter 'ssh_host_*' -Err
 # key given when it's deployed.
 Remove-Item -Path (Join-Path $env:ProgramData 'ssh\administrators_authorized_keys') -Force -ErrorAction SilentlyContinue
 Remove-Item -Path (Join-Path $env:ProgramData 'lab-deploy') -Recurse -Force -ErrorAction SilentlyContinue
+
+Step 'Removing apps installed for one user only'
+# Sysprep won't generalize while an app package is installed for a user but not provisioned for
+# all (0x80073cf2): e.g. Microsoft Edge updating itself during the build on Windows Server 2022. Such
+# packages go; Windows' own provisioned apps stay.
+# (An array either way: Windows Server 2019 has no provisioned packages, and strict mode refuses
+# .DisplayName on nothing.)
+$provisioned = @(Get-AppxProvisionedPackage -Online | ForEach-Object { $_.DisplayName })
+Get-AppxPackage -AllUsers |
+    Where-Object { $_.Name -notin $provisioned -and -not $_.IsFramework -and -not $_.NonRemovable } |
+    ForEach-Object {
+        Write-Host "  $($_.PackageFullName)"
+        Remove-AppxPackage -Package $_.PackageFullName -AllUsers -ErrorAction Continue
+    }
 
 Step 'Running sysprep: the VM shuts down when it has finished'
 & $Sysprep /generalize /oobe /shutdown "/unattend:$Unattend"

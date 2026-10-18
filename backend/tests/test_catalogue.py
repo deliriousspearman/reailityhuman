@@ -69,6 +69,7 @@ def test_offered_by_says_what_is_ready(monkeypatch, a_planned_template):
     assert {"template": "ubuntu", "version": "26.04", "ready": False} in catalogue.offered_by("ftp")
     assert catalogue.offered_by("iis") == [
         {"template": "windows-server", "version": "2025", "ready": True},
+        {"template": "windows-server", "version": "2022", "ready": True},
         {"template": "windows-server", "version": "2025 Core", "ready": True},
         {"template": "windows", "version": "11", "ready": True},
     ]
