@@ -106,10 +106,13 @@ CASES: dict[str, list[dict]] = {
 
 
 def base_checks(family: str, access: list[str], name: str) -> list[tuple]:
-    """What every machine gets: it answers where its template says it does, under its own name."""
+    """What every machine gets: it answers where its template says it does, under its own name (a
+    complete image, family image, keeps its own, so only that its user signs in)."""
     checks: list[tuple] = []
     if "ssh" in access:
-        checks.append(("ssh", "hostname", name))
+        checks.append(("ssh", "hostname", "" if family == "image" else name))
     if "rdp" in access:
         checks.append(("tcp", 3389))
+    if "web" in access and family == "image":
+        checks.append(("tcp", 80))
     return checks

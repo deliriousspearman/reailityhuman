@@ -164,7 +164,11 @@ def ssh(ip: str, user: str, password: str, command: str, windows: bool, timeout:
     args = [
         "ssh", "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null", "-o", "LogLevel=ERROR",
         "-o", "PubkeyAuthentication=no", "-o", "PreferredAuthentications=password,keyboard-interactive",
-        "-o", "ConnectTimeout=10", f"{user}@{ip}", command,
+        "-o", "ConnectTimeout=10",
+        # Old SSH servers' algorithms too (Metasploitable 2's, from 2008): "+" only adds them.
+        "-o", "KexAlgorithms=+diffie-hellman-group1-sha1,diffie-hellman-group14-sha1",
+        "-o", "HostKeyAlgorithms=+ssh-rsa,ssh-dss", "-o", "Ciphers=+aes128-cbc,3des-cbc",
+        f"{user}@{ip}", command,
     ]  # fmt: skip
     r = subprocess.run(args, env=env, capture_output=True, text=True, timeout=timeout, stdin=subprocess.DEVNULL)
     if r.returncode != 0:

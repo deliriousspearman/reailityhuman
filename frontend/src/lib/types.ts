@@ -244,13 +244,15 @@ export interface PanelConfig {
 		version: string;
 		resources: { cpu: number; memoryGB: number; diskGB: number };
 		username: string;
-		/** debian, rhel or windows (backend/templates.yaml). */
+		/** debian, rhel, windows, legacy, vyos or image (backend/templates.yaml). */
 		family: string;
 		/** Extras this version's template offers. */
 		extras: Extra[];
 		/** Set in templates.yaml; otherwise the catalogue's (templates.ts). */
 		access?: Access[];
 		webUrl?: string;
+		/** A complete image's own password (family image): every machine signs in with it. */
+		fixedPassword?: string;
 	}[];
 	/** Every extra, and where it runs, for choosing a service first. */
 	services: Service[];

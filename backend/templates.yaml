@@ -208,3 +208,20 @@
   family: legacy
   adminGroup: wheel
   access: [ssh, console]
+
+# Metasploitable 2: a deliberately vulnerable Ubuntu 8.04, deployed as the complete image it is
+# (packer/metasploitable/import-ms2.sh: Rapid7's image, with VMware's frozen Tools 10.0.12 added so
+# the panel sees its address). Its own sign-in, msfadmin / msfadmin, is on every machine: keep these
+# on the lab network only.
+- template: metasploitable
+  version: "2"
+  # Imported on 2026-10-18 from metasploitable-linux-2.0.0.zip.
+  vsphere: Labs/Templates/tpl-metasploitable-2-20261018
+  cpu: 1
+  memoryGB: 1
+  diskGB: 8
+  username: msfadmin
+  password: msfadmin
+  family: image
+  access: [ssh, web, console]
+  webUrl: http://{ip}/

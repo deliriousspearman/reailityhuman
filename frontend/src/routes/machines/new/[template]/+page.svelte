@@ -87,6 +87,8 @@
 	const live = $derived(store.config?.templates.find((t) => t.template === template?.id && t.version === version));
 	const username = $derived(live?.username);
 	const windows = $derived(live?.family === 'windows');
+	// A complete image (Metasploitable): its own sign-in, the same on every machine.
+	const fixedPassword = $derived(live?.fixedPassword);
 	const passwordMin = $derived(store.config?.rules.passwordMin ?? 8);
 	const passwordProblem = $derived(
 		!password
@@ -384,43 +386,52 @@
 				</p>
 			</fieldset>
 
-			<div class="field">
-				<label for="password">Password <span class="optional">optional</span></label>
-				<div class="password-row">
-					<input
-						id="password"
-						class="input mono-input"
-						type={showPassword ? 'text' : 'password'}
-						bind:value={password}
-						autocomplete="new-password"
-						spellcheck="false"
-						placeholder="Leave blank for a random one"
-						aria-invalid={!!passwordProblem}
-						aria-describedby="password-hint"
-					/>
-					<button class="btn btn-quiet btn-sm" type="button" onclick={() => (showPassword = !showPassword)}>
-						<Icon name="eye" />{showPassword ? 'Hide' : 'Show'}
-					</button>
+			{#if fixedPassword}
+				<div class="field">
+					<p class="hint">
+						A complete image, deployed as it is: every machine signs in as <code>{username}</code> with the password
+						<code>{fixedPassword}</code>. It's deliberately vulnerable, so keep it on the lab network.
+					</p>
 				</div>
-				<p id="password-hint" class="hint" class:problem={passwordProblem}>
-					{passwordProblem ??
-						`For ${username ?? 'the user'}, ${windows ? 'an administrator. Windows needs three of: capitals, small letters, digits and symbols' : 'and sudo'}. Blank: a random one, shown once it's deployed. Anyone who can open the panel can see it, so don't reuse one you use elsewhere.`}
-				</p>
-			</div>
+			{:else}
+				<div class="field">
+					<label for="password">Password <span class="optional">optional</span></label>
+					<div class="password-row">
+						<input
+							id="password"
+							class="input mono-input"
+							type={showPassword ? 'text' : 'password'}
+							bind:value={password}
+							autocomplete="new-password"
+							spellcheck="false"
+							placeholder="Leave blank for a random one"
+							aria-invalid={!!passwordProblem}
+							aria-describedby="password-hint"
+						/>
+						<button class="btn btn-quiet btn-sm" type="button" onclick={() => (showPassword = !showPassword)}>
+							<Icon name="eye" />{showPassword ? 'Hide' : 'Show'}
+						</button>
+					</div>
+					<p id="password-hint" class="hint" class:problem={passwordProblem}>
+						{passwordProblem ??
+							`For ${username ?? 'the user'}, ${windows ? 'an administrator. Windows needs three of: capitals, small letters, digits and symbols' : 'and sudo'}. Blank: a random one, shown once it's deployed. Anyone who can open the panel can see it, so don't reuse one you use elsewhere.`}
+					</p>
+				</div>
 
-			<div class="field">
-				<label for="ssh-key">SSH public key <span class="optional">optional</span></label>
-				<textarea
-					id="ssh-key"
-					class="input mono-input"
-					rows="3"
-					bind:value={sshKey}
-					spellcheck="false"
-					placeholder="ssh-ed25519 AAAA… you@laptop"
-					aria-describedby="ssh-key-hint"
-				></textarea>
-				<p id="ssh-key-hint" class="hint">Added for {username ?? 'the user'}, so you can sign in without the password.</p>
-			</div>
+				<div class="field">
+					<label for="ssh-key">SSH public key <span class="optional">optional</span></label>
+					<textarea
+						id="ssh-key"
+						class="input mono-input"
+						rows="3"
+						bind:value={sshKey}
+						spellcheck="false"
+						placeholder="ssh-ed25519 AAAA… you@laptop"
+						aria-describedby="ssh-key-hint"
+					></textarea>
+					<p id="ssh-key-hint" class="hint">Added for {username ?? 'the user'}, so you can sign in without the password.</p>
+				</div>
+			{/if}
 		</div>
 
 		<aside class="summary panel">
@@ -440,7 +451,13 @@
 				{#if username}
 					<div>
 						<dt>First sign-in</dt>
-						<dd><code>{username}</code>, {password ? 'with your password' : "with a password shown once it's deployed"}</dd>
+						<dd>
+							<code>{username}</code>, {fixedPassword
+								? `with the image's password, ${fixedPassword}`
+								: password
+									? 'with your password'
+									: "with a password shown once it's deployed"}
+						</dd>
 					</div>
 				{:else if template.credentials}
 					<div><dt>First sign-in</dt><dd><code>{template.credentials}</code></dd></div>

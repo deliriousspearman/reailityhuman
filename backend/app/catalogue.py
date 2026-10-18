@@ -25,8 +25,9 @@ class LiveTemplate:
     disk_gb: int
     username: str
     # OS family: "debian" (Debian, Ubuntu), "rhel" (CentOS Stream, Rocky, Alma), "windows", "legacy"
-    # (old Linux and OPNsense, set up by lab-firstboot: give adminGroup), or "vyos" (VyOS's own
-    # cloud-init: configuration commands).
+    # (old Linux and OPNsense, set up by lab-firstboot: give adminGroup), "vyos" (VyOS's own
+    # cloud-init: configuration commands), or "image" (a complete image deployed as it is, e.g. a
+    # practice target: nothing is set up on it, and its own sign-in is fixed_password).
     family: str = "debian"
     # The group that gives the user sudo. Default: "sudo" for the debian family, "wheel" for rhel.
     admin_group: str = "sudo"
@@ -40,6 +41,8 @@ class LiveTemplate:
     planned: bool = False
     # Extras it will offer once rebuilt with today's prepare.sh: prepped, but not in it yet.
     planned_extras: tuple[str, ...] = ()
+    # Family "image" only: its own, well-known password, which every machine from it has.
+    fixed_password: str = ""
 
 
 ACCESS = ("ssh", "rdp", "web", "console")
@@ -71,7 +74,10 @@ def _load() -> list[LiveTemplate]:
             web_url=e.get("webUrl", ""),
             planned=planned,
             planned_extras=tuple(e.get("plannedExtras", [])),
+            fixed_password=str(e.get("password", "")),
         )
+        if (family == "image") != bool(t.fixed_password):
+            raise ValueError(f"templates.yaml: {t.template} {t.version}: give a password for family image (its own sign-in), and only then")
         if unknown := [a for a in t.access if a not in ACCESS]:
             raise ValueError(f"templates.yaml: {t.template} {t.version}: unknown access {', '.join(unknown)}")
         if both := set(t.extras) & set(t.planned_extras):

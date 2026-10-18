@@ -61,6 +61,8 @@ def deploy(vc: VCenter, m: Machine) -> None:
         extra = cloudinit.legacy_guestinfo(m.id, m.name, m.username, m.password, m.ssh_key, tpl.admin_group)
     elif tpl.family == "vyos":
         extra = cloudinit.vyos_guestinfo(m.id, m.name, m.username, m.password, m.ssh_key)
+    elif tpl.family == "image":
+        extra = {}  # deployed as it is
     else:
         extra = cloudinit.guestinfo(
             m.id, m.name, m.username, m.password, m.ssh_key, tpl.admin_group, extras.cloud_config(chosen, tpl.family, m.name, m.username, m.password)
@@ -228,6 +230,9 @@ def _await_setup(vc: VCenter, vm, m: Machine) -> None:
     password and SSH, then any extras; Windows: after sysprep, a restart and its first-boot script), so
     "ready" means people can sign in. Each extra's own log is on the machine (extras.log_file)."""
     family = m.family
+    if family == "image":
+        add_log(m.id, "A complete image, as it is: nothing to set up.", "muted")
+        return
     if family == "vyos":
         _await_vyos(vc, vm, m)
         return

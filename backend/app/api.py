@@ -173,6 +173,8 @@ def config() -> dict:
                 "extras": [extra_out(extras.find(i)) for i in t.extras],
                 **({"access": list(t.access)} if t.access else {}),
                 **({"webUrl": t.web_url} if t.web_url else {}),
+                # A complete image's own sign-in, the same on every machine (family "image").
+                **({"fixedPassword": t.fixed_password} if t.fixed_password else {}),
             }
             for t in catalogue.catalogue().values()
         ],
@@ -300,6 +302,14 @@ def deploy_machine(req: DeployRequest, db: Db) -> dict:
     if not OWNER_RULE.match(owner):
         raise HTTPException(422, OWNER_PROBLEM)
     password = req.password or None
+    if tpl.fixed_password:
+        if password or (req.sshKey or "").strip():
+            raise HTTPException(
+                422,
+                f"{tpl.template} {tpl.version} is a complete image that signs in as {tpl.username} / {tpl.fixed_password}: "
+                "it can't take a password or SSH key.",
+            )
+        password = tpl.fixed_password
     if password is not None and (len(password) < PASSWORD_MIN or any(not c.isprintable() for c in password)):
         raise HTTPException(422, f"Use a password of at least {PASSWORD_MIN} characters, without line breaks or tabs.")
     if password is not None and tpl.family == "windows" and (problem := cloudinit.windows_password_problem(password, tpl.username)):
