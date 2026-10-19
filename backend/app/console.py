@@ -165,6 +165,8 @@ async def console_stream(browser: WebSocket, token: str) -> None:
             create_connection=_connection_class(pending.ticket.thumbprint),
             open_timeout=15,
             max_size=None,
+            # ESXi closes the console when it gets a WebSocket ping.
+            ping_interval=None,
         ) as host:
             await _relay(browser, host)
     except (OSError, asyncio.TimeoutError, WebSocketException) as e:
