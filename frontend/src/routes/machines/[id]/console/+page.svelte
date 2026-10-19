@@ -53,12 +53,21 @@
 		r?.disconnect();
 	}
 
+	const SHIFT = 0xffe1;
+	// Characters typed with Shift on a US keyboard. ESXi presses the key a character is on, without
+	// Shift, so these need it held.
+	const SHIFTED = /[A-Z~!@#$%^&*()_+{}|:"<>?]/;
+
 	/** Types text as key presses: pasting doesn't reach the machine. Printable ASCII only. */
 	function type(text: string) {
 		if (!rfb) return;
 		for (const ch of text) {
 			const code = ch.charCodeAt(0);
-			if (code >= 0x20 && code <= 0x7e) rfb.sendKey(code, null);
+			if (code < 0x20 || code > 0x7e) continue;
+			const shift = SHIFTED.test(ch);
+			if (shift) rfb.sendKey(SHIFT, 'ShiftLeft', true);
+			rfb.sendKey(code, null);
+			if (shift) rfb.sendKey(SHIFT, 'ShiftLeft', false);
 		}
 		rfb.focus();
 	}

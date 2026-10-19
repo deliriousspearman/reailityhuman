@@ -172,5 +172,5 @@ async def console_stream(browser: WebSocket, token: str) -> None:
     finally:
         try:
             await browser.close()
-        except RuntimeError:
-            pass  # already closed
+        except (RuntimeError, WebSocketDisconnect):
+            pass  # the browser has already gone
