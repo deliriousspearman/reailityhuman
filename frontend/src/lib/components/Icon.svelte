@@ -28,6 +28,8 @@
 		moon: 'M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5',
 		auto: 'M12 3v18M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18',
 		chevron: 'm6 9 6 6 6-6',
+		expand: 'M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5',
+		keyboard: 'M3 6h18v12H3zM7 10h.01M11 10h.01M15 10h.01M8 14h8',
 	} as const;
 
 	export type IconName = keyof typeof paths;

@@ -288,8 +288,11 @@
 			<li>
 				<span class="way">Console</span>
 				<span class="cmd muted">In the browser, for first-time setup and when the network is down</span>
-				<button class="btn btn-sm" type="button" disabled title="Coming soon"><Icon name="console" /> Open console</button>
-				<span class="soon-tag">Soon</span>
+				{#if m.state === 'stopped' || m.state === 'expired'}
+					<button class="btn btn-sm" type="button" disabled title="Start the machine first"><Icon name="console" /> Open console</button>
+				{:else}
+					<a class="btn btn-sm" href="/machines/{m.id}/console"><Icon name="console" /> Open console</a>
+				{/if}
 			</li>
 		{/if}
 	</ul>

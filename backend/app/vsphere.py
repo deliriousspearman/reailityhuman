@@ -55,6 +55,14 @@ class Capacity:
     powered_on: frozenset[str] = frozenset()
 
 
+@dataclass(frozen=True)
+class ConsoleTicket:
+    # wss://<ESXi host>:443/ticket/<ticket>: a VNC (RFB) stream of the VM's screen.
+    url: str
+    # The SHA-1 fingerprint of the host's certificate as vCenter knows it ("AB:CD:..."), if it says.
+    thumbprint: str | None
+
+
 def describe(fault: vmodl.MethodFault) -> str:
     """A vCenter fault as a sentence for people, naming missing privileges."""
     if isinstance(fault, vim.fault.NoPermission):
@@ -442,6 +450,25 @@ class VCenter:
                 return decode_text(res.read())
         except OSError as e:
             raise VSphereError(f"Couldn't fetch {path} from the ESXi host running the machine: {e}") from e
+
+    def console_ticket(self, vm: vim.VirtualMachine) -> "ConsoleTicket":
+        """Where to open the VM's screen: a WebMKS ticket from vCenter, for the ESXi host running the
+        VM. The ticket is single-use and lapses if it isn't used within a few seconds."""
+        try:
+            t = vm.AcquireTicket("webmks")
+        except vim.fault.NoPermission as e:
+            raise VSphereError(
+                "The panel's vCenter account can't open consoles (it needs Virtual machine → Interaction "
+                "→ Console interaction; re-run scripts/setup_vcenter.py)"
+            ) from e
+        except vim.fault.InvalidState as e:
+            raise VSphereError("The machine is off: start it to see its console") from e
+        except vmodl.MethodFault as e:
+            raise VSphereError(f"vCenter wouldn't open the console: {describe(e)}") from e
+        host = t.host
+        if not host:
+            host = self.props(self.props(vm, "runtime.host").get("runtime.host"), "name").get("name")
+        return ConsoleTicket(url=f"wss://{host}:{t.port or 443}/ticket/{t.ticket}", thumbprint=t.sslThumbprint or None)
 
     def capacity(self) -> Capacity:
         """What the cluster has, and what powered-on VMs on it are configured to use."""

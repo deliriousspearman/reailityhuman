@@ -7,26 +7,21 @@ import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
-from typing import Annotated
 
-from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException
+from fastapi import APIRouter, FastAPI, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from . import catalogue, cloudinit, extras, jobs
+from . import catalogue, cloudinit, console, extras, jobs
 from .config import settings
-from .db import get_session
-from .models import STABLE_STATES, Job, LogLine, Machine, utcnow
+from .deps import ANYONE, OWNER_RULE, Actor, Db, add_log, get_machine
+from .models import STABLE_STATES, Job, Machine, utcnow
 from .vsphere import Capacity, VSphereError, connect
 
-# No sign-in yet: people type their name when they deploy, and the panel sends it with every
-# request (X-Lab-User) so jobs record who did what. Without one, it's "anyone".
-ANYONE = "anyone"
 # A hostname label: starts with a letter, doesn't end with a hyphen; 15 at most, Windows' limit.
 NAME_RULE = re.compile(r"^[a-z](?:[a-z0-9-]{0,13}[a-z0-9])?$")
-OWNER_RULE = re.compile(r"^[a-z][a-z0-9-]{0,19}$")
 PASSWORD_MIN = 8
 NAME_PROBLEM = "Use 1 to 15 lowercase letters, digits or hyphens, starting with a letter and not ending with a hyphen."
 OWNER_PROBLEM = "Use 1 to 20 lowercase letters, digits or hyphens for your name, starting with a letter."
@@ -34,16 +29,6 @@ MAX_HOURS = 24 * 30
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/api")
-Db = Annotated[Session, Depends(get_session)]
-
-
-def actor(x_lab_user: Annotated[str | None, Header()] = None) -> str:
-    """Who's asking, as the panel says (no sign-in yet, so it's taken on trust)."""
-    name = (x_lab_user or "").strip().lower()
-    return name if OWNER_RULE.match(name) else ANYONE
-
-
-Actor = Annotated[str, Depends(actor)]
 
 
 def ms(t: datetime | None) -> int | None:
@@ -101,13 +86,6 @@ def job_out(j: Job) -> dict:
     return out
 
 
-def get_machine(db: Session, machine_id: str) -> Machine:
-    m = db.get(Machine, machine_id)
-    if m is None:
-        raise HTTPException(404, "There's no machine with that id. It may have been destroyed.")
-    return m
-
-
 def require_idle(m: Machine) -> None:
     if m.state not in STABLE_STATES:
         raise HTTPException(409, f"{m.name} is busy ({m.state}). Try again when it's finished.")
@@ -115,10 +93,6 @@ def require_idle(m: Machine) -> None:
 
 def hours_label(hours: int) -> str:
     return f"{hours} h" if hours < 24 else f"{hours // 24} d"
-
-
-def add_log(db: Session, m: Machine, text_: str, tone: str | None = None) -> None:
-    db.add(LogLine(machine_id=m.id, text=text_, tone=tone))
 
 
 def queue(db: Session, m: Machine, action: str, by: str) -> None:
@@ -561,6 +535,7 @@ def create_app() -> FastAPI:
     # No docs pages: the CSP blocks the CDN assets they load. The schema is at /api/openapi.json.
     api = FastAPI(title="lab-deploy", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url="/api/openapi.json")
     api.include_router(router)
+    api.include_router(console.router)
     return api
 
 

@@ -67,6 +67,7 @@ PRIVILEGES = [
     "VirtualMachine.Config.EditDevice",  # point the NIC at the port group
     "VirtualMachine.GuestOperations.Query",  # read whether extras finished, through VMware Tools
     "VirtualMachine.Interact.DeviceConnection",  # NIC connected at power on (if the template's isn't)
+    "VirtualMachine.Interact.ConsoleInteract",  # the console in the browser (a WebMKS ticket)
     "VirtualMachine.Inventory.CreateFromExisting",
     "VirtualMachine.Inventory.Delete",
     "VirtualMachine.Interact.PowerOff",

@@ -13,6 +13,8 @@ dependencies = [
 	"pyyaml==6.0.3",
 	"sqlalchemy==2.1.4",
 	"uvicorn==0.54.0",
+	# The consoles' WebSockets: uvicorn serves them with it, and the API connects to ESXi with it.
+	"websockets==16.1.1",
 ]
 
 [project.optional-dependencies]
