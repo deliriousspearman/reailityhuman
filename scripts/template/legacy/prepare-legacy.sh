@@ -65,7 +65,7 @@ if [[ $OS == centos ]]; then
 name=EPEL 6 (archived)
 baseurl=http://archives.fedoraproject.org/pub/archive/epel/6/$basearch/
 gpgcheck=1
-gpgkey=http://archives.fedoraproject.org/pub/archive/epel/RPM-GPG-KEY-EPEL-6
+gpgkey=https://dl.fedoraproject.org/pub/epel/RPM-GPG-KEY-EPEL-6
 REPO
 	fi
 	yum -y -q clean all
