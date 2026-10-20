@@ -10,6 +10,9 @@ host=$(hostname)
 sed -i -E "/[[:space:]]$host([.[:space:]]|\$)/d" /etc/hosts
 echo "$ip $host.lab.example $host" >>/etc/hosts
 
+# Debian's installer adds an "inet6 auto" stanza, which ifupdown2 (Proxmox's) rejects, failing its
+# install. prepare-proxmox.sh writes the network config afresh afterwards anyway.
+sed -i '/inet6 auto/d' /etc/network/interfaces
 apt-get -q update
 apt-get -yq install curl ca-certificates
 curl -fsSL https://enterprise.proxmox.com/debian/proxmox-release-bullseye.gpg -o /etc/apt/trusted.gpg.d/proxmox-release-bullseye.gpg

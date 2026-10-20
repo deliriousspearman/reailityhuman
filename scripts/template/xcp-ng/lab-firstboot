@@ -5,9 +5,9 @@
 # Tools. At every boot, once XAPI answers:
 #   1. makes sure the management network has an address: early in boot the bridge comes up with the
 #      template's MAC address (from XAPI's cache), which ESXi doesn't let through, so its DHCP gets
-#      nothing; XAPI then moves the bridge onto this machine's adapter, and switching the management
-#      interface to a placeholder static address and back to DHCP starts its client again on the
-#      right one (asking for DHCP when it's already DHCP does nothing).
+#      nothing, and XAPI doesn't keep the adapter as management once it has a new MAC. So eth0 is made
+#      the management interface again, switched to a placeholder static address and back to DHCP
+#      (asking for DHCP when it's already DHCP does nothing), which starts its client on the right MAC.
 # On a new machine, then:
 #   2. sets the host's name, root's password (the machine's, as a SHA-512 hash) and SSH key, and makes
 #      new SSH host keys;
@@ -39,10 +39,17 @@ for _ in $(seq 12); do
 	sleep 5
 done
 if [ -z "$(bridge_ip)" ]; then
-	pif=$(xe pif-list management=true --minimal)
-	echo "No address on the management network: DHCP again (PIF $pif)."
+	# The clone's adapter (eth0, with its own MAC: clean-xcp-ng.sh made XAPI forget the template's)
+	# becomes the management interface, by DHCP again.
+	pif=$(xe pif-list device=eth0 --minimal)
+	if [ -z "$pif" ]; then
+		xe pif-scan host-uuid="$(xe host-list --minimal)"
+		pif=$(xe pif-list device=eth0 --minimal)
+	fi
+	echo "No address on the management network: eth0 (PIF $pif) as management, by DHCP."
 	xe pif-reconfigure-ip uuid="$pif" mode=static IP=192.0.2.250 netmask=255.255.255.0
 	xe pif-reconfigure-ip uuid="$pif" mode=dhcp
+	xe host-management-reconfigure pif-uuid="$pif"
 	for _ in $(seq 24); do
 		[ -n "$(bridge_ip)" ] && break
 		sleep 5
