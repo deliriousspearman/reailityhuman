@@ -30,6 +30,7 @@ as building by hand ([setup-vsphere.md](setup-vsphere.md), parts 2, 5 and 6), wh
 | VyOS 1.5 rolling | `packer/vyos/build-iso.sh` once, then `packer/build.sh vyos` | ~8 min |
 | Metasploitable 2 | `packer/metasploitable/import-ms2.sh` | ~15 min |
 | Metasploitable 3 (Ubuntu 14.04) | `packer/metasploitable/import-ms3.sh` | ~30 min |
+| Metasploitable 3 (Windows Server 2008 R2) | `packer/metasploitable/import-ms3-win.sh` | ~90 min (a 7.9 GB download) |
 | Kali Linux 2026.2 | `packer/build.sh kali` | ~31 min |
 | Parrot Security 7.4 | `packer/parrot/import-base.sh <ova>` once, then `packer/build.sh parrot` | ~11 min |
 | Rocky Linux 9 | `packer/build.sh rhel -var distro=rocky` | ~15–20 min |
@@ -151,8 +152,10 @@ It's deliberately vulnerable: keep it on the lab network.
 **Metasploitable 3** (its Ubuntu 14.04 variant) is imported the same way, but from the VMware image
 Rapid7 published on Vagrant Cloud (`import-ms3.sh`): its own build needs Chef, whose installers now
 need a licence. The image has VMware Tools already, so nothing in it changes. Sign-in: vagrant /
-vagrant. Its Windows Server 2008 R2 variant isn't offered: that image's evaluation licence expired
-long ago.
+vagrant. Its Windows Server 2008 R2 variant comes the same way (`import-ms3-win.sh`), unpacked as it
+downloads (the box is 7.9 GB), with the disk and adapter types its `.vmx` gives. Its evaluation expired
+long ago, so Windows shuts it down every hour; the catalogue flags it ("Shuts down hourly"). Sign-in:
+vagrant / vagrant.
 
 **Container apps** (Juice Shop, DVWA, Uptime Kuma, Grafana, Vaultwarden, Gitea): `prepare.sh` pulls
 their pinned images (`DOCKER_IMAGES`) into the template's Docker, so machines start them without

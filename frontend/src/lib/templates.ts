@@ -298,6 +298,8 @@ export const templates: MachineTemplate[] = [
 		resources: { cpu: 2, memoryGB: 4, diskGB: 60 },
 		access: ['rdp', 'ssh', 'console'],
 		credentials: 'vagrant / vagrant',
+		// Rapid7's image, built from a 2008 R2 evaluation that has long expired.
+		flags: ['hourly'],
 	},
 ];
 
@@ -341,4 +343,8 @@ export const flagNotes: Record<NonNullable<MachineTemplate['flags']>[number], { 
 	licence: { label: 'Licence', note: 'Uses an evaluation or volume licence that an admin manages.' },
 	vtpm: { label: 'vTPM', note: 'Needs a virtual TPM, which the admin must enable in vCenter.' },
 	domain: { label: 'Needs a domain', note: 'Deploy Windows Server with the Domain controller extra first, then choose it here.' },
+	hourly: {
+		label: 'Shuts down hourly',
+		note: "Its Windows evaluation expired long ago, so Windows shuts it down every hour. Start it again from the machine's page.",
+	},
 };

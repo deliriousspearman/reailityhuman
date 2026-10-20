@@ -391,6 +391,13 @@ build = "packer/metasploitable/import-ms3.sh"
 env = ["MEDIA={media_dir}/images"]
 media = ["images/ub1404.box"]
 
+[[template]]
+id = "metasploitable-3-windows"
+catalogue = "metasploitable-windows 3"
+build = "packer/metasploitable/import-ms3-win.sh"
+env = ["MEDIA={media_dir}/images"]
+media = ["images/win2k8.box"]
+
 # What extras need from the media folder offline (the Linux ones; the Windows ones are Office's files
 # and SQL Server's ISO). An extra not listed needs only the template's package mirror.
 [extras]
