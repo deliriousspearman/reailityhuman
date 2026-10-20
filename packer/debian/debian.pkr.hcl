@@ -2,11 +2,18 @@
 #
 #   packer/build.sh debian                                                       # Debian 13
 #   packer/build.sh debian -var version=12 -var iso=debian-12.15.0-amd64-netinst.iso
+#   packer/build.sh debian -var version=11 -var iso=debian-11.11.0-amd64-netinst.iso   # 11, 10, 9, 8: legacy
 #
 # Installs from Debian's netinst ISO with a preseed file (preseed.pkrtpl.cfg, served by Packer's web
 # server: the build VM must reach this machine) as a plain server, runs scripts/template/prepare.sh
 # (cloud-init, the extras), then clean.sh as the shutdown, and leaves a template in Labs/Templates
 # with its "clean" snapshot.
+#
+# Debian 11 and older are legacy practice targets: their cloud-init is too old to read the panel's
+# data from vCenter, so they get scripts/template/legacy (prepare-legacy.sh, then clean-legacy.sh),
+# lab-firstboot and no extras. 10 and older install from archive.debian.org, where Debian keeps
+# releases after their support ends; 8 and 9's archive keys have expired, so their installs skip the
+# signature check (the ISO itself is checked against Debian's checksums when fetched).
 
 packer {
   required_plugins {
@@ -89,7 +96,10 @@ variable "http_ip" {
 }
 
 locals {
-  codename    = { "12" = "bookworm", "13" = "trixie" }[var.version]
+  codename    = { "8" = "jessie", "9" = "stretch", "10" = "buster", "11" = "bullseye", "12" = "bookworm", "13" = "trixie" }[var.version]
+  legacy      = contains(["8", "9", "10", "11"], var.version)
+  archived    = contains(["8", "9", "10"], var.version)
+  mirror_host = local.archived && var.debian_mirror_host == "deb.debian.org" ? "archive.debian.org" : var.debian_mirror_host
   vm_name     = var.vm_name != "" ? var.vm_name : "tpl-debian-${var.version}-${formatdate("YYYYMMDD", timestamp())}"
   extras_flag = var.extras == "" ? "" : (var.extras == "none" ? "--no-extras" : "--extras=${var.extras}")
   media       = trimsuffix(var.media_url, "/")
@@ -115,7 +125,7 @@ source "vsphere-iso" "debian" {
   vm_name             = local.vm_name
   notes               = "Debian ${var.version} template for lab-deploy, built by Packer on ${formatdate("YYYY-MM-DD", timestamp())}."
 
-  guest_os_type        = "debian12_64Guest"
+  guest_os_type        = local.legacy ? "debian${var.version}_64Guest" : "debian12_64Guest"
   firmware             = "efi"
   CPUs                 = 2
   RAM                  = 2048
@@ -135,11 +145,15 @@ source "vsphere-iso" "debian" {
   http_ip = var.http_ip != "" ? var.http_ip : null
   http_content = {
     "/preseed.cfg" = templatefile("${path.root}/preseed.pkrtpl.cfg", {
-      mirror_host    = var.debian_mirror_host
+      mirror_host    = local.mirror_host
       mirror_dir     = var.debian_mirror_dir
       codename       = local.codename
       password_hash  = bcrypt(uuidv4())
       ssh_public_key = var.ssh_public_key
+      # Archived releases have no security or updates repositories, and 11's security packages are
+      # gone from security.debian.org (its index remains, so installs fail); 8 and 9's keys have expired.
+      services              = local.archived ? "" : (var.version == "11" ? "updates" : "security, updates")
+      allow_unauthenticated = contains(["8", "9"], var.version)
     })
   }
 
@@ -158,7 +172,7 @@ source "vsphere-iso" "debian" {
   ssh_private_key_file = var.ssh_private_key_file
   ssh_timeout          = "120m"
 
-  shutdown_command    = "sudo bash /tmp/clean.sh --yes"
+  shutdown_command    = local.legacy ? "sudo bash /tmp/legacy/clean-legacy.sh --yes" : "sudo bash /tmp/clean.sh --yes"
   shutdown_timeout    = "15m"
   create_snapshot     = true
   snapshot_name       = "clean"
@@ -169,12 +183,12 @@ build {
   sources = ["source.vsphere-iso.debian"]
 
   provisioner "file" {
-    sources     = ["${path.root}/../../scripts/template/prepare.sh", "${path.root}/../../scripts/template/clean.sh"]
+    sources     = ["${path.root}/../../scripts/template/prepare.sh", "${path.root}/../../scripts/template/clean.sh", "${path.root}/../../scripts/template/legacy"]
     destination = "/tmp/"
   }
 
   provisioner "shell" {
-    inline = ["sudo env ${local.media_env} bash /tmp/prepare.sh ${local.extras_flag}"]
+    inline = [local.legacy ? "sudo bash /tmp/legacy/prepare-legacy.sh" : "sudo env ${local.media_env} bash /tmp/prepare.sh ${local.extras_flag}"]
   }
 
   post-processor "manifest" {

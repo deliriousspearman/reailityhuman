@@ -87,6 +87,44 @@
   # Not Nextcloud: it needs PHP 8.3, and 12 has 8.2 (the snap brings its own).
   extras: [nginx, apache, apache-https, wordpress, nextcloud-snap, postgresql, mariadb, sqlite, mail, ftp, desktop, docker, juice-shop, dvwa, uptime-kuma, grafana, vaultwarden, gitea]
 
+# Debian 11 and 10 (and 9, 8): legacy practice targets, out of support. Their cloud-init can't read the
+# panel's data, so they get lab-firstboot (family legacy) and no extras; 10 and older install from
+# archive.debian.org, and none has security updates any more.
+- template: debian
+  version: "11"
+  # Built by Packer (packer/build.sh debian -var version=11 -var iso=…) on 2026-10-20.
+  vsphere: Labs/Templates/tpl-debian-11-20261020
+  cpu: 2
+  memoryGB: 2
+  diskGB: 25
+  username: labuser
+  family: legacy
+  adminGroup: sudo
+  access: [ssh, console]
+- template: debian
+  version: "10"
+  # Built by Packer (packer/build.sh debian -var version=10 -var iso=…) on 2026-10-20.
+  vsphere: Labs/Templates/tpl-debian-10-20261020
+  cpu: 2
+  memoryGB: 2
+  diskGB: 25
+  username: labuser
+  family: legacy
+  adminGroup: sudo
+  access: [ssh, console]
+
+- template: debian
+  version: "9"
+  # Built by Packer (packer/build.sh debian -var version=9 -var iso=…) on 2026-10-20.
+  vsphere: Labs/Templates/tpl-debian-9-20261020
+  cpu: 2
+  memoryGB: 2
+  diskGB: 25
+  username: labuser
+  family: legacy
+  adminGroup: sudo
+  access: [ssh, console]
+
 # Windows Server 2025, with Desktop Experience and as Server Core (packer/windows-server, or by hand:
 # docs/setup-vsphere.md, "Windows Server templates"). Windows needs more memory: Core runs in 2 GB, the
 # desktop wants 4.

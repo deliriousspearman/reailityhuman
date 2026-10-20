@@ -1,9 +1,13 @@
 # Legacy CentOS templates for the panel (practice targets on old systems), built unattended
 # (docs/build-templates.md):
 #
-#   packer/build.sh centos-legacy              # CentOS 7
+#   packer/build.sh centos-legacy                                                          # CentOS 7
+#   packer/build.sh centos-legacy -var version=8 -var iso=CentOS-8.5.2111-x86_64-boot.iso
+#   packer/build.sh centos-legacy -var version=6 -var iso=CentOS-6.10-x86_64-minimal.iso
 #
-# Installs from the vault's Minimal ISO with a kickstart (ks.pkrtpl.cfg, on a CD labelled OEMDRV),
+# Installs from the vault's ISO with a kickstart: 7 and 8 read it from a CD labelled OEMDRV
+# (ks.pkrtpl.cfg, ks8.pkrtpl.cfg); 6 fetches it from Packer's web server (ks6.pkrtpl.cfg, so the build
+# VM must reach this machine), and gets VMware Tools from EPEL's archive. Packages come from the vault,
 # then runs scripts/template/legacy/prepare-legacy.sh and clean-legacy.sh: these systems' cloud-init
 # can't read the panel's data, so they get lab-firstboot instead (templates.yaml: family legacy).
 
@@ -49,10 +53,20 @@ variable "media_url" {
   type    = string
   default = ""
 }
-# The vault's release folder (or a LAN mirror of it), holding os/ and updates/.
+# The vault's release folder (or a LAN mirror of it). Empty: the version's last release on vault.centos.org.
 variable "vault" {
   type    = string
-  default = "http://vault.centos.org/7.9.2009"
+  default = ""
+}
+# CentOS 6 only: EPEL's archived repository (or a LAN mirror), for VMware Tools.
+variable "epel6" {
+  type    = string
+  default = "http://archives.fedoraproject.org/pub/archive/epel/6/x86_64/"
+}
+# The address the build VM reaches this machine's web server on (CentOS 6), if Packer guesses wrong.
+variable "http_ip" {
+  type    = string
+  default = ""
 }
 
 variable "version" {
@@ -77,6 +91,14 @@ variable "build_password" {
 
 locals {
   vm_name = var.vm_name != "" ? var.vm_name : "tpl-centos-${var.version}-${formatdate("YYYYMMDD", timestamp())}"
+  release = { "6" = "6.10", "7" = "7.9.2009", "8" = "8.5.2111" }[var.version]
+  vault   = trimsuffix(var.vault != "" ? var.vault : "http://vault.centos.org/${local.release}", "/")
+  ks = templatefile("${path.root}/ks${var.version == "7" ? "" : var.version}.pkrtpl.cfg", {
+    vault          = local.vault
+    epel           = var.epel6
+    build_password = var.build_password
+    ssh_public_key = var.ssh_public_key
+  })
 }
 
 source "vsphere-iso" "centos_legacy" {
@@ -91,7 +113,7 @@ source "vsphere-iso" "centos_legacy" {
   vm_name             = local.vm_name
   notes               = "CentOS ${var.version} (legacy) template for lab-deploy, built by Packer on ${formatdate("YYYY-MM-DD", timestamp())}."
 
-  guest_os_type        = "centos7_64Guest"
+  guest_os_type        = "centos${var.version}_64Guest"
   firmware             = "bios"
   CPUs                 = 2
   RAM                  = 2048
@@ -106,20 +128,19 @@ source "vsphere-iso" "centos_legacy" {
   }
 
   iso_paths = ["[${var.datastore}] ${var.iso_folder}/${var.iso}"]
-  # The installer reads ks.cfg from a volume labelled OEMDRV by itself.
-  cd_label = "OEMDRV"
-  cd_content = {
-    "ks.cfg" = templatefile("${path.root}/ks.pkrtpl.cfg", {
-      vault          = trimsuffix(var.vault, "/")
-      build_password = var.build_password
-      ssh_public_key = var.ssh_public_key
-    })
-  }
+  # 7 and 8: the installer reads ks.cfg from a volume labelled OEMDRV by itself.
+  cd_label     = "OEMDRV"
+  cd_content   = var.version == "6" ? {} : { "ks.cfg" = local.ks }
+  http_content = var.version == "6" ? { "/ks.cfg" = local.ks } : {}
+  http_ip      = var.http_ip != "" ? var.http_ip : null
   remove_cdrom = true
 
-  # The boot menu's default entry checks the media first: go up to the plain install.
-  boot_wait    = "5s"
-  boot_command = ["<up><wait><enter>"]
+  # 7 and 8: the boot menu's default entry checks the media first, so go up to the plain install.
+  # 6: the first entry installs; its boot line gets the kickstart's address (Tab edits it).
+  boot_wait = "5s"
+  boot_command = var.version == "6" ? [
+    "<tab><wait> ks=http://{{ .HTTPIP }}:{{ .HTTPPort }}/ks.cfg<enter>",
+  ] : ["<up><wait><enter>"]
 
   ip_wait_timeout      = "60m"
   communicator         = "ssh"

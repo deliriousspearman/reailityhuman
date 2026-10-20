@@ -1,0 +1,23 @@
+#!/bin/sh
+# The lab panel's first boot, for systems without systemd (CentOS 6): runs lab-firstboot at each boot,
+# after the network, sshd and VMware Tools. lab-firstboot.service does the same elsewhere.
+#
+# chkconfig: 345 99 01
+# description: Lab panel first boot (legacy templates): hostname, user, SSH
+### BEGIN INIT INFO
+# Provides: lab-firstboot
+# Required-Start: $network $remote_fs vmtoolsd sshd
+# Default-Start: 3 4 5
+# Short-Description: Lab panel first boot
+### END INIT INFO
+
+case "$1" in
+start)
+	/usr/local/sbin/lab-firstboot
+	;;
+stop | status | restart) ;;
+*)
+	echo "usage: $0 start" >&2
+	exit 2
+	;;
+esac

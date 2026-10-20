@@ -37,11 +37,20 @@ ubuntu-18.04     https://cdimage.ubuntu.com/releases/18.04/release/ubuntu-18.04.
 ubuntu-16.04     https://releases.ubuntu.com/16.04/ubuntu-16.04.7-server-amd64.iso    https://releases.ubuntu.com/16.04/SHA256SUMS
 # CentOS 7 (legacy practice target, packer/centos-legacy): the final Minimal ISO, from the vault.
 centos-7         https://vault.centos.org/7.9.2009/isos/x86_64/CentOS-7-x86_64-Minimal-2207-02.iso    https://vault.centos.org/7.9.2009/isos/x86_64/sha256sum.txt
+# CentOS 8 and 6 (legacy, packer/centos-legacy -var version=…): 8's boot ISO (packages from the vault),
+# 6's minimal ISO.
+centos-8         https://vault.centos.org/8.5.2111/isos/x86_64/CentOS-8.5.2111-x86_64-boot.iso    https://vault.centos.org/8.5.2111/isos/x86_64/CHECKSUM
+centos-6         https://vault.centos.org/6.10/isos/x86_64/CentOS-6.10-x86_64-minimal.iso    https://vault.centos.org/6.10/isos/x86_64/sha256sum.txt
 # OPNsense: published bzip2-compressed; fetch.sh checks then unpacks it.
 opnsense-26.7  https://pkg.opnsense.org/releases/26.7/OPNsense-26.7-dvd-amd64.iso.bz2  https://pkg.opnsense.org/releases/26.7/OPNsense-26.7-checksums-amd64.sha256
 # Debian: the netinst ISOs (packer/debian installs the rest from the mirror).
 debian-13        https://cdimage.debian.org/debian-cd/current/amd64/iso-cd/debian-13.7.0-amd64-netinst.iso    https://cdimage.debian.org/debian-cd/current/amd64/iso-cd/SHA256SUMS
 debian-12        https://cdimage.debian.org/cdimage/archive/12.15.0/amd64/iso-cd/debian-12.15.0-amd64-netinst.iso    https://cdimage.debian.org/cdimage/archive/12.15.0/amd64/iso-cd/SHA256SUMS
+# Older releases (legacy practice targets): installed from archive.debian.org, except 11, still on deb.debian.org.
+debian-11        https://cdimage.debian.org/cdimage/archive/11.11.0/amd64/iso-cd/debian-11.11.0-amd64-netinst.iso    https://cdimage.debian.org/cdimage/archive/11.11.0/amd64/iso-cd/SHA256SUMS
+debian-10        https://cdimage.debian.org/cdimage/archive/10.13.0/amd64/iso-cd/debian-10.13.0-amd64-netinst.iso    https://cdimage.debian.org/cdimage/archive/10.13.0/amd64/iso-cd/SHA256SUMS
+debian-9         https://cdimage.debian.org/cdimage/archive/9.13.0/amd64/iso-cd/debian-9.13.0-amd64-netinst.iso    https://cdimage.debian.org/cdimage/archive/9.13.0/amd64/iso-cd/SHA256SUMS
+debian-8         https://cdimage.debian.org/cdimage/archive/8.11.1/amd64/iso-cd/debian-8.11.1-amd64-netinst.iso    https://cdimage.debian.org/cdimage/archive/8.11.1/amd64/iso-cd/SHA256SUMS
 # pfSense CE: 2.7.2 is the last release with an offline installer (later ones download as they install).
 # Netgate's mirror; published gzip-compressed, which fetch.sh checks then unpacks.
 pfsense-2.7.2    https://atxfiles.netgate.com/mirror/downloads/pfSense-CE-2.7.2-RELEASE-amd64.iso.gz  https://atxfiles.netgate.com/mirror/downloads/pfSense-CE-2.7.2-RELEASE-amd64.iso.gz.sha256

@@ -6,9 +6,11 @@
 #
 #   sudo bash prepare-legacy.sh [--dry-run]
 #
-# Supported: CentOS 7, Ubuntu 16.04. (Ubuntu 14.04 and CentOS 6 to follow.) It:
+# Supported: CentOS 6 to 8, Ubuntu 16.04, Debian 8 to 11. It:
 #   1. installs VMware Tools (open-vm-tools) and OpenSSH, and takes out cloud-init if the install
-#      brought it; CentOS 7's packages come from the vault (its own mirrors are gone);
+#      brought it; CentOS's packages come from the vault (its own mirrors are gone; CentOS 6's VMware
+#      Tools from EPEL's archive), and Debian 8 to
+#      10's from archive.debian.org (whose 8 and 9 keys have expired, so apt doesn't check them there);
 #   2. grows the root volume into the whole disk;
 #   3. installs lab-firstboot and its service;
 #   4. labels the template in /etc/lab-template.
@@ -29,9 +31,9 @@ elif [[ -r /etc/redhat-release ]]; then
 	OS=centos VERSION=$(grep -oE '[0-9]+' /etc/redhat-release | head -1)
 fi
 case "$OS $VERSION" in
-"centos 7" | "ubuntu 16") ;;
+"centos 6" | "centos 7" | "centos 8" | "ubuntu 16" | "debian 8" | "debian 9" | "debian 10" | "debian 11") ;;
 *)
-	echo "$OS $VERSION isn't supported by prepare-legacy.sh yet (CentOS 7 and Ubuntu 16.04 are). Current releases: prepare.sh." >&2
+	echo "$OS $VERSION isn't supported by prepare-legacy.sh yet (CentOS 6 to 8, Ubuntu 16.04 and Debian 8 to 11 are). Current releases: prepare.sh." >&2
 	exit 1
 	;;
 esac
@@ -45,20 +47,51 @@ fi
 if [[ $OS == centos ]]; then
 	echo "==> Packages (from vault.centos.org)"
 	# The mirrorlist service is gone: the last release's packages live on the vault.
-	release=$(grep -oE '[0-9]+\.[0-9]+\.[0-9]+' /etc/redhat-release || echo 7.9.2009)
+	case $VERSION in
+	6) release=6.10 ;;
+	8) release=8.5.2111 ;;
+	*) release=$(grep -oE '[0-9]+\.[0-9]+\.[0-9]+' /etc/redhat-release || echo 7.9.2009) ;;
+	esac
 	for repo in /etc/yum.repos.d/CentOS-*.repo; do
+		# 6 and 7 name the release folder centos/$releasever; 8, $contentdir/$releasever.
 		sed -i -e 's/^mirrorlist=/#mirrorlist=/' \
-			-e "s|^#\?baseurl=http://mirror.centos.org/centos/\$releasever/|baseurl=http://vault.centos.org/$release/|" "$repo"
+			-e "s|^#\?baseurl=http://mirror.centos.org/centos/\$releasever/|baseurl=http://vault.centos.org/$release/|" \
+			-e "s|^#\?baseurl=http://mirror.centos.org/\$contentdir/\$releasever/|baseurl=http://vault.centos.org/$release/|" "$repo"
 	done
+	if ((VERSION == 6)); then
+		# CentOS 6 has no VMware Tools of its own: EPEL's archived ones.
+		cat >/etc/yum.repos.d/epel-archive.repo <<'REPO'
+[epel-archive]
+name=EPEL 6 (archived)
+baseurl=http://archives.fedoraproject.org/pub/archive/epel/6/$basearch/
+gpgcheck=1
+gpgkey=http://archives.fedoraproject.org/pub/archive/epel/RPM-GPG-KEY-EPEL-6
+REPO
+	fi
 	yum -y -q clean all
 	yum -y -q install open-vm-tools openssh-server
 	yum -y -q remove cloud-init 2>/dev/null || true
-	systemctl enable -q vmtoolsd sshd
+	if command -v systemctl >/dev/null; then
+		systemctl enable -q vmtoolsd sshd
+	else
+		chkconfig vmtoolsd on
+		chkconfig sshd on
+	fi
 else
 	echo "==> Packages"
 	export DEBIAN_FRONTEND=noninteractive
+	if [[ $OS == debian ]] && grep -rqs archive.debian.org /etc/apt/sources.list /etc/apt/sources.list.d; then
+		# An archived release: its Release files are past their dates, and 8 and 9's signing keys
+		# have expired.
+		{
+			echo 'Acquire::Check-Valid-Until "false";'
+			if ((VERSION <= 9)); then echo 'APT::Get::AllowUnauthenticated "true";'; fi
+		} >/etc/apt/apt.conf.d/99lab-archive
+	fi
 	apt-get -q update
-	apt-get -yq install open-vm-tools openssh-server cloud-guest-utils
+	apt-get -yq install open-vm-tools openssh-server sudo
+	# growpart, for an LVM root (Ubuntu's install; Debian's preseed makes plain partitions).
+	if [[ $OS == ubuntu ]]; then apt-get -yq install cloud-guest-utils; fi
 	apt-get -yq purge cloud-init 2>/dev/null || true
 	systemctl enable -q open-vm-tools ssh
 fi
@@ -78,9 +111,18 @@ df -h / | tail -1
 
 echo "==> lab-firstboot"
 install -m 755 "$here/lab-firstboot" /usr/local/sbin/lab-firstboot
-install -m 644 "$here/lab-firstboot.service" /etc/systemd/system/lab-firstboot.service
-systemctl daemon-reload
-systemctl enable -q lab-firstboot.service
+if command -v systemctl >/dev/null; then
+	install -m 644 "$here/lab-firstboot.service" /etc/systemd/system/lab-firstboot.service
+	# SELinux: copied from /tmp, the files keep its label, and systemd may not read them (CentOS 8).
+	if command -v restorecon >/dev/null; then restorecon /usr/local/sbin/lab-firstboot /etc/systemd/system/lab-firstboot.service; fi
+	systemctl daemon-reload
+	systemctl enable -q lab-firstboot.service
+else
+	# CentOS 6: SysV init.
+	install -m 755 "$here/lab-firstboot.init" /etc/rc.d/init.d/lab-firstboot
+	if command -v restorecon >/dev/null; then restorecon /usr/local/sbin/lab-firstboot /etc/rc.d/init.d/lab-firstboot; fi
+	chkconfig --add lab-firstboot
+fi
 echo "  enabled: runs at each boot, acts once per machine"
 
 printf 'os=%s %s\nfamily=legacy\nprepared=%s\n' "$OS" "$VERSION" "$(date -u +%Y-%m-%dT%H:%MZ)" >/etc/lab-template
