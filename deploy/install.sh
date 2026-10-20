@@ -34,8 +34,9 @@ if ! command -v docker >/dev/null || ! docker compose version >/dev/null 2>&1; t
 	. /etc/os-release
 	debs=$bundle/debs/$VERSION_CODENAME
 	[[ -d $debs ]] || { echo "No Docker here, and the bundle has no packages for Ubuntu $VERSION_CODENAME (it has: $(ls "$bundle/debs"))." >&2; exit 1; }
-	step "Installing Docker from the bundle"
-	apt-get install -y -q --no-download "$debs"/*.deb 2>/dev/null || dpkg -i "$debs"/*.deb
+	step "Installing Docker from the bundle (log: $root/install/docker-install.log)"
+	{ apt-get install -y -q --no-download "$debs"/*.deb || dpkg -i "$debs"/*.deb; } >"$root/install/docker-install.log" 2>&1 ||
+		{ echo "Docker didn't install: see $root/install/docker-install.log" >&2; exit 1; }
 	systemctl enable --now docker
 fi
 # Logs capped, as deploy/setup-server.sh does online.

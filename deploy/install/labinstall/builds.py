@@ -4,6 +4,7 @@ the install's state so a re-run picks up where the last one stopped."""
 import functools
 import http.server
 import os
+import re
 import subprocess
 import threading
 import time
@@ -13,6 +14,9 @@ from pathlib import Path
 from .checks import Context, Item
 from .manifest import command
 from .state import save
+
+# Packer colours its output; the log and the console get it plain.
+ANSI = re.compile(r"\x1b\[[0-9;]*m")
 
 
 def pkrvars(ctx: Context) -> Path:
@@ -126,6 +130,7 @@ def run(argv: list[str], env: dict, cwd: Path, log: Path, verbose: bool) -> bool
         p = subprocess.Popen(argv, cwd=cwd, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
                              bufsize=1, stdin=subprocess.DEVNULL)
         for line in p.stdout:
+            line = ANSI.sub("", line)
             out.write(line)
             # Packer's steps ("==> vsphere-iso.x: …") and the import scripts' "==> " lines.
             if verbose or line.startswith("==> "):

@@ -156,6 +156,26 @@ def _askpass() -> str:
 ASKPASS = _askpass()
 
 
+def _legacy() -> list[str]:
+    """Old SSH servers' algorithms too (Metasploitable 2's, from 2008), as far as this ssh still has
+    them ("+" only adds them; newer OpenSSH has dropped DSA, and names it doesn't know are an error)."""
+    wanted = {"KexAlgorithms": ("kex", ["diffie-hellman-group1-sha1", "diffie-hellman-group14-sha1"]),
+              "HostKeyAlgorithms": ("key", ["ssh-rsa", "ssh-dss"]),
+              "Ciphers": ("cipher", ["aes128-cbc", "3des-cbc"])}
+    opts = []
+    for option, (query, names) in wanted.items():
+        try:
+            known = set(subprocess.run(["ssh", "-Q", query], capture_output=True, text=True, timeout=10).stdout.split())
+        except (OSError, subprocess.SubprocessError):
+            continue
+        if have := [n for n in names if n in known]:
+            opts += ["-o", f"{option}=+{','.join(have)}"]
+    return opts
+
+
+LEGACY = _legacy()
+
+
 def ssh(ip: str, user: str, password: str, command: str, windows: bool, timeout: float = 120) -> str:
     if windows:
         # Windows' OpenSSH starts cmd.exe; PowerShell then gets the command whole, encoded.
@@ -165,9 +185,7 @@ def ssh(ip: str, user: str, password: str, command: str, windows: bool, timeout:
         "ssh", "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null", "-o", "LogLevel=ERROR",
         "-o", "PubkeyAuthentication=no", "-o", "PreferredAuthentications=password,keyboard-interactive",
         "-o", "ConnectTimeout=10",
-        # Old SSH servers' algorithms too (Metasploitable 2's, from 2008): "+" only adds them.
-        "-o", "KexAlgorithms=+diffie-hellman-group1-sha1,diffie-hellman-group14-sha1",
-        "-o", "HostKeyAlgorithms=+ssh-rsa,ssh-dss", "-o", "Ciphers=+aes128-cbc,3des-cbc",
+        *LEGACY,
         f"{user}@{ip}", command,
     ]  # fmt: skip
     r = subprocess.run(args, env=env, capture_output=True, text=True, timeout=timeout, stdin=subprocess.DEVNULL)
