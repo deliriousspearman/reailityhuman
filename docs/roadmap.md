@@ -1,6 +1,6 @@
 # Roadmap
 
-Where lab-deploy stands and what comes next. Last updated 2026-10-20 (afternoon). The original design is in
+Where lab-deploy stands and what comes next. Last updated 2026-10-20 (evening). The original design is in
 [plan.md](plan.md); building templates is in [build-templates.md](build-templates.md).
 
 ## Where things stand
@@ -15,13 +15,14 @@ deployed by CI.
 | Family | Templates |
 |---|---|
 | Ubuntu | 26.04, 24.04, 22.04, 20.04, 18.04, 16.04 |
-| Debian | 13, 12 |
-| Enterprise Linux | Rocky 10, 9 and 8; AlmaLinux 10, 9 and 8; CentOS Stream 9; CentOS 7 |
+| Debian | 13, 12; 11, 10, 9, 8 (legacy) |
+| Enterprise Linux | Rocky 10, 9 and 8; AlmaLinux 10, 9 and 8; CentOS Stream 9; CentOS 8, 7, 6 (legacy) |
 | Windows Server | 2025 (desktop and Core), 2022, 2019 |
 | Windows | 11 Enterprise (90-day evaluation; TPM checks skipped) |
 | Security | Kali 2026.2, Parrot 7.4 |
-| Firewalls and routers | OPNsense 26.7, pfSense CE 2.7.2, VyOS (rolling) |
-| Hypervisors | Proxmox VE 9.2 (nested) |
+| Firewalls and routers | OPNsense 26.7, pfSense CE 2.7.2, VyOS (rolling), MikroTik CHR 7.24 |
+| Hypervisors | Proxmox VE 9.2, 8.4, 7.4; XCP-ng 8.3 (all nested) |
+| Mail | Exchange Server SE (its own template; joins a domain controller's domain) |
 | Storage | TrueNAS SCALE 25.10, TrueNAS CORE 13.3 |
 | Practice targets | Metasploitable 2 and 3 (Linux), as complete images |
 
@@ -55,12 +56,12 @@ and mouse in the browser.
 
 | Item | What's needed | Then |
 |---|---|---|
-| MikroTik CHR 7 | mikrotik.com is unreachable from the lab network (every host times out). Download the stable "Cloud Hosted Router" VMDK image (`chr-7.x.vmdk.zip`) from mikrotik.com/download elsewhere and put it where Claude can reach it | Import it as a complete image, as Metasploitable was |
 | Windows 10 | The ISO in the datastore's `ISO/` folder (Enterprise LTSC 2021 or 22H2, x64, en-US), its file name, and a key if it isn't an evaluation | Build with `packer/windows` (as Windows 11, `version = "10"`), run the e2e tests, add it to `templates.yaml` |
 | Firefox black screen | Testing on the one affected Firefox: without extensions, then with `privacy.resistFingerprinting` off. Canvas blockers stop the screen drawing | A fix if it isn't the browser's settings |
 | Workstation snapshot | Delete the snapshot of the ESXi VM taken before the datastore was extended | — |
 | `parrot-base-7.4` | Choose: convert it to a vSphere template (recommended; it stays, for Parrot rebuilds) or delete it (frees 12.7 GB; rebuilding then means re-importing the OVA) | One line in `packer/parrot/import-base.sh` so new bases are templates |
 | Off-host backups | Somewhere to copy the daily database dump: a network share or another machine | A copy job in `deploy/compose.yaml` |
+| GitLab pushes | Since 2026-10-20 the GitLab server rejects pushes ("unable to create temporary object directory": usually its disk is full, or git-data permissions). Its API answers | Push the commits waiting locally; CI deploys again. Meanwhile the panel is deployed with `deploy/deploy.sh` from the build machine |
 
 ## Next, in order
 
@@ -109,8 +110,6 @@ sign in at the OPNsense menu.
 
 | Template | Approach | Notes |
 |---|---|---|
-| MikroTik CHR 7 | Complete image (image family): import the official VMDK | Waiting for the download (see above) |
-| Debian 8 to 11 | The Debian builds with older preseeds; the legacy family for 8 and 9 | Archive mirrors for old releases |
 | Windows 7 | Legacy Windows build: BIOS, older unattend, no Cloudbase-Init support for the newest versions | ISO from Jake |
 | Windows 10 | See "Waiting on Jake" | — |
 
