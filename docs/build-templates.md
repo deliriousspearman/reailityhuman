@@ -20,6 +20,8 @@ as building by hand ([setup-vsphere.md](setup-vsphere.md), parts 2, 5 and 6), wh
 | OPNsense 26.7 | `packer/build.sh opnsense` | ~14 min |
 | pfSense CE 2.7.2 | `packer/build.sh pfsense` | ~10 min |
 | Proxmox VE 9 | `packer/proxmox/prepare-iso.sh` once, then `packer/build.sh proxmox` | ~15 min |
+| TrueNAS SCALE 25.10 | `packer/build.sh truenas-scale` | ~25 min |
+| TrueNAS CORE 13.3 | `packer/build.sh truenas-core` | ~25 min |
 | VyOS 1.5 rolling | `packer/vyos/build-iso.sh` once, then `packer/build.sh vyos` | ~8 min |
 | Metasploitable 2 | `packer/metasploitable/import-ms2.sh` | ~15 min |
 | Metasploitable 3 (Ubuntu 14.04) | `packer/metasploitable/import-ms3.sh` | ~30 min |
@@ -84,6 +86,16 @@ adds a first-boot script that installs VMware Tools. The VM has nested virtualis
 cluster filesystem: before it, the node's name, root's password, and `/etc/hosts` pointing at the
 machine's DHCP address (Proxmox won't start otherwise); after it, the node's certificate and root's
 SSH key. The bridge `vmbr0` takes its address from DHCP.
+
+**TrueNAS** (SCALE and CORE) has no unattended installer either, so its builds type the answers too,
+then open a shell at the installed system's console menu (8 on SCALE, 9 on CORE) to switch SSH on.
+Each VM has three 20 GB disks: the installer lists them in its own order and takes the first, so they
+are the same size, and the other two are empty, for a pool. `scripts/template/truenas/` serves both
+editions: `lab-firstboot` is a middleware init script, run at the end of each boot, which sets the
+hostname, the administrator's password (truenas_admin on SCALE, root on CORE) as the panel's SHA-512
+hash in TrueNAS's own database, its SSH key, and new SSH host keys, which TrueNAS also keeps in its
+database. On SCALE the build runs its scripts as `sudo bash <script>`: `/tmp` is mounted noexec, and
+TrueNAS's sudo (`log_subcmds`) stops a script that's run directly.
 
 **VyOS** builds from our own ISO (part 2), whose cloud-init takes the panel's settings from vCenter
 (the `vyos` family): the user through cloud-config `users` (with none there, VyOS adds `vyos` /
@@ -241,6 +253,8 @@ packer/build.sh opnsense
 packer/build.sh pfsense
 packer/proxmox/prepare-iso.sh --credentials ~/.config/lab-deploy/vcenter-build   # once per release
 packer/build.sh proxmox
+packer/build.sh truenas-scale
+packer/build.sh truenas-core
 packer/build.sh vyos                                  # after build-iso.sh (part 2)
 packer/build.sh kali
 packer/parrot/import-base.sh ~/Parrot-security-7.4_amd64.ova --credentials ~/.config/lab-deploy/vcenter-build
