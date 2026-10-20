@@ -15,6 +15,9 @@ windows-server-2019  https://go.microsoft.com/fwlink/p/?LinkID=2195167&clcid=0x4
 windows-11-26h2      https://go.microsoft.com/fwlink/?linkid=2382600&clcid=0x409&culture=en-us&country=us  bc3f24086ebadc94489066b5ad78089e2cf5c3491e90e790bb81a2b199c10e38  windows-11-enterprise-eval-26300.9457.iso
 # SQL Server 2025 Enterprise Developer: free for development and testing, not production.
 sql-server-2025  https://download.microsoft.com/download/dea8c210-c44a-4a9d-9d80-0c81578860c5/ENU/SQLServer2025-x64-ENU-EntDev.iso  f78f869d44e8c2cbf93be16ce6ea52dd811636f046ded29e7a74dd1352134851
+# Exchange Server Subscription Edition (SE): Microsoft's Download Center; without a product key it runs
+# as a 180-day trial. SHA-256 from Microsoft's release announcement (KB5047155).
+exchange-se      https://download.microsoft.com/download/ad9b1e53-f28e-4a82-987d-6c88803795b2/ExchangeServerSE-x64.iso  cd2b13f2c297187776af4cff3541b4be3c677cf907cca69d85ab0e2b70377bd1
 kali-2026.2      https://cdimage.kali.org/kali-2026.2/kali-linux-2026.2-installer-amd64.iso    https://cdimage.kali.org/kali-2026.2/SHA256SUMS
 # VyOS Stream (free, quarterly): signed with minisign, key RWTR1ty93Oyontk6caB9WqmiQC4fgeyd/ejgRxCRGd2MQej7nqebHneP
 # (vyos.net/get/stream); this SHA-256 is of the file whose signature checked out.

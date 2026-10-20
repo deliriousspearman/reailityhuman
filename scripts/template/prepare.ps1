@@ -13,7 +13,10 @@ as Administrator. It:
   - stops Server Manager opening at every sign-in, and never sleeps;
   - with -Office, copies Office's install files in, for the panel's Outlook extra;
   - with -SqlServer, copies SQL Server's install files in, with the Chinook sample database, for
-    the panel's SQL Server extra.
+    the panel's SQL Server extra;
+  - with -Exchange, copies Exchange Server's install files in and installs everything it needs
+    first (Windows features, Visual C++ 2012 and 2013, IIS URL Rewrite, UCMA), for the panel's
+    Exchange extra, which then only has to join a domain and run Exchange's setup.
 It's safe to re-run. Then install anything every machine should have, and run clean.ps1.
 
 The whole process, including the vCenter steps, is in docs/setup-vsphere.md.
@@ -42,6 +45,16 @@ Offline: Chinook_SqlServer.sql (the SQL Server extra's dummy data), already down
 media folder scripts/isos/fetch-media.sh makes. It's checked against the pinned SHA-256 and copied in;
 without it, it's downloaded.
 
+.PARAMETER Exchange
+Exchange Server SE's install media: the folder with its Setup.exe, e.g. the mounted ISO's drive. It's
+copied to C:\LabDeploy\exchange, and its prerequisites are installed (downloaded, so it needs the
+internet, unless -ExchangePrereqs gives them). Desktop Experience only.
+
+.PARAMETER ExchangePrereqs
+Offline: a folder with Exchange's downloaded prerequisites (vcredist2012_x64.exe, vcredist2013_x64.exe,
+rewrite_amd64_en-US.msi), e.g. the media folder's windows\exchange. Each is checked against its pinned
+SHA-256 and Microsoft's signature.
+
 .PARAMETER DryRun
 Only say what it found and what it would do.
 
@@ -61,6 +74,8 @@ param(
     [string]$Office,
     [string]$SqlServer,
     [string]$Chinook,
+    [string]$Exchange,
+    [string]$ExchangePrereqs,
     [switch]$DryRun
 )
 
@@ -78,6 +93,21 @@ $SqlServerDir = 'C:\LabDeploy\sqlserver'
 $ChinookDir = 'C:\LabDeploy\chinook'
 $ChinookUrl = 'https://github.com/lerocha/chinook-database/releases/download/v1.4.5/Chinook_SqlServer.sql'
 $ChinookSha256 = '5ea75c9e925ead917d3fabea6ed3cc8c1ff1d036b61e915c94631aafa2b0802b'
+# Where the Exchange extra looks for its install files; and its prerequisites (Microsoft's links, pinned).
+$ExchangeDir = 'C:\LabDeploy\exchange'
+$ExchangePrereqDir = 'C:\LabDeploy\exchange-prereqs'
+$ExchangePrereqFiles = [ordered]@{
+    'vcredist2012_x64.exe'    = @('https://download.microsoft.com/download/1/6/B/16B06F60-3B20-4FF2-B699-5E9B7962F9AE/VSU_4/vcredist_x64.exe', '681BE3E5BA9FD3DA02C09D7E565ADFA078640ED66A0D58583EFAD2C1E3CC4064')
+    'vcredist2013_x64.exe'    = @('https://download.visualstudio.microsoft.com/download/pr/10912041/cee5d6bca2ddbcd039da727bf4acb48a/vcredist_x64.exe', 'A4BBA7701E355AE29C403431F871A537897C363E215CAFE706615E270984F17C')
+    'rewrite_amd64_en-US.msi' = @('https://download.microsoft.com/download/1/2/8/128E2E22-C1B9-44A4-BE2A-5859ED1D4592/rewrite_amd64_en-US.msi', '37342FF2F585F263F34F48E9DE59EB1051D61015A8E967DBDE4075716230A32A')
+}
+# The Windows features Exchange's Mailbox role needs (Microsoft's list for Windows Server 2022 and 2025).
+$ExchangeFeatures = 'Server-Media-Foundation', 'NET-Framework-45-Features', 'RPC-over-HTTP-proxy', 'RSAT-Clustering',
+    'RSAT-Clustering-CmdInterface', 'RSAT-Clustering-Mgmt', 'RSAT-Clustering-PowerShell', 'WAS-Process-Model', 'Web-Asp-Net45',
+    'Web-Basic-Auth', 'Web-Client-Auth', 'Web-Digest-Auth', 'Web-Dir-Browsing', 'Web-Dyn-Compression', 'Web-Http-Errors',
+    'Web-Http-Logging', 'Web-Http-Redirect', 'Web-Http-Tracing', 'Web-ISAPI-Ext', 'Web-ISAPI-Filter', 'Web-Metabase',
+    'Web-Mgmt-Console', 'Web-Mgmt-Service', 'Web-Net-Ext45', 'Web-Request-Monitor', 'Web-Server', 'Web-Stat-Compression',
+    'Web-Static-Content', 'Web-Windows-Auth', 'Web-WMI', 'RSAT-ADDS'
 
 function Step([string]$Text) { Write-Host "==> $Text" -ForegroundColor Cyan }
 function Note([string]$Text) { Write-Host "    $Text" }
@@ -124,6 +154,14 @@ if ($Office) {
         throw 'Outlook needs the desktop, and this is Server Core: leave out -Office.'
     }
 }
+if ($Exchange) {
+    if (-not (Test-Path (Join-Path $Exchange 'Setup.exe')) -or -not (Test-Path (Join-Path $Exchange 'UCMARedist\Setup.exe'))) {
+        throw "$Exchange has no Setup.exe and UCMARedist. Give the folder (or mounted ISO) with Exchange Server's install media."
+    }
+    if (-not $server -or (Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion').InstallationType -eq 'Server Core') {
+        throw 'Exchange is prepared on Windows Server with the Desktop Experience.'
+    }
+}
 if ($SqlServer -and -not (Test-Path (Join-Path $SqlServer 'setup.exe'))) {
     throw "$SqlServer has no setup.exe. Give the folder (or mounted ISO) with SQL Server's install media."
 }
@@ -148,6 +186,9 @@ if ($Office) {
 if ($SqlServer) {
     $size = (Get-ChildItem -Path $SqlServer -Recurse -File | Measure-Object -Property Length -Sum).Sum
     Note ("SQL Server files: to copy from $SqlServer to $SqlServerDir ({0:N1} GB), and Chinook to $ChinookDir" -f ($size / 1GB))
+}
+if ($Exchange) {
+    Note "Exchange: its files from $Exchange to $ExchangeDir, and its prerequisites installed"
 }
 if ($DryRun) {
     Note 'Dry run: nothing changed.'
@@ -295,6 +336,55 @@ if ($SqlServer) {
         Remove-Item -Path $chinookFile
         throw "$from isn't the file expected (its SHA-256 differs)."
     }
+}
+
+# Exchange ------------------------------------------------------------------------------------------------
+
+if ($Exchange) {
+    Step "Copying Exchange's install files to $ExchangeDir"
+    robocopy.exe $Exchange $ExchangeDir /MIR /NFL /NDL /NJH /NJS /NP /XD 'System Volume Information' | Out-Null
+    if ($LASTEXITCODE -ge 8) {
+        throw "Copying $Exchange to $ExchangeDir failed (robocopy exit code $LASTEXITCODE)."
+    }
+
+    Step "Exchange's prerequisites"
+    New-Item -ItemType Directory -Force -Path $ExchangePrereqDir | Out-Null
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+    foreach ($name in $ExchangePrereqFiles.Keys) {
+        $url, $sha256 = $ExchangePrereqFiles[$name]
+        $file = Join-Path $ExchangePrereqDir $name
+        if ($ExchangePrereqs -and (Test-Path (Join-Path $ExchangePrereqs $name))) {
+            Copy-Item -Path (Join-Path $ExchangePrereqs $name) -Destination $file -Force
+        } elseif (-not (Test-Path $file)) {
+            Invoke-WebRequest -Uri $url -OutFile $file -UseBasicParsing
+        }
+        if ((Get-FileHash -Path $file -Algorithm SHA256).Hash -ne $sha256) {
+            Remove-Item -Path $file
+            throw "$name isn't the file expected (its SHA-256 differs)."
+        }
+        $signature = Get-AuthenticodeSignature -FilePath $file
+        if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notlike '*O=Microsoft Corporation*') {
+            throw "$name isn't signed by Microsoft."
+        }
+    }
+    Note 'Windows features'
+    $features = Get-WindowsFeature -Name $ExchangeFeatures | Where-Object { -not $_.Installed } | ForEach-Object Name
+    if ($features) {
+        $result = Install-WindowsFeature -Name $features
+        if (-not $result.Success) { throw "Installing Exchange's Windows features failed." }
+    }
+    # Each installer's exit code: 0, or 3010 (installed, a restart needed: sysprep's shutdown is one).
+    function Install-Prereq([string]$Name, [string]$FilePath, [string[]]$Arguments) {
+        Note $Name
+        $process = Start-Process -FilePath $FilePath -ArgumentList $Arguments -Wait -PassThru
+        if ($process.ExitCode -notin 0, 1638, 3010) {
+            throw "$Name failed to install (exit code $($process.ExitCode))."
+        }
+    }
+    Install-Prereq 'Visual C++ 2012' (Join-Path $ExchangePrereqDir 'vcredist2012_x64.exe') '/install', '/quiet', '/norestart'
+    Install-Prereq 'Visual C++ 2013' (Join-Path $ExchangePrereqDir 'vcredist2013_x64.exe') '/install', '/quiet', '/norestart'
+    Install-Prereq 'IIS URL Rewrite' msiexec.exe '/i', "`"$(Join-Path $ExchangePrereqDir 'rewrite_amd64_en-US.msi')`"", '/qn', '/norestart'
+    Install-Prereq 'Unified Communications Managed API 4.0' (Join-Path $ExchangeDir 'UCMARedist\Setup.exe') '/passive', '/norestart'
 }
 
 # Odds and ends -------------------------------------------------------------------------------------------

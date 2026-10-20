@@ -4,7 +4,7 @@
 # SQL Server's ISO; otherwise downloaded.
 #
 # Environment (set by Packer): LAB_EDITION desktop or core; LAB_OFFICE yes/no (desktop only);
-# LAB_SQLSERVER yes/no.
+# LAB_SQLSERVER yes/no; LAB_EXCHANGE yes/no.
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'   # Invoke-WebRequest is many times slower with it
 
@@ -70,6 +70,14 @@ if ($env:LAB_SQLSERVER -eq 'yes') {
     $prepareArgs.SqlServer = $sql
     $chinook = Join-Path $media 'chinook\Chinook_SqlServer.sql'
     if (Test-Path $chinook) { $prepareArgs.Chinook = $chinook }
+}
+
+# Exchange, from its ISO in a CD drive; its prerequisites from the media folder offline
+if ($env:LAB_EXCHANGE -eq 'yes') {
+    $exchange = Get-PSDrive -PSProvider FileSystem | Where-Object { Test-Path (Join-Path $_.Root 'UCMARedist\Setup.exe') } | ForEach-Object { $_.Root } | Select-Object -First 1
+    if (-not $exchange) { throw "Exchange's ISO isn't attached." }
+    $prepareArgs.Exchange = $exchange
+    if (Test-Path (Join-Path $media 'exchange')) { $prepareArgs.ExchangePrereqs = Join-Path $media 'exchange' }
 }
 
 Write-Host "==> prepare.ps1 $(($prepareArgs.GetEnumerator() | ForEach-Object { "-$($_.Key) $($_.Value)" }) -join ' ')"

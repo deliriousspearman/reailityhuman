@@ -151,5 +151,22 @@ def test_first_boot_script_handles_a_domain_controller():
     script = cloudinit.windows_userdata("labadmin", "Pass-word1", None, [], "dc01")
     assert "DomainRole -ge 4" in script
     # The user into Domain Admins by SID, and the local accounts only when it isn't a controller.
-    assert "DomainSID.Value)-512" in script
+    assert "foreach ($rid in 512, 518, 519)" in script
     assert script.index("DomainRole -ge 4") < script.index("New-LocalUser")
+
+
+def test_exchange_joins_then_installs():
+    x = extras.find("exchange")
+    assert [o.id for o in x.options] == ["dc", "organization"] and x.options[0].extra == "domain-controller"
+    assert x.setup_minutes >= 120 and x.min_memory_gb >= 8
+    _, script = x.families["windows"]
+    # The join restarts and comes back to it (3011); setup runs as the domain controller's user.
+    assert script.index("exit 3011") < script.index("/Mode:Install /Roles:Mailbox")
+    assert "-User $admin -Password $dc_password" in script
+
+
+def test_windows_runner_reruns_an_extra_after_3011():
+    runner = extras.WINDOWS_RUNNER
+    rerun = runner.index("$code -eq 3011")
+    # Unlike 3010, it doesn't mark the extra done, so the next run carries on with it.
+    assert '"ok $id"' not in runner[rerun : runner.index("exit 1003", rerun)]

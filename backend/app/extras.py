@@ -466,8 +466,10 @@ def cloud_config(chosen: list[dict], family: str, hostname: str, username: str =
 # An extra that needs a restart to finish (e.g. a server role) exits with 3010, Windows' "done,
 # restart needed". The runner notes it in `progress` and exits with 1003, which the first-boot script
 # passes on: Cloudbase-Init restarts Windows and runs it all again, and the runner carries on after
-# the extras already done (one that asked is done). At most RESTARTS_MAX restarts in all, so a long
-# list of them can't keep the machine restarting for ever.
+# the extras already done (one that asked is done). An extra with more to do after the restart (e.g.
+# Exchange: join the domain, restart, then install) exits with 3011 instead: it isn't marked done, so
+# it runs again. At most RESTARTS_MAX restarts in all, so a long list of them can't keep the machine
+# restarting for ever.
 RESTARTS_MAX = 3
 WINDOWS_RUNNER = rf"""# Written by the lab panel: applies the extras chosen for this machine (run on first boot, and
 # again after any restart an extra asks for).
@@ -491,7 +493,11 @@ foreach ($id in $Ids) {{
         Add-Content -Path $progress -Value @("ok $id", 'restart')
         exit 1003
     }}
-    if ($code -eq 3010) {{
+    if ($code -eq 3011 -and $restarts -lt {RESTARTS_MAX}) {{
+        Add-Content -Path $progress -Value 'restart'
+        exit 1003
+    }}
+    if ($code -eq 3010 -or $code -eq 3011) {{
         $lines += "failed $id needs a restart, but the extras have had {RESTARTS_MAX} already"
     }} elseif ($code -eq 0) {{
         $lines += "ok $id"

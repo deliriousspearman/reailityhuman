@@ -94,6 +94,17 @@ variable "sql_server" {
   type    = bool
   default = true
 }
+# The Exchange template (desktop only): Exchange Server SE's files and its prerequisites, for the
+# Exchange extra. Built as its own template (-var exchange=true -var office=false -var sql_server=false):
+# Exchange wants a machine of its own.
+variable "exchange" {
+  type    = bool
+  default = false
+}
+variable "exchange_iso" {
+  type    = string
+  default = "ExchangeServerSE-x64.iso"
+}
 # Offline builds: the media folder scripts/isos/fetch-media.sh makes (its windows\ part goes on the
 # build's CD): Cloudbase-Init, Office's files, Chinook. Empty: downloaded during the build.
 variable "media_dir" {
@@ -114,7 +125,8 @@ variable "build_password" {
 locals {
   core    = var.edition == "core"
   suffix  = local.core ? "-core" : ""
-  vm_name = var.vm_name != "" ? var.vm_name : "tpl-windows-server-${var.version}${local.suffix}-${formatdate("YYYYMMDD", timestamp())}"
+  suffix2 = var.exchange ? "-exchange" : local.suffix
+  vm_name = var.vm_name != "" ? var.vm_name : "tpl-windows-server-${var.version}${local.suffix2}-${formatdate("YYYYMMDD", timestamp())}"
   # 2025's images go by these names; 2022's and 2019's have other names inside (Setup then asks), so
   # those go by number: 1 Standard (Core), 2 Standard (Desktop Experience).
   image_key  = var.version == "2025" ? "/IMAGE/NAME" : "/IMAGE/INDEX"
@@ -133,6 +145,7 @@ locals {
   iso_paths = concat(
     ["[${var.datastore}] ${var.iso_folder}/${local.iso}", "[] /vmimages/tools-isoimages/windows.iso"],
     var.sql_server ? ["[${var.datastore}] ${var.iso_folder}/${var.sql_server_iso}"] : [],
+    var.exchange ? ["[${var.datastore}] ${var.iso_folder}/${var.exchange_iso}"] : [],
   )
 }
 
@@ -154,7 +167,7 @@ source "vsphere-iso" "windows" {
   RAM                  = local.core ? 2048 : 4096
   disk_controller_type = ["nvme"]
   storage {
-    disk_size             = local.core ? 40960 : 61440
+    disk_size             = var.exchange ? 102400 : (local.core ? 40960 : 61440)
     disk_thin_provisioned = true
   }
   network_adapters {
@@ -214,6 +227,7 @@ build {
       "LAB_EDITION=${var.edition}",
       "LAB_OFFICE=${local.office ? "yes" : "no"}",
       "LAB_SQLSERVER=${var.sql_server ? "yes" : "no"}",
+      "LAB_EXCHANGE=${var.exchange ? "yes" : "no"}",
     ]
     elevated_user     = "Administrator"
     elevated_password = var.build_password
@@ -223,7 +237,7 @@ build {
   # template itself (and once left WinRM refusing Packer's shutdown command).
 
   post-processor "manifest" {
-    output     = "${path.root}/../output/windows-server-${var.version}${local.suffix}.json"
+    output     = "${path.root}/../output/windows-server-${var.version}${local.suffix2}.json"
     strip_path = true
     custom_data = {
       vm_name    = local.vm_name

@@ -37,6 +37,7 @@
 #              An extra that needs a restart to finish exits with 3010 ("done, restart needed"), e.g.
 #              `if ((Install-WindowsFeature X).RestartNeeded -eq 'Yes') { exit 3010 }`: Windows
 #              restarts and the extras after it carry on (3 restarts at most, for all of them).
+#              One with more to do after the restart exits with 3011 instead: it runs again then.
 
 - id: nginx
   name: nginx
@@ -911,4 +912,88 @@
       }
       $credential = New-Object PSCredential("$($dc_netbios.ToUpper())\$dc_username", (ConvertTo-SecureString $dc_password -AsPlainText -Force))
       Add-Computer -DomainName $dc_domain -Credential $credential -Force -WarningAction SilentlyContinue
+      exit 3010
+
+# Exchange Server SE on its own template (templates.yaml: exchange), with its files and prerequisites
+# baked in (prepare.ps1 -Exchange). It joins a domain controller's domain, then runs Exchange's setup as
+# that controller's user (a domain, schema and enterprise administrator), which also prepares the
+# forest. Unlicensed, it's a 180-day trial.
+- id: exchange
+  name: Exchange Server
+  category: Mail
+  description: Exchange Server SE (Mailbox role) in a domain controller's domain, with a mailbox for the controller's user. Takes over an hour to set up.
+  # No ports listed: it's alone on its template, so there's nothing to clash with.
+  setupMinutes: 150
+  minMemoryGB: 8
+  notes:
+    - "Outlook on the web: https://{ip}/owa, and the admin centre: https://{ip}/ecp. Sign in as the domain controller's user (DOMAIN\\user, with its password; its machine page has them). The certificate is self-signed."
+    - "Unlicensed, Exchange runs as a 180-day trial. It uses the domain controller for DNS, so keep that running."
+  options:
+    - id: dc
+      label: Domain controller
+      type: machine
+      extra: domain-controller
+      help: A running machine with the Domain controller extra. Exchange joins its domain.
+    - id: organization
+      label: Organisation name
+      type: text
+      pattern: "[A-Za-z0-9][A-Za-z0-9 -]{0,63}"
+      default: Lab
+      help: The Exchange organisation's name, shown in its admin centre.
+  windows:
+    script: |
+      $src = 'C:\LabDeploy\exchange'
+      if (-not (Test-Path "$src\Setup.exe")) {
+        throw "This template has no Exchange files in $src. Rebuild it with prepare.ps1 -Exchange."
+      }
+      $admin = "$($dc_netbios.ToUpper())\$dc_username"
+      # First: join the domain (as the Join a domain extra), then restart.
+      $computer = Get-CimInstance Win32_ComputerSystem
+      if (-not ($computer.PartOfDomain -and $computer.Domain -eq $dc_domain)) {
+        $adapter = Get-NetAdapter | Where-Object Status -eq 'Up' | Select-Object -First 1
+        Set-DnsClientServerAddress -InterfaceIndex $adapter.ifIndex -ServerAddresses $dc_ip
+        Clear-DnsClientCache
+        $deadline = (Get-Date).AddMinutes(5)
+        while (-not (Resolve-DnsName -Name "_ldap._tcp.dc._msdcs.$dc_domain" -Type SRV -ErrorAction SilentlyContinue)) {
+          if ((Get-Date) -gt $deadline) { throw "Can't find the domain $dc_domain through $dc_name ($dc_ip)." }
+          Start-Sleep -Seconds 10
+        }
+        $credential = New-Object PSCredential($admin, (ConvertTo-SecureString $dc_password -AsPlainText -Force))
+        Add-Computer -DomainName $dc_domain -Credential $credential -Force -WarningAction SilentlyContinue
+        # Restart, then run this again (3011, not 3010: it isn't done).
+        exit 3011
+      }
+
+      # Then Exchange's setup, as the domain administrator: it prepares the schema and the domain, which
+      # the machine's own account can't. A scheduled task runs it as that user, and this waits for it.
+      function Invoke-AsAdmin([string]$Name, [string]$Command, [int]$Hours) {
+        $action = New-ScheduledTaskAction -Execute 'cmd.exe' -Argument "/c $Command"
+        Register-ScheduledTask -TaskName $Name -Action $action -User $admin -Password $dc_password -RunLevel Highest -Force | Out-Null
+        Start-ScheduledTask -TaskName $Name
+        Start-Sleep -Seconds 10
+        $deadline = (Get-Date).AddHours($Hours)
+        while ((Get-ScheduledTask -TaskName $Name).State -eq 'Running') {
+          if ((Get-Date) -gt $deadline) { throw "$Name didn't finish within $Hours hours." }
+          Start-Sleep -Seconds 30
+        }
+        $result = (Get-ScheduledTaskInfo -TaskName $Name).LastTaskResult
+        Unregister-ScheduledTask -TaskName $Name -Confirm:$false
+        return $result
+      }
+      $logs = 'C:\ProgramData\lab-deploy\logs'
+      if (-not (Get-Service -Name MSExchangeIS -ErrorAction SilentlyContinue)) {
+        $setup = "`"$src\Setup.exe`" /IAcceptExchangeServerLicenseTerms_DiagnosticDataOFF /Mode:Install /Roles:Mailbox " +
+          "/OrganizationName:`"$organization`" > `"$logs\exchange-setup.log`" 2>&1"
+        $code = Invoke-AsAdmin 'LabExchangeSetup' $setup 4
+        if ($code -ne 0) {
+          throw "Exchange's setup failed (exit code $code): see $logs\exchange-setup.log and C:\ExchangeSetupLogs\ExchangeSetup.log."
+        }
+      }
+      # A mailbox for the domain controller's user, so Outlook on the web works straight away.
+      $mailbox = "powershell.exe -NoProfile -Command `"Add-PSSnapin Microsoft.Exchange.Management.PowerShell.SnapIn; " +
+        "if (-not (Get-Mailbox -Identity '$dc_username' -ErrorAction SilentlyContinue)) { Enable-Mailbox -Identity '$dc_username' }`" " +
+        "> `"$logs\exchange-mailbox.log`" 2>&1"
+      $code = Invoke-AsAdmin 'LabExchangeMailbox' $mailbox 1
+      if ($code -ne 0) { throw "Making $dc_username's mailbox failed: see $logs\exchange-mailbox.log." }
+      # Exchange asks for a restart after setup.
       exit 3010
