@@ -228,6 +228,7 @@ catalogue = "windows-server 2025"
 build = "packer/build.sh windows-server"
 vars = ["media_dir={media_dir}"]
 isos = ["windows-server-2025"]
+media = ["windows/cloudbase-init/CloudbaseInitSetup_x64.msi"]
 extras = "windows"
 eval_days = 180
 
@@ -237,6 +238,7 @@ catalogue = "windows-server 2025 Core"
 build = "packer/build.sh windows-server"
 vars = ["edition=core", "media_dir={media_dir}"]
 isos = ["windows-server-2025"]
+media = ["windows/cloudbase-init/CloudbaseInitSetup_x64.msi"]
 extras = "windows"
 eval_days = 180
 
@@ -246,6 +248,7 @@ catalogue = "windows-server 2022"
 build = "packer/build.sh windows-server"
 vars = ["version=2022", "media_dir={media_dir}"]
 isos = ["windows-server-2022"]
+media = ["windows/cloudbase-init/CloudbaseInitSetup_x64.msi"]
 extras = "windows"
 eval_days = 180
 
@@ -255,6 +258,7 @@ catalogue = "windows-server 2019"
 build = "packer/build.sh windows-server"
 vars = ["version=2019", "media_dir={media_dir}"]
 isos = ["windows-server-2019"]
+media = ["windows/cloudbase-init/CloudbaseInitSetup_x64.msi"]
 extras = "windows"
 eval_days = 180
 
@@ -264,6 +268,7 @@ catalogue = "windows 11"
 build = "packer/build.sh windows"
 vars = ["media_dir={media_dir}"]
 isos = ["windows-11-26h2"]
+media = ["windows/cloudbase-init/CloudbaseInitSetup_x64.msi"]
 extras = "windows"
 eval_days = 90
 
@@ -273,7 +278,7 @@ catalogue = "exchange SE"
 build = "packer/build.sh windows-server"
 vars = ["exchange=true", "office=false", "sql_server=false", "media_dir={media_dir}"]
 isos = ["windows-server-2025", "exchange-se"]
-media = ["windows/exchange/vcredist2012_x64.exe", "windows/exchange/vcredist2013_x64.exe", "windows/exchange/rewrite_amd64_en-US.msi"]
+media = ["windows/cloudbase-init/CloudbaseInitSetup_x64.msi", "windows/exchange/vcredist2012_x64.exe", "windows/exchange/vcredist2013_x64.exe", "windows/exchange/rewrite_amd64_en-US.msi"]
 eval_days = 180
 
 # Firewalls and routers

@@ -125,7 +125,7 @@ def run(ctx: Context, state: dict, verify_isos: bool = False) -> None:
 
     # The media folder.
     if not ctx.media_dir.is_dir():
-        ctx.add("Media", WARN if cfg.internet else FAIL, f"no media folder at {ctx.media_dir}")
+        ctx.add("Media", WARN, f"no media folder at {ctx.media_dir}: templates and extras that need it are left out")
     else:
         ctx.add("Media", OK, f"{ctx.media_dir}, served at {ctx.media_url}")
         if not port_free(port):
