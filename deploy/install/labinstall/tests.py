@@ -1,0 +1,46 @@
+"""Testing the new templates through the panel (docs/offline-install.md, step 9), with
+scripts/e2e/run.py: the lifecycle of each, or every extra too."""
+
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+from .checks import Context
+
+
+def run_tests(ctx: Context, state: dict, panel: str, mode: str, logs: Path) -> None:
+    records = state.get("templates", {})
+    todo = [t for t in ctx.manifest.templates.values()
+            if t.catalogue and records.get(t.id, {}).get("status") == "built" and "test" not in records[t.id]]
+    if mode == "none" or not todo:
+        return
+    only = ",".join(t.catalogue.replace(" ", ":", 1) for t in todo)
+    report = logs / "e2e-report.md"
+    argv = [sys.executable, "scripts/e2e/run.py", "--panel", panel, "--only", only, "--parallel", "1",
+            "--report", str(report)]
+    if mode == "lifecycle":
+        argv.append("--no-extras")
+    print(f"Testing {len(todo)} template(s) through the panel ({'lifecycle' if mode == 'lifecycle' else 'every extra'}); "
+          f"report: {report}", flush=True)
+    with open(logs / "e2e.log", "w") as log:
+        subprocess.run(argv, cwd=ctx.manifest.src, stdout=log, stderr=subprocess.STDOUT)
+    results = parse(report)
+    for t in todo:
+        mine = {k: v for k, v in results.items() if k.startswith(f"{t.catalogue}:")}
+        if not mine:
+            records[t.id]["test"] = "not run"
+        else:
+            records[t.id]["test"] = "passed" if all(v == "pass" for v in mine.values()) else "failed"
+            records[t.id]["test_results"] = mine
+        print(f"  {t.id}: {records[t.id]['test']}")
+
+
+def parse(report: Path) -> dict[str, str]:
+    """run.py's report table: | <template> <version>: <test> | pass/FAIL | minutes |."""
+    try:
+        text = report.read_text()
+    except OSError:
+        return {}
+    return {m.group(1).strip(): m.group(2).strip().lower()
+            for m in re.finditer(r"^\| ([^|]+:[^|]+) \| (\w+) \|", text, re.M)}

@@ -1,0 +1,414 @@
+# How the offline install (deploy/install.sh) builds each template, and what each build needs.
+# docs/offline-install.md explains the install; docs/build-templates.md the builds themselves.
+#
+# Each [[template]]:
+#   id         the name the config's [templates] build list and the report use
+#   catalogue  its entry in backend/templates.yaml: "<template> <version>"
+#   build      the command, from the repo's root (packer/build.sh or an import script)
+#   vars       Packer variables, -var name=value; a value with a {placeholder} is only passed when
+#              the placeholder has a value:
+#                {mirror.<name>}       the config's [mirrors] <name>; {mirror.<name>.host} and
+#                                      {mirror.<name>.path} its host and path, for debian-installer
+#                {media}               the media folder's address (the installer serves it)
+#                {media_dir}           the media folder's path, for the Windows builds' CD
+#                {http_ip}             this server's address on the VM network
+#   env        environment for import scripts, with the same placeholders
+#   isos       what must be in the datastore's ISO folder: names in scripts/isos/isos.txt, or
+#              file:<name> for an ISO made from one (Proxmox's -auto, VyOS's own)
+#   mirrors    "<mirror>:<path>": the mirror, and a file it must have for this release
+#   media      files the build reads from the media folder, offline
+#   extras     true: Linux, built with the catalogue's extras that can be built (-var extras=);
+#              "windows": Office and SQL Server's files decide outlook and mssql
+#   needs      templates built first (Parrot's base VM)
+#   internet   set when the build still downloads something no mirror or media option covers yet:
+#              offline, it's skipped and the reason is shown
+#   eval_days  an evaluation licence's length, for the report
+
+# Ubuntu (autoinstall; 18.04 and 16.04 with debian-installer)
+[[template]]
+id = "ubuntu-26.04"
+catalogue = "ubuntu 26.04"
+build = "packer/build.sh ubuntu"
+vars = ["apt_mirror={mirror.ubuntu}", "media_url={media}"]
+isos = ["ubuntu-26.04"]
+mirrors = ["ubuntu:dists/resolute/Release"]
+extras = true
+
+[[template]]
+id = "ubuntu-24.04"
+catalogue = "ubuntu 24.04"
+build = "packer/build.sh ubuntu"
+vars = ["version=24.04", "iso=ubuntu-24.04.5-live-server-amd64.iso", "apt_mirror={mirror.ubuntu}", "media_url={media}"]
+isos = ["ubuntu-24.04"]
+mirrors = ["ubuntu:dists/noble/Release"]
+extras = true
+
+[[template]]
+id = "ubuntu-22.04"
+catalogue = "ubuntu 22.04"
+build = "packer/build.sh ubuntu"
+vars = ["version=22.04", "iso=ubuntu-22.04.5-live-server-amd64.iso", "apt_mirror={mirror.ubuntu}", "media_url={media}"]
+isos = ["ubuntu-22.04"]
+mirrors = ["ubuntu:dists/jammy/Release"]
+extras = true
+
+[[template]]
+id = "ubuntu-20.04"
+catalogue = "ubuntu 20.04"
+build = "packer/build.sh ubuntu"
+vars = ["version=20.04", "iso=ubuntu-20.04.6-live-server-amd64.iso", "apt_mirror={mirror.ubuntu}", "media_url={media}"]
+isos = ["ubuntu-20.04"]
+mirrors = ["ubuntu:dists/focal/Release"]
+extras = true
+
+[[template]]
+id = "ubuntu-18.04"
+catalogue = "ubuntu 18.04"
+build = "packer/build.sh ubuntu-di"
+vars = ["ubuntu_mirror_host={mirror.ubuntu.host}", "ubuntu_mirror_dir={mirror.ubuntu.path}", "media_url={media}", "http_ip={http_ip}"]
+isos = ["ubuntu-18.04"]
+mirrors = ["ubuntu:dists/bionic/Release"]
+extras = true
+
+[[template]]
+id = "ubuntu-16.04"
+catalogue = "ubuntu 16.04"
+build = "packer/build.sh ubuntu-di"
+vars = ["version=16.04", "iso=ubuntu-16.04.7-server-amd64.iso", "legacy=true", "ubuntu_mirror_host={mirror.ubuntu.host}", "ubuntu_mirror_dir={mirror.ubuntu.path}", "http_ip={http_ip}"]
+isos = ["ubuntu-16.04"]
+mirrors = ["ubuntu:dists/xenial/Release"]
+
+# Debian (debian-installer; 11 and older are legacy, 10 and older from Debian's archive)
+[[template]]
+id = "debian-13"
+catalogue = "debian 13"
+build = "packer/build.sh debian"
+vars = ["debian_mirror_host={mirror.debian.host}", "debian_mirror_dir={mirror.debian.path}", "media_url={media}", "http_ip={http_ip}"]
+isos = ["debian-13"]
+mirrors = ["debian:dists/trixie/Release"]
+extras = true
+
+[[template]]
+id = "debian-12"
+catalogue = "debian 12"
+build = "packer/build.sh debian"
+vars = ["version=12", "iso=debian-12.15.0-amd64-netinst.iso", "debian_mirror_host={mirror.debian.host}", "debian_mirror_dir={mirror.debian.path}", "media_url={media}", "http_ip={http_ip}"]
+isos = ["debian-12"]
+mirrors = ["debian:dists/bookworm/Release"]
+extras = true
+
+[[template]]
+id = "debian-11"
+catalogue = "debian 11"
+build = "packer/build.sh debian"
+vars = ["version=11", "iso=debian-11.11.0-amd64-netinst.iso", "debian_mirror_host={mirror.debian.host}", "debian_mirror_dir={mirror.debian.path}", "http_ip={http_ip}"]
+isos = ["debian-11"]
+mirrors = ["debian:dists/bullseye/Release"]
+
+[[template]]
+id = "debian-10"
+catalogue = "debian 10"
+build = "packer/build.sh debian"
+vars = ["version=10", "iso=debian-10.13.0-amd64-netinst.iso", "debian_mirror_host={mirror.debian_archive.host}", "debian_mirror_dir={mirror.debian_archive.path}", "http_ip={http_ip}"]
+isos = ["debian-10"]
+mirrors = ["debian_archive:dists/buster/Release"]
+
+[[template]]
+id = "debian-9"
+catalogue = "debian 9"
+build = "packer/build.sh debian"
+vars = ["version=9", "iso=debian-9.13.0-amd64-netinst.iso", "debian_mirror_host={mirror.debian_archive.host}", "debian_mirror_dir={mirror.debian_archive.path}", "http_ip={http_ip}"]
+isos = ["debian-9"]
+mirrors = ["debian_archive:dists/stretch/Release"]
+
+[[template]]
+id = "debian-8"
+catalogue = "debian 8"
+build = "packer/build.sh debian"
+vars = ["version=8", "iso=debian-8.11.1-amd64-netinst.iso", "debian_mirror_host={mirror.debian_archive.host}", "debian_mirror_dir={mirror.debian_archive.path}", "http_ip={http_ip}"]
+isos = ["debian-8"]
+mirrors = ["debian_archive:dists/jessie/Release"]
+
+# The RHEL family (kickstart; packages from the mirror's BaseOS and AppStream)
+[[template]]
+id = "rocky-10"
+catalogue = "rocky 10"
+build = "packer/build.sh rhel"
+vars = ["distro=rocky", "version=10", "iso=Rocky-10.2-x86_64-boot.iso", "repo_mirror={mirror.rocky}/10", "media_url={media}"]
+isos = ["rocky-10"]
+mirrors = ["rocky:10/BaseOS/x86_64/os/repodata/repomd.xml"]
+extras = true
+
+[[template]]
+id = "rocky-9"
+catalogue = "rocky 9"
+build = "packer/build.sh rhel"
+vars = ["distro=rocky", "repo_mirror={mirror.rocky}/9", "media_url={media}"]
+isos = ["rocky-9"]
+mirrors = ["rocky:9/BaseOS/x86_64/os/repodata/repomd.xml"]
+extras = true
+
+[[template]]
+id = "rocky-8"
+catalogue = "rocky 8"
+build = "packer/build.sh rhel"
+vars = ["distro=rocky", "version=8", "iso=Rocky-8.10-x86_64-boot.iso", "repo_mirror={mirror.rocky}/8", "media_url={media}"]
+isos = ["rocky-8"]
+mirrors = ["rocky:8/BaseOS/x86_64/os/repodata/repomd.xml"]
+extras = true
+
+[[template]]
+id = "alma-10"
+catalogue = "alma 10"
+build = "packer/build.sh rhel"
+vars = ["distro=alma", "version=10", "iso=AlmaLinux-10.2-x86_64-boot.iso", "repo_mirror={mirror.alma}/10", "media_url={media}"]
+isos = ["alma-10"]
+mirrors = ["alma:10/BaseOS/x86_64/os/repodata/repomd.xml"]
+extras = true
+
+[[template]]
+id = "alma-9"
+catalogue = "alma 9"
+build = "packer/build.sh rhel"
+vars = ["distro=alma", "repo_mirror={mirror.alma}/9", "media_url={media}"]
+isos = ["alma-9"]
+mirrors = ["alma:9/BaseOS/x86_64/os/repodata/repomd.xml"]
+extras = true
+
+[[template]]
+id = "alma-8"
+catalogue = "alma 8"
+build = "packer/build.sh rhel"
+vars = ["distro=alma", "version=8", "iso=AlmaLinux-8.10-x86_64-boot.iso", "repo_mirror={mirror.alma}/8", "media_url={media}"]
+isos = ["alma-8"]
+mirrors = ["alma:8/BaseOS/x86_64/os/repodata/repomd.xml"]
+extras = true
+
+[[template]]
+id = "centos-stream-9"
+catalogue = "centos Stream 9"
+build = "packer/build.sh rhel"
+vars = ["distro=centos-stream", "repo_mirror={mirror.centos_stream}/9-stream", "media_url={media}"]
+isos = ["centos-stream-9"]
+mirrors = ["centos_stream:9-stream/BaseOS/x86_64/os/repodata/repomd.xml"]
+extras = true
+
+# CentOS 8, 7, 6 (legacy, from the vault)
+[[template]]
+id = "centos-8"
+catalogue = "centos 8"
+build = "packer/build.sh centos-legacy"
+vars = ["version=8", "iso=CentOS-8.5.2111-x86_64-boot.iso", "vault={mirror.centos_vault}/8.5.2111", "http_ip={http_ip}"]
+isos = ["centos-8"]
+mirrors = ["centos_vault:8.5.2111/BaseOS/x86_64/os/repodata/repomd.xml"]
+internet = "prepare-legacy.sh switches the installed system's repositories to vault.centos.org"
+
+[[template]]
+id = "centos-7"
+catalogue = "centos 7"
+build = "packer/build.sh centos-legacy"
+vars = ["vault={mirror.centos_vault}/7.9.2009", "http_ip={http_ip}"]
+isos = ["centos-7"]
+mirrors = ["centos_vault:7.9.2009/os/x86_64/repodata/repomd.xml"]
+internet = "prepare-legacy.sh switches the installed system's repositories to vault.centos.org"
+
+[[template]]
+id = "centos-6"
+catalogue = "centos 6"
+build = "packer/build.sh centos-legacy"
+vars = ["version=6", "iso=CentOS-6.10-x86_64-minimal.iso", "vault={mirror.centos_vault}/6.10", "epel6={mirror.epel_archive}/6/x86_64/", "http_ip={http_ip}"]
+isos = ["centos-6"]
+mirrors = ["centos_vault:6.10/os/x86_64/repodata/repomd.xml", "epel_archive:6/x86_64/repodata/repomd.xml"]
+internet = "prepare-legacy.sh uses vault.centos.org, EPEL's archive and its key from dl.fedoraproject.org"
+
+# Windows (autounattend; the media folder's windows/ part goes on a CD)
+[[template]]
+id = "windows-server-2025"
+catalogue = "windows-server 2025"
+build = "packer/build.sh windows-server"
+vars = ["media_dir={media_dir}"]
+isos = ["windows-server-2025"]
+extras = "windows"
+eval_days = 180
+
+[[template]]
+id = "windows-server-2025-core"
+catalogue = "windows-server 2025 Core"
+build = "packer/build.sh windows-server"
+vars = ["edition=core", "media_dir={media_dir}"]
+isos = ["windows-server-2025"]
+extras = "windows"
+eval_days = 180
+
+[[template]]
+id = "windows-server-2022"
+catalogue = "windows-server 2022"
+build = "packer/build.sh windows-server"
+vars = ["version=2022", "media_dir={media_dir}"]
+isos = ["windows-server-2022"]
+extras = "windows"
+eval_days = 180
+
+[[template]]
+id = "windows-server-2019"
+catalogue = "windows-server 2019"
+build = "packer/build.sh windows-server"
+vars = ["version=2019", "media_dir={media_dir}"]
+isos = ["windows-server-2019"]
+extras = "windows"
+eval_days = 180
+
+[[template]]
+id = "windows-11"
+catalogue = "windows 11"
+build = "packer/build.sh windows"
+vars = ["media_dir={media_dir}"]
+isos = ["windows-11-26h2"]
+extras = "windows"
+eval_days = 90
+
+[[template]]
+id = "exchange"
+catalogue = "exchange SE"
+build = "packer/build.sh windows-server"
+vars = ["exchange=true", "office=false", "sql_server=false", "media_dir={media_dir}"]
+isos = ["windows-server-2025", "exchange-se"]
+media = ["windows/exchange/vcredist2012_x64.exe", "windows/exchange/vcredist2013_x64.exe", "windows/exchange/rewrite_amd64_en-US.msi"]
+eval_days = 180
+
+# Firewalls and routers
+[[template]]
+id = "opnsense"
+catalogue = "opnsense 26.7"
+build = "packer/build.sh opnsense"
+isos = ["opnsense-26.7"]
+internet = "prepare-opnsense.sh installs VMware Tools (os-vmware) from OPNsense's package repository"
+
+[[template]]
+id = "pfsense"
+catalogue = "pfsense 2.7.2"
+build = "packer/build.sh pfsense"
+isos = ["pfsense-2.7.2"]
+internet = "prepare-pfsense.sh installs VMware Tools from pfSense's package repository"
+
+[[template]]
+id = "vyos"
+catalogue = "vyos 1.5 rolling"
+build = "packer/build.sh vyos"
+isos = ["file:vyos-1.5-rolling-202610180239-vmware-amd64.iso"]
+
+[[template]]
+id = "mikrotik"
+catalogue = "mikrotik 7"
+build = "packer/mikrotik/import-chr.sh"
+env = ["MEDIA={media_dir}/images"]
+media = ["images/chr-7.24.5.vmdk.zip"]
+
+# Hypervisors (nested)
+[[template]]
+id = "proxmox-9"
+catalogue = "proxmox 9"
+build = "packer/build.sh proxmox"
+isos = ["file:proxmox-ve_9.2-1-auto.iso"]
+internet = "its first boot and prepare-proxmox.sh install packages from Debian's and Proxmox's repositories"
+
+[[template]]
+id = "proxmox-8"
+catalogue = "proxmox 8"
+build = "packer/build.sh proxmox"
+vars = ["version=8.4", "iso=proxmox-ve_8.4-1-auto.iso"]
+isos = ["file:proxmox-ve_8.4-1-auto.iso"]
+internet = "its first boot and prepare-proxmox.sh install packages from Debian's and Proxmox's repositories"
+
+[[template]]
+id = "proxmox-7"
+catalogue = "proxmox 7"
+build = "packer/build.sh proxmox7"
+vars = ["debian_mirror_host={mirror.debian.host}", "debian_mirror_dir={mirror.debian.path}", "http_ip={http_ip}"]
+isos = ["debian-11"]
+mirrors = ["debian:dists/bullseye/Release"]
+internet = "install-pve7.sh adds Proxmox's repository and key from download.proxmox.com"
+
+[[template]]
+id = "xcp-ng"
+catalogue = "xcp-ng 8.3"
+build = "packer/build.sh xcp-ng"
+vars = ["http_ip={http_ip}"]
+isos = ["xcp-ng-8.3"]
+internet = "its post-install script installs VMware Tools from vault.centos.org"
+
+# Storage
+[[template]]
+id = "truenas-scale"
+catalogue = "truenas-scale 25.10"
+build = "packer/build.sh truenas-scale"
+isos = ["truenas-scale-25.10"]
+
+[[template]]
+id = "truenas-core"
+catalogue = "truenas-core 13.3"
+build = "packer/build.sh truenas-core"
+isos = ["truenas-core-13.3"]
+
+# Security
+[[template]]
+id = "kali"
+catalogue = "kali 2026.2"
+build = "packer/build.sh kali"
+vars = ["kali_mirror_host={mirror.kali.host}", "kali_mirror_dir={mirror.kali.path}", "media_url={media}", "http_ip={http_ip}"]
+isos = ["kali-2026.2"]
+mirrors = ["kali:dists/kali-rolling/Release"]
+extras = true
+
+[[template]]
+id = "parrot-base"
+build = "packer/parrot/import-base.sh {media_dir}/images/Parrot-security-7.4_amd64.ova"
+media = ["images/Parrot-security-7.4_amd64.ova"]
+base = true
+
+[[template]]
+id = "parrot"
+catalogue = "parrot 7"
+build = "packer/build.sh parrot"
+vars = ["media_url={media}"]
+needs = ["parrot-base"]
+mirrors = ["parrot:dists/echo/Release"]
+extras = true
+internet = "its packages come from the mirror set in the base VM, which the install doesn't change yet"
+
+# Practice targets (Rapid7's images, imported whole)
+[[template]]
+id = "metasploitable-2"
+catalogue = "metasploitable 2"
+build = "packer/metasploitable/import-ms2.sh"
+env = ["MEDIA={media_dir}/images"]
+media = ["images/metasploitable-linux-2.0.0.zip", "images/linuxPreGlibc25.iso"]
+
+[[template]]
+id = "metasploitable-3"
+catalogue = "metasploitable 3"
+build = "packer/metasploitable/import-ms3.sh"
+env = ["MEDIA={media_dir}/images"]
+media = ["images/ub1404.box"]
+
+# What extras need from the media folder offline (the Linux ones; the Windows ones are Office's files
+# and SQL Server's ISO). An extra not listed needs only the template's package mirror.
+[extras]
+wordpress = ["linux/wordpress/latest.tar.gz", "linux/wp-cli/wp-cli.phar"]
+nextcloud = ["linux/nextcloud/latest.tar.bz2"]
+postgresql = ["linux/chinook"]
+mariadb = ["linux/chinook"]
+mysql = ["linux/chinook"]
+sqlite = ["linux/chinook"]
+juice-shop = ["linux/docker/juice-shop.tar"]
+dvwa = ["linux/docker/dvwa.tar"]
+uptime-kuma = ["linux/docker/uptime-kuma.tar"]
+grafana = ["linux/docker/grafana.tar"]
+vaultwarden = ["linux/docker/vaultwarden.tar"]
+gitea = ["linux/docker/gitea.tar"]
+outlook = ["windows/office/setup.exe"]
+mssql = ["iso:sql-server-2025", "windows/chinook/Chinook_SqlServer.sql"]
+
+# Extras that can't be built without internet at all.
+[extras_online_only]
+nextcloud-snap = "it installs from the Snap Store"

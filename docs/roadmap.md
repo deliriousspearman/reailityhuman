@@ -154,6 +154,23 @@ Alerts on the panel's Admin page, and refusal to deploy, when one of these runs 
 Those three caused most outages so far. The datastore is already checked before deploys. The other
 two need a way to read them: an agent or a check on the PC, and the DHCP server's lease count.
 
+### Queued (2026-10-20)
+
+- **Metasploitable 3 (Windows):** Rapid7's image as it is; its expired evaluation shuts it down
+  hourly, which the catalogue says ("Shuts down hourly").
+- **MinIO:** an extra, built from source at RELEASE.2025-04-22 (the last free release with the full
+  admin console; MinIO's binaries and images are no longer published, and its repository is archived),
+  with `mc`. Alternatives if needed: RustFS, Garage, SeaweedFS.
+- **iRedMail 1.8.8:** an extra on Ubuntu 24.04 and 22.04 and Debian 12 (a full mail stack: Postfix,
+  Dovecot, Roundcube, SOGo, iRedAdmin, spam and virus filtering). Clashes with the Mail server extra and
+  the web extras. 4 GB.
+- **Zimbra 8.8.15 GA (open source):** its own template on Ubuntu 20.04, unpatched on purpose (known
+  vulnerabilities, for practice); configured at first boot (domain, admin password). 8 GB.
+- **Python versions:** an extra with a version choice (uv's standalone builds, baked in for offline),
+  on Ubuntu and Kali first; the system's python3 untouched. Waiting on which versions, and one or several.
+- **Mail, suggested:** Mailpit (a mail catcher for apps) and GoPhish (phishing exercises), both small
+  Docker extras; Mailcow for a realistic organisation mail server.
+
 ## Later
 
 Added by Jake on 2026-10-20:

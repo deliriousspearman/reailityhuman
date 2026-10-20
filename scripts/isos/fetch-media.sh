@@ -2,23 +2,30 @@
 # Gathers what template builds otherwise download, for building on a network without internet
 # (docs/build-templates.md, "Offline"). Run it on any Linux machine with internet and curl:
 #
-#   scripts/isos/fetch-media.sh <folder>
+#   scripts/isos/fetch-media.sh <folder> [--images]
 #
 # It fills <folder> with, each checked against its published or pinned checksum:
 #   linux/     WordPress, WP-CLI, Nextcloud, Chinook and the container apps' Docker images (if this
 #              machine has Docker), for prepare.sh. Serve this folder's parent on a LAN web server
 #              and pass the address to the Linux builds: -var media_url=http://…
-#   windows/   Cloudbase-Init and Chinook's SQL Server script. Pass the folder to the Windows build:
+#   windows/   Cloudbase-Init, Chinook's SQL Server script and Exchange's prerequisites (Visual C++
+#              2012 and 2013, URL Rewrite). Pass the folder to the Windows build:
 #              -var media_dir=<folder>. Office's files go in windows/office (see its README.txt).
+#   images/    with --images: what the templates imported whole start from (about 20 GB): MikroTik
+#              CHR, Metasploitable 2 and 3 (both), Parrot's OVA. The import scripts read them with
+#              MEDIA=<folder>/images.
 #   packer/    Packer itself and its vSphere plugin, to install on the build machine.
 #   SHA256SUMS of everything, to check the copy after carrying it across: sha256sum -c SHA256SUMS
 # Re-running it fetches only what's missing. ISOs are separate: scripts/isos/fetch.sh <name> --no-upload.
 set -euo pipefail
 
-out=${1:?"usage: fetch-media.sh <folder>"}
+out=${1:?"usage: fetch-media.sh <folder> [--images]"}
+images=0
+[[ ${2:-} == --images ]] && images=1
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 prepare=$here/../template/prepare.sh
-mkdir -p "$out"/{linux/{wordpress,wp-cli,nextcloud,chinook,docker},windows/{cloudbase-init,chinook,office},packer}
+packer_dir=$here/../../packer
+mkdir -p "$out"/{linux/{wordpress,wp-cli,nextcloud,chinook,docker},windows/{cloudbase-init,chinook,office,exchange},packer}
 out=$(cd "$out" && pwd)
 
 # What prepare.sh and the Windows build use: keep in step with them.
@@ -77,6 +84,13 @@ get "$CLOUDBASE_URL" "$out/windows/cloudbase-init/CloudbaseInitSetup_x64.msi"
 check "$out/windows/cloudbase-init/CloudbaseInitSetup_x64.msi" "$CLOUDBASE_SHA256" sha256
 get "$CHINOOK_URL/Chinook_SqlServer.sql" "$out/windows/chinook/Chinook_SqlServer.sql"
 check "$out/windows/chinook/Chinook_SqlServer.sql" "$CHINOOK_SQLSERVER_SHA256" sha256
+step "Windows: Exchange's prerequisites, as prepare.ps1 pins them"
+grep -oE "'[A-Za-z0-9_.-]+' += @\('https://[^']+', '[0-9A-F]{64}'\)" "$here/../template/prepare.ps1" |
+	sed -E "s/'([^']+)' += @\('([^']+)', '([0-9A-F]{64})'\)/\1 \2 \3/" | while read -r file url sum; do
+		get "$url" "$out/windows/exchange/$file"
+		check "$out/windows/exchange/$file" "${sum,,}" sha256
+	done
+
 cat >"$out/windows/office/README.txt" <<'EOF'
 Office's files, for the Outlook extra (Windows Server with Desktop Experience). They need the Office
 Deployment Tool, which only runs on Windows: follow docs/setup-vsphere.md, "Office's files, for
@@ -94,6 +108,30 @@ get "$base/${plugin}_x5.0_linux_amd64.zip" "$out/packer/${plugin}_x5.0_linux_amd
 get "$base/${plugin}_SHA256SUMS" "$out/packer/${plugin}_SHA256SUMS"
 (cd "$out/packer" && grep -h linux_amd64.zip ./*SHA256SUMS | sha256sum -c --quiet)
 
+if ((images)); then
+	# Each as its import script names and pins it (packer/mikrotik, packer/metasploitable, packer/parrot).
+	pin() { sed -n "s/^$2=\${$2:-\(.*\)}$/\1/p; s/^$2=\([^$]*\)$/\1/p" "$1" | head -1; }
+	mkdir -p "$out/images"
+	step "Images: MikroTik CHR"
+	chr=$(pin "$packer_dir/mikrotik/import-chr.sh" VERSION)
+	get "https://download.mikrotik.com/routeros/$chr/chr-$chr.vmdk.zip" "$out/images/chr-$chr.vmdk.zip"
+	get "https://download.mikrotik.com/routeros/$chr/chr-$chr.vmdk.zip.sha256" "$out/images/chr-$chr.vmdk.zip.sha256"
+	check "$out/images/chr-$chr.vmdk.zip" "$(grep -oE '[0-9a-f]{64}' "$out/images/chr-$chr.vmdk.zip.sha256" | head -1)" sha256
+	step "Images: Metasploitable 2, and VMware's frozen Tools for it"
+	ms2=$packer_dir/metasploitable/import-ms2.sh
+	get "$(pin "$ms2" IMAGE_URL)" "$out/images/metasploitable-linux-2.0.0.zip"
+	check "$out/images/metasploitable-linux-2.0.0.zip" "$(pin "$ms2" IMAGE_SHA256)" sha256
+	get "$(pin "$ms2" TOOLS_URL)" "$out/images/linuxPreGlibc25.iso"
+	step "Images: Metasploitable 3 (Ubuntu 14.04 and Windows Server 2008 R2)"
+	for v in ms3:ub1404 ms3-win:win2k8; do
+		script=$packer_dir/metasploitable/import-${v%%:*}.sh
+		get "$(pin "$script" BOX_URL)" "$out/images/${v#*:}.box"
+		check "$out/images/${v#*:}.box" "$(pin "$script" BOX_SHA256)" sha256
+	done
+	step "Images: Parrot Security's OVA"
+	echo "  Parrot's OVA is a manual download (its signed hashes need checking): put Parrot-security-<version>_amd64.ova in $out/images (packer/parrot/import-base.sh)."
+fi
+
 step "SHA256SUMS of everything"
-(cd "$out" && find . -type f ! -name SHA256SUMS ! -name '*.part' -printf '%P\n' | sort | xargs -d '\n' sha256sum >SHA256SUMS)
+(cd "$out" && find . -type f ! -name SHA256SUMS ! -name '*.part' -printf '%P\n' | sort | xargs -d '\n' sha256sum >"$out.sums" && mv "$out.sums" SHA256SUMS)
 echo "Done: $out ($(du -sh "$out" | cut -f1)). Office's files: $out/windows/office/README.txt"

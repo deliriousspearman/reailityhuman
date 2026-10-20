@@ -1,0 +1,49 @@
+# The lab's offline install (deploy/install.sh, docs/offline-install.md). Copy this to
+# /srv/lab-deploy/lab-install.toml on the panel's server and fill it in; anything left out is asked
+# for when the install runs (and saved here). Passwords aren't in this file: put them in the files
+# under /srv/lab-deploy/secrets/ (chmod 600), the user on the first line and the password on the second.
+
+[panel]
+address = "labs.lab.example"        # what browsers use to reach the panel
+
+[vcenter]
+host = "vcenter.lab.example"
+insecure = true                     # accept vCenter's own self-signed certificate
+admin_credentials = "/srv/lab-deploy/secrets/vcenter-admin"   # an administrator: builds and setup
+panel_credentials = "/srv/lab-deploy/secrets/vcenter-panel"   # the panel's account (svc-labdeploy@vsphere.local)
+datacenter = "Datacenter"
+cluster = "Cluster"                 # or a standalone host's name
+datastore = "datastore1"
+network = "VM Network"              # the port group machines join; it needs DHCP
+iso_folder = "ISO"                  # the datastore folder the ISOs are in
+template_folder = "Labs/Templates"
+
+# The network's package mirrors, by the address its root has (the folder holding dists/ for apt; for
+# the RHEL family, the folder holding the release folders, e.g. 9/BaseOS/). Leave out any you don't
+# have: the templates that need it are listed as not ready. internet = true lets builds download
+# what no mirror is given for (a lab with internet).
+[mirrors]
+ubuntu = "http://mirror.lab.example/ubuntu"                 # as archive.ubuntu.com/ubuntu
+debian = "http://mirror.lab.example/debian"                 # as deb.debian.org/debian (13, 12, 11)
+debian_archive = "http://mirror.lab.example/debian-archive" # as archive.debian.org/debian (10, 9, 8)
+kali = "http://mirror.lab.example/kali"                     # as http.kali.org/kali
+parrot = "http://mirror.lab.example/parrot"                 # as deb.parrot.sh/parrot
+rocky = "http://mirror.lab.example/rocky"                   # as dl.rockylinux.org/pub/rocky
+alma = "http://mirror.lab.example/almalinux"                # as repo.almalinux.org/almalinux
+centos_stream = "http://mirror.lab.example/centos-stream"   # as mirror.stream.centos.org
+centos_vault = "http://mirror.lab.example/centos-vault"     # as vault.centos.org (CentOS 6, 7, 8)
+epel_archive = "http://mirror.lab.example/epel-archive"     # as archives.fedoraproject.org/pub/archive/epel (CentOS 6)
+proxmox = "http://mirror.lab.example/proxmox"               # as download.proxmox.com/debian
+# internet = false
+
+[templates]
+build = ["all"]                     # or ids from deploy/install/manifest.toml, e.g. ["ubuntu-26.04", "windows-server-2025"]
+on_missing = "ask"                  # templates not ready: ask, skip (build the rest) or cancel
+rebuild = false                     # true: build again templates that exist already
+test = "lifecycle"                  # none, lifecycle (each template's deploy to destroy), or full (every extra too; hours)
+remove_isos = "ask"                 # after building: ask, none, all, or keep-windows (Windows' are needed to rebuild
+                                    # when their evaluations expire)
+
+[media]
+port = 8690                         # the installer serves the bundle's media folder to the builds on this port
+# http_ip = "192.0.2.10"            # this server's address as the VMs reach it (default: found from vCenter's)
