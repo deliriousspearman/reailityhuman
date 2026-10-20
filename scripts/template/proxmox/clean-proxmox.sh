@@ -23,7 +23,7 @@ rm -f /var/lib/dbus/machine-id /var/lib/dhcp/* /var/lib/lab-deploy/*
 
 echo "==> Caches, logs, histories"
 apt-get -q clean
-journalctl --rotate >/dev/null 2>&1 && journalctl --vacuum-time=1s >/dev/null 2>&1 || true
+{ journalctl --rotate && journalctl --vacuum-time=1s; } >/dev/null 2>&1 || true
 find /var/log -type f \( -name '*.log' -o -name '*.gz' -o -name '*.[0-9]' \) -exec truncate -s 0 {} + 2>/dev/null || true
 rm -rf /var/log/lab-deploy/* /root/.bash_history /tmp/proxmox
 echo "cleaned=$(date -u +%Y-%m-%dT%H:%MZ)" >>/etc/lab-template
