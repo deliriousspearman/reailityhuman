@@ -91,12 +91,16 @@ else
 		} >/etc/apt/apt.conf.d/99lab-archive
 		sed -i '/^deb-src /d' /etc/apt/sources.list
 	fi
-	for try in 1 2 3; do
-		apt-get -q update && break
-		((try < 3)) || exit 1
-		sleep 30
-	done
-	apt-get -yq install open-vm-tools openssh-server sudo
+	# Usually there already, from the install: then the (slow, for archived releases) package lists
+	# aren't needed at all.
+	if [[ $OS == ubuntu ]] || ! dpkg -s open-vm-tools openssh-server sudo >/dev/null 2>&1; then
+		for try in 1 2 3; do
+			apt-get -q update && break
+			((try < 3)) || exit 1
+			sleep 30
+		done
+		apt-get -yq install open-vm-tools openssh-server sudo
+	fi
 	# growpart, for an LVM root (Ubuntu's install; Debian's preseed makes plain partitions).
 	if [[ $OS == ubuntu ]]; then apt-get -yq install cloud-guest-utils; fi
 	apt-get -yq purge cloud-init 2>/dev/null || true

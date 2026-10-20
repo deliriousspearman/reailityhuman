@@ -18,6 +18,8 @@ rm -f /root/.ssh/authorized_keys
 
 echo "==> Identity"
 rm -f /etc/ssh/ssh_host_* /var/lib/dhclient/* /var/lib/lab-deploy/*
+# XAPI's DHCP leases: a clone would otherwise start out claiming the template's address.
+rm -f /var/lib/xcp/dhclient-*.leases
 # XCP-ng names adapters by their MAC addresses: forget the template's, so a clone's is eth0 again.
 rm -f /etc/sysconfig/network-scripts/interface-rename-data/*
 

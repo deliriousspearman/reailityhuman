@@ -337,6 +337,20 @@
   adminGroup: wheel
   access: [web, ssh, console]
 
+# Proxmox VE 8: as 9, a release back (packer/proxmox -var version=8.4; Debian 12 underneath).
+- template: proxmox
+  version: "8"
+  # Built by Packer (packer/build.sh proxmox -var version=8.4 -var iso=proxmox-ve_8.4-1-auto.iso) on 2026-10-20.
+  vsphere: Labs/Templates/tpl-proxmox-8.4-20261020
+  cpu: 4
+  memoryGB: 6
+  diskGB: 64
+  username: root
+  family: legacy
+  adminGroup: root
+  access: [web, ssh, console]
+  webUrl: "https://{ip}:8006/"
+
 # Kali Linux and Parrot Security: attack boxes, reached over Remote Desktop to their own desktop
 # (packer/kali, or by hand: docs/setup-vsphere.md, "Kali Linux and Parrot Security templates"). Not
 # the desktop extra: they have their own; nor MySQL: Debian has only MariaDB.

@@ -2,9 +2,13 @@
 # The lab panel's first boot for XCP-ng templates (installed by prepare-xcp-ng.sh, run at each boot
 # once XAPI is up). XCP-ng has no cloud-init for itself, so like ../legacy/lab-firstboot this reads the
 # guestinfo.lab.* keys the panel sets (backend/app/cloudinit.py: legacy_guestinfo) through VMware
-# Tools. On a new machine:
-#   1. if the management network still belongs to the template's adapter (XAPI keeps it by MAC
-#      address), resets networking onto this machine's eth0, by DHCP, and restarts;
+# Tools. At every boot, once XAPI answers:
+#   1. makes sure the management network has an address: early in boot the bridge comes up with the
+#      template's MAC address (from XAPI's cache), which ESXi doesn't let through, so its DHCP gets
+#      nothing; XAPI then moves the bridge onto this machine's adapter, and switching the management
+#      interface to a placeholder static address and back to DHCP starts its client again on the
+#      right one (asking for DHCP when it's already DHCP does nothing).
+# On a new machine, then:
 #   2. sets the host's name, root's password (the machine's, as a SHA-512 hash) and SSH key, and makes
 #      new SSH host keys;
 #   3. writes /var/lib/lab-deploy/extras.status, which the panel waits for as the sign it's ready.
@@ -20,6 +24,32 @@ exec >>"$LOG_DIR/firstboot.log" 2>&1
 echo "== $(date -u '+%Y-%m-%d %H:%M:%S') lab-firstboot"
 
 rpc() { vmware-rpctool "info-get guestinfo.lab.$1" 2>/dev/null; }
+PATH=$PATH:/opt/xensource/bin
+
+# XAPI takes a while after its service starts.
+for _ in $(seq 60); do
+	xe host-list --minimal >/dev/null 2>&1 && break
+	sleep 5
+done
+
+# 1. The management network's address.
+bridge_ip() { ip -4 -o addr show dev xenbr0 2>/dev/null | awk '{ print $4; exit }'; }
+for _ in $(seq 12); do
+	[ -n "$(bridge_ip)" ] && break
+	sleep 5
+done
+if [ -z "$(bridge_ip)" ]; then
+	pif=$(xe pif-list management=true --minimal)
+	echo "No address on the management network: DHCP again (PIF $pif)."
+	xe pif-reconfigure-ip uuid="$pif" mode=static IP=192.0.2.250 netmask=255.255.255.0
+	xe pif-reconfigure-ip uuid="$pif" mode=dhcp
+	for _ in $(seq 24); do
+		[ -n "$(bridge_ip)" ] && break
+		sleep 5
+	done
+fi
+echo "Management network: $(bridge_ip)"
+
 instance=$(rpc instance)
 if [ -z "$instance" ]; then
 	echo "No panel data (guestinfo.lab.instance): nothing to do."
@@ -27,18 +57,6 @@ if [ -z "$instance" ]; then
 fi
 if [ "$(cat "$DIR/instance" 2>/dev/null)" = "$instance" ]; then
 	echo "Already set up for $instance."
-	exit 0
-fi
-
-# 1. The management network, on this machine's adapter.
-mac=$(cat /sys/class/net/eth0/address 2>/dev/null)
-pif=$(xe pif-list management=true --minimal 2>/dev/null)
-pif_mac=$([ -n "$pif" ] && xe pif-param-get uuid="$pif" param-name=MAC 2>/dev/null)
-if [ "$pif_mac" != "$mac" ] && [ "$(cat "$DIR/network-reset" 2>/dev/null)" != "$instance" ]; then
-	echo "Management network on $pif_mac, but eth0 is $mac: resetting it, then restarting."
-	echo "$instance" >"$DIR/network-reset"
-	echo yes | xe-reset-networking --device=eth0 --mode=dhcp
-	reboot
 	exit 0
 fi
 
