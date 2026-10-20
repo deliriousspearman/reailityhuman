@@ -27,6 +27,12 @@ echo "==> Proxmox VE $version"
 
 echo "==> Packages"
 export DEBIAN_FRONTEND=noninteractive
+# The enterprise repositories need a subscription (401 without): off, in either format. (The 8 and 9
+# ISOs' first boot did it already; Proxmox VE 7, installed on Debian, brings its own.)
+for f in /etc/apt/sources.list.d/pve-enterprise.list /etc/apt/sources.list.d/pve-enterprise.sources \
+	/etc/apt/sources.list.d/ceph.list /etc/apt/sources.list.d/ceph.sources; do
+	if [[ -f $f ]]; then mv "$f" "$f.disabled"; fi
+done
 apt-get -q update
 apt-get -yq -o Dpkg::Options::=--force-confold full-upgrade
 # isc-dhcp-client: ifupdown2's DHCP for the bridge.
