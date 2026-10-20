@@ -288,6 +288,23 @@
   access: [web, ssh, console]
   webUrl: "https://{ip}:8006/"
 
+# XCP-ng: the Xen hypervisor, nested (packer/xcp-ng). VMware Tools come from CentOS 7 (XCP-ng has
+# none). scripts/template/xcp-ng/lab-firstboot moves the management network onto each clone's adapter
+# (restarting once), then sets the host's name and root's password and key (family legacy). Manage it
+# with Xen Orchestra or xe over SSH, as root.
+- template: xcp-ng
+  version: "8.3"
+  # Built by Packer (packer/build.sh xcp-ng -var http_ip=…) on 2026-10-20.
+  vsphere: Labs/Templates/tpl-xcp-ng-8.3-20261020
+  cpu: 2
+  memoryGB: 4
+  diskGB: 64
+  username: root
+  family: legacy
+  adminGroup: root
+  access: [web, ssh, console]
+  webUrl: "https://{ip}/"
+
 # TrueNAS SCALE: the Linux NAS (packer/truenas-scale). Three 20 GB disks: one boots, two are empty,
 # for a pool. No cloud-init: scripts/template/truenas/lab-firstboot (a middleware init script) sets the
 # hostname, truenas_admin's password in TrueNAS's database, its key and new SSH host keys (family
