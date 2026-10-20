@@ -78,6 +78,11 @@ rm -f /etc/network/interfaces.new
 update-initramfs -u -k all >/dev/null
 echo "  vmbr0: DHCP, on $name (was $port)"
 
+# root signs in with its password over SSH, as Proxmox's own installer sets up (Debian's default,
+# which Proxmox VE 7 on Debian keeps, is keys only).
+sed -i -E 's/^#?PermitRootLogin .*/PermitRootLogin yes/' /etc/ssh/sshd_config
+grep -q '^PermitRootLogin yes' /etc/ssh/sshd_config || echo 'PermitRootLogin yes' >>/etc/ssh/sshd_config
+
 echo "==> lab-firstboot"
 install -m 755 "$here/lab-firstboot" /usr/local/sbin/lab-firstboot
 install -m 644 "$here/lab-firstboot-hosts.service" "$here/lab-firstboot-node.service" /etc/systemd/system/
