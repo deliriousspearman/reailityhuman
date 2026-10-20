@@ -1,0 +1,23 @@
+# Proxmox VE 8's installer answers (proxmox.pkr.hcl with -var version=8.x; 9 renamed the keys, see
+# answer.pkrtpl.toml). On a CD labelled PROXMOX-AIS; the password and key are the build's own, which
+# clean-proxmox.sh removes.
+[global]
+keyboard = "en-us"
+country = "us"
+fqdn = "pve-template.lab.example"
+mailto = "root@localhost"
+timezone = "UTC"
+root_password = "${root_password}"
+root_ssh_keys = ["${ssh_key}"]
+reboot_on_error = false
+
+[network]
+source = "from-dhcp"
+
+[disk-setup]
+filesystem = "ext4"
+disk_list = ["sda"]
+
+[first-boot]
+source = "from-iso"
+ordering = "network-online"

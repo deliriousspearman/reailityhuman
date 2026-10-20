@@ -2,6 +2,8 @@
 #
 #   packer/proxmox/prepare-iso.sh     # once per release: the unattended installer ISO
 #   packer/build.sh proxmox
+#   packer/proxmox/prepare-iso.sh proxmox-ve-8.4
+#   packer/build.sh proxmox -var version=8.4 -var iso=proxmox-ve_8.4-1-auto.iso
 #
 # A hypervisor inside a VM: nested virtualisation is on, so machines in it can run with KVM. The
 # installer runs on its own (Proxmox's automated installation), reading answer.pkrtpl.toml from a
@@ -71,6 +73,8 @@ variable "build_password" {
 
 locals {
   vm_name = var.vm_name != "" ? var.vm_name : "tpl-proxmox-${var.version}-${formatdate("YYYYMMDD", timestamp())}"
+  # Proxmox VE 8's answer file names its keys differently (root_password, disk_list...).
+  answer = startswith(var.version, "8.") ? "answer8.pkrtpl.toml" : "answer.pkrtpl.toml"
 }
 
 source "vsphere-iso" "proxmox" {
@@ -103,7 +107,7 @@ source "vsphere-iso" "proxmox" {
   iso_paths = ["[${var.datastore}] ${var.iso_folder}/${var.iso}"]
   cd_label  = "PROXMOX-AIS"
   cd_content = {
-    "answer.toml" = templatefile("${path.root}/answer.pkrtpl.toml", {
+    "answer.toml" = templatefile("${path.root}/${local.answer}", {
       root_password = var.build_password
       ssh_key       = var.ssh_public_key
     })

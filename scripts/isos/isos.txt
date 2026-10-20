@@ -57,6 +57,7 @@ debian-8         https://cdimage.debian.org/cdimage/archive/8.11.1/amd64/iso-cd/
 # pfSense CE: 2.7.2 is the last release with an offline installer (later ones download as they install).
 # Netgate's mirror; published gzip-compressed, which fetch.sh checks then unpacks.
 pfsense-2.7.2    https://atxfiles.netgate.com/mirror/downloads/pfSense-CE-2.7.2-RELEASE-amd64.iso.gz  https://atxfiles.netgate.com/mirror/downloads/pfSense-CE-2.7.2-RELEASE-amd64.iso.gz.sha256
+proxmox-ve-8.4   https://enterprise.proxmox.com/iso/proxmox-ve_8.4-1.iso    https://enterprise.proxmox.com/iso/SHA256SUMS
 proxmox-ve-9.2   https://enterprise.proxmox.com/iso/proxmox-ve_9.2-1.iso    https://enterprise.proxmox.com/iso/SHA256SUMS
 # TrueNAS: each .sha256 next to the ISO holds the hash alone (CORE's names a build path), so pinned here.
 truenas-scale-25.10  https://download.truenas.com/TrueNAS-SCALE-Goldeye/25.10.7/TrueNAS-SCALE-25.10.7.iso  54ce9441ce66966a392e28f63604ca3c2c083d0bec4db7bb5af2f74f7a007c8e

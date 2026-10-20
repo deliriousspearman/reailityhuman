@@ -180,10 +180,9 @@ def _log_tail(vc: VCenter, vm, m: Machine, path: str) -> str | None:
 
 
 def _recheck_ip(vc: VCenter, vm, m: Machine) -> None:
-    """Windows restarts while setting up, and can be slow to report an address first time round:
-    read it again now it's done."""
-    if m.family != "windows":
-        return
+    """Some machines restart while setting up, and may come back on another address: Windows (and
+    it can be slow to report one first time round), XCP-ng (its network moves onto the clone's own
+    adapter). Read it again now it's done."""
     ip = vc.ipv4(vm)
     if ip and ip != load(m.id).ip:
         set_machine(m.id, ip=ip)
