@@ -20,6 +20,11 @@ as building by hand ([setup-vsphere.md](setup-vsphere.md), parts 2, 5 and 6), wh
 | OPNsense 26.7 | `packer/build.sh opnsense` | ~14 min |
 | pfSense CE 2.7.2 | `packer/build.sh pfsense` | ~10 min |
 | Proxmox VE 9 | `packer/proxmox/prepare-iso.sh` once, then `packer/build.sh proxmox` | ~15 min |
+| Proxmox VE 8 | `packer/proxmox/prepare-iso.sh proxmox-ve-8.4` once, then `packer/build.sh proxmox -var version=8.4 -var iso=proxmox-ve_8.4-1-auto.iso` | ~8 min |
+| Proxmox VE 7 | `packer/build.sh proxmox7` | ~30 min |
+| XCP-ng 8.3 | `packer/build.sh xcp-ng -var http_ip=<this machine's address>` | ~8 min |
+| MikroTik CHR 7 | `packer/mikrotik/import-chr.sh` | ~5 min |
+| Exchange Server SE | `packer/build.sh windows-server -var exchange=true -var office=false -var sql_server=false` | ~40 min |
 | TrueNAS SCALE 25.10 | `packer/build.sh truenas-scale` | ~25 min |
 | TrueNAS CORE 13.3 | `packer/build.sh truenas-core` | ~25 min |
 | VyOS 1.5 rolling | `packer/vyos/build-iso.sh` once, then `packer/build.sh vyos` | ~8 min |
@@ -35,6 +40,8 @@ as building by hand ([setup-vsphere.md](setup-vsphere.md), parts 2, 5 and 6), wh
 | Ubuntu 18.04 (legacy) | `packer/build.sh ubuntu-di -var extras=…` | ~13 min |
 | Ubuntu 16.04 (legacy) | `packer/build.sh ubuntu-di -var version=16.04 -var iso=ubuntu-16.04.7-server-amd64.iso -var legacy=true` | ~6 min |
 | CentOS 7 (legacy) | `packer/build.sh centos-legacy` | ~8 min |
+| CentOS 8, 6 (legacy) | `packer/build.sh centos-legacy -var version=8 -var iso=CentOS-8.5.2111-x86_64-boot.iso` (6: `-var version=6 -var iso=CentOS-6.10-x86_64-minimal.iso`) | ~15 min |
+| Debian 11, 10, 9, 8 (legacy) | `packer/build.sh debian -var version=11 -var iso=debian-11.11.0-amd64-netinst.iso` (and alike) | 15 min to over an hour (archive.debian.org is slow) |
 
 **Legacy targets** are old releases for practising on, with no security updates (keep them off
 networks that matter). Ubuntu 18.04 and 20.04 still use cloud-init; give them only the extras that
@@ -96,6 +103,38 @@ hostname, the administrator's password (truenas_admin on SCALE, root on CORE) as
 hash in TrueNAS's own database, its SSH key, and new SSH host keys, which TrueNAS also keeps in its
 database. On SCALE the build runs its scripts as `sudo bash <script>`: `/tmp` is mounted noexec, and
 TrueNAS's sudo (`log_subcmds`) stops a script that's run directly.
+
+**Older Debian and CentOS** (Debian 8 to 11, CentOS 6 and 8) are legacy practice targets like
+CentOS 7: `prepare-legacy.sh`, `lab-firstboot`, no extras. Debian 10 and older install from
+archive.debian.org (8 and 9 without signature checks: their keys have expired), 11 without its
+security repository (its packages are gone from security.debian.org though the index remains). CentOS
+8's packages come from the vault (8.5.2111); CentOS 6's too, with VMware Tools from EPEL's archive,
+its kickstart over Packer's web server (its installer doesn't look for an OEMDRV disk), and the build
+signing in with a password (its OpenSSH predates ed25519 keys). The legacy scripts restore SELinux
+labels on what they install (CentOS 8's systemd won't read a unit copied from /tmp otherwise).
+
+**MikroTik CHR** is imported as a complete image (`import-chr.sh`): every machine signs in as admin /
+mikrotik-lab. RouterOS ties interface names to MAC addresses, so the script adds a startup script that
+renames each clone's adapters back to ether1, ether2 and gives them DHCP. Its licence and shutdown
+prompts take a single key (no Enter).
+
+**XCP-ng** reads an answer file from Packer's web server; its post-install script adds CentOS 7's
+VMware Tools (XCP-ng has none) and lets them start under Xen. Its `lab-firstboot` makes each clone's
+eth0 the management interface again (XAPI drops it when the MAC changes) and restarts its DHCP; the
+clean script deletes XAPI's DHCP leases. Give the build `http_ip`: the answer file names its
+post-install script by URL.
+
+**Proxmox VE 8** uses the same build as 9, with its own answer file (8's keys are snake_case);
+`prepare-iso.sh proxmox-ve-8.4` uses 8's assistant. **Proxmox VE 7** has no automated installer, so
+`packer/proxmox7` installs Debian 11 with the Debian build's preseed and adds Proxmox VE from its
+repository, as Proxmox documents; the same prepare and clean scripts follow.
+
+**Exchange Server SE** has a template of its own: Windows Server 2025 built with `-var exchange=true`
+(the Exchange ISO attached; `prepare.ps1 -Exchange` copies its files in and installs the Windows
+features, Visual C++ 2012 and 2013, URL Rewrite and UCMA). Its Exchange extra joins a domain
+controller's domain (deploy one first: Windows Server with the Domain controller extra) and runs setup
+as that controller's user, who's in Schema Admins and Enterprise Admins. Without a product key it's a
+180-day trial.
 
 **VyOS** builds from our own ISO (part 2), whose cloud-init takes the panel's settings from vCenter
 (the `vyos` family): the user through cloud-config `users` (with none there, VyOS adds `vyos` /
