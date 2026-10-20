@@ -351,6 +351,20 @@
   access: [web, ssh, console]
   webUrl: "https://{ip}:8006/"
 
+# Proxmox VE 7: Debian 11 with Proxmox VE 7.4 added (packer/proxmox7: 7 has no automated installer).
+- template: proxmox
+  version: "7"
+  # Built by Packer (packer/build.sh proxmox7) on 2026-10-20: Proxmox VE 7.4.
+  vsphere: Labs/Templates/tpl-proxmox-7.4-20261020
+  cpu: 4
+  memoryGB: 6
+  diskGB: 64
+  username: root
+  family: legacy
+  adminGroup: root
+  access: [web, ssh, console]
+  webUrl: "https://{ip}:8006/"
+
 # Kali Linux and Parrot Security: attack boxes, reached over Remote Desktop to their own desktop
 # (packer/kali, or by hand: docs/setup-vsphere.md, "Kali Linux and Parrot Security templates"). Not
 # the desktop extra: they have their own; nor MySQL: Debian has only MariaDB.
