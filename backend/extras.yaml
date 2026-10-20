@@ -983,6 +983,10 @@
         return $result
       }
       $logs = 'C:\ProgramData\lab-deploy\logs'
+      # Windows features Exchange's setup checks for that templates built before 2026-10-21 lack
+      # (prepare.ps1 installs them now). From files already on the machine; no restart.
+      $missing = Get-WindowsFeature -Name NET-WCF-HTTP-Activation45, NET-WCF-Pipe-Activation45 | Where-Object { -not $_.Installed }
+      if ($missing) { Install-WindowsFeature -Name $missing.Name | Out-Null }
       if (-not (Get-Service -Name MSExchangeIS -ErrorAction SilentlyContinue)) {
         $setup = "`"$src\Setup.exe`" /IAcceptExchangeServerLicenseTerms_DiagnosticDataOFF /Mode:Install /Roles:Mailbox " +
           "/OrganizationName:`"$organization`" > `"$logs\exchange-setup.log`" 2>&1"
