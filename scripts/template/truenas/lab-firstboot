@@ -1,0 +1,63 @@
+#!/bin/bash
+# The lab panel's first boot for TrueNAS SCALE templates (installed by prepare-truenas.sh, run by the
+# middleware at the end of each boot: an init script, POSTINIT). TrueNAS has no cloud-init, so like
+# ../legacy/lab-firstboot this reads the guestinfo.lab.* keys the panel sets
+# (backend/app/cloudinit.py: legacy_guestinfo) through VMware Tools, and sets through the middleware:
+#   - the hostname;
+#   - the user's password: the machine's, as a SHA-512 hash, kept in TrueNAS's database as it keeps
+#     its own (the web interface, SSH and the console all check it); and its SSH key;
+#   - new SSH host keys (the template's were deleted), also kept in the database;
+# then writes /var/lib/lab-deploy/extras.status, which the panel waits for as the sign the machine is
+# ready. It acts once per machine (guestinfo.lab.instance); a reset reverts the disk, so it runs again.
+# The panel's user is truenas_admin, TrueNAS's administrator.
+set -u
+
+DIR=/var/lib/lab-deploy
+LOG_DIR=/var/log/lab-deploy
+mkdir -p "$DIR" "$LOG_DIR"
+chmod 755 "$DIR" "$LOG_DIR"
+exec >>"$LOG_DIR/firstboot.log" 2>&1
+echo "== $(date -u '+%Y-%m-%d %H:%M:%S') lab-firstboot"
+
+rpc() { vmware-rpctool "info-get guestinfo.lab.$1" 2>/dev/null; }
+instance=$(rpc instance)
+if [ -z "$instance" ]; then
+	echo "No panel data (guestinfo.lab.instance): nothing to do."
+	exit 0
+fi
+if [ "$(cat "$DIR/instance" 2>/dev/null)" = "$instance" ]; then
+	echo "Already set up for $instance."
+	exit 0
+fi
+host=$(rpc hostname)
+user=$(rpc username)
+echo "Setting up $instance: host $host, user $user"
+set -e
+
+midclt call network.configuration.update "$(jq -nc --arg h "$host" '{hostname: $h}')" >/dev/null
+id=$(midclt call user.query "$(jq -nc --arg u "$user" '[["username", "=", $u]]')" '{"get": true}' | jq .id)
+midclt call datastore.update account.bsdusers "$id" "$(jq -nc --arg h "$(rpc password)" '{bsdusr_unixhash: $h}')" >/dev/null
+midclt call etc.generate shadow >/dev/null
+key=$(rpc sshkey | base64 -d 2>/dev/null || true)
+if [ -n "$key" ]; then
+	midclt call user.update "$id" "$(jq -nc --arg k "$key" '{sshpubkey: $k}')" >/dev/null
+fi
+
+# This machine's own SSH host keys, in the database as base64 of each file (as TrueNAS keeps them).
+tmp=$(mktemp -d)
+update='{}'
+for type in rsa ecdsa ed25519; do
+	ssh-keygen -q -t "$type" -N "" -C "" -f "$tmp/$type"
+	update=$(jq -c --arg k "$(base64 -w0 "$tmp/$type")" --arg p "$(base64 -w0 "$tmp/$type.pub")" \
+		". + {\"ssh_host_${type}_key\": \$k, \"ssh_host_${type}_key_pub\": \$p}" <<<"$update")
+done
+rm -rf "$tmp"
+midclt call datastore.update services.ssh 1 "$update" >/dev/null
+midclt call service.restart ssh >/dev/null
+
+echo "$instance" >"$DIR/instance"
+# Empty: no extras on TrueNAS. Written last, in one go, readable by the panel.
+tmp=$(mktemp "$DIR/status.XXXXXX")
+chmod 644 "$tmp"
+mv "$tmp" "$DIR/extras.status"
+echo "Done."

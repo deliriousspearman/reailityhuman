@@ -36,11 +36,19 @@ systemctl enable -q open-vm-tools
 echo "==> Network"
 port=$(awk '$1 == "bridge-ports" { print $2; exit }' /etc/network/interfaces)
 [[ -n $port ]] || { echo "No bridge-ports in /etc/network/interfaces." >&2; exit 1; }
-# The installer pins the adapter's name to its MAC (a .link file); clones have their own MAC, so use the
-# name the kernel gives the adapter by its slot, which clones share.
-name=$(udevadm info -q property -p "/sys/class/net/$port" | sed -n 's/^ID_NET_NAME_PATH=//p')
+# The installer may pin the adapter's name to its MAC (a .link file, naming it nic0); clones have their
+# own MAC, so drop the pin and use the name the kernel gives the adapter by its place in the VM, which
+# clones share: udev's first of onboard, slot and path names.
+name=$port
+for link in /usr/local/lib/systemd/network/*.link /etc/systemd/network/*.link; do
+	if [[ -f $link ]] && grep -q "$port" "$link"; then
+		echo "  removing $link"
+		rm -f "$link"
+		props=$(udevadm test-builtin net_id "/sys/class/net/$port" 2>/dev/null)
+		name=$(sed -n 's/^ID_NET_NAME_\(ONBOARD\|SLOT\|PATH\)=//p' <<<"$props" | head -1)
+	fi
+done
 [[ -n $name ]] || { echo "Can't tell $port's usual name." >&2; exit 1; }
-grep -l -s "$port" /usr/local/lib/systemd/network/*.link /etc/systemd/network/*.link | xargs -r rm -f
 cat >/etc/network/interfaces <<NET
 # Written by the lab template (prepare-proxmox.sh): the bridge takes its address from DHCP.
 auto lo

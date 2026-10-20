@@ -32,7 +32,7 @@ scripts-check:
   stage: build
   image: koalaman/shellcheck-alpine:v0.10.0
   script:
-    - shellcheck scripts/template/*.sh scripts/template/legacy/*.sh scripts/template/legacy/lab-firstboot scripts/isos/fetch.sh packer/vyos/build-iso.sh scripts/template/proxmox/*.sh scripts/template/proxmox/lab-firstboot packer/proxmox/*.sh
+    - shellcheck scripts/template/*.sh scripts/template/legacy/*.sh scripts/template/legacy/lab-firstboot scripts/isos/fetch.sh packer/vyos/build-iso.sh scripts/template/proxmox/*.sh scripts/template/proxmox/lab-firstboot packer/proxmox/*.sh scripts/template/truenas/*.sh scripts/template/truenas/lab-firstboot
     - shellcheck -s sh scripts/template/opnsense/*.sh scripts/template/opnsense/lab-firstboot packer/opnsense/live.sh scripts/template/pfsense/*.sh packer/pfsense/live.sh
 
 # The Windows template scripts: parsed with PowerShell's own parser (they run on VMs, so CI only

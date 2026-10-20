@@ -46,7 +46,7 @@ fi
 "$isos/fetch.sh" "$name" --no-upload
 cp "$here/first-boot.sh" "$STAGING/first-boot.sh"
 echo "Preparing $auto…"
-docker run --rm -v "$STAGING:/work" debian:trixie sh -euc '
+docker run --rm -e DEBIAN_FRONTEND=noninteractive -v "$STAGING:/work" debian:trixie sh -euc '
 	apt-get update -qq >/dev/null
 	apt-get install -y -qq curl ca-certificates >/dev/null
 	curl -fsSL https://enterprise.proxmox.com/debian/proxmox-archive-keyring-trixie.gpg -o /usr/share/keyrings/proxmox-archive-keyring.gpg
