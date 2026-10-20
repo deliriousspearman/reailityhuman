@@ -158,9 +158,9 @@ two need a way to read them: an agent or a check on the PC, and the DHCP server'
 
 Added by Jake on 2026-10-20:
 - **OS and distribution icons** on the catalogue and machine pages.
-- **An offline setup script** for the Packer side: checks every ISO and media file is present (and
-  matches its checksum) before building, and walks through the build and setup steps on a network
-  with no internet.
+- **The offline install:** one script that installs the panel and builds every template on a network
+  without internet, with checks first (vCenter, ISOs, mirrors, media, room) and a choice to skip what
+  isn't ready. Design agreed 2026-10-20: [offline-install.md](offline-install.md). In progress.
 - **ProLabs** based on the `/home/user/coding/vuln-ad` project (see "ProLabs" above).
 - **Other platforms:** how hard it would be to run the panel on a standalone ESXi host (no vCenter) or
   on Nutanix (AHV, through Prism's API) instead of vCenter.
@@ -174,9 +174,7 @@ Added by Jake on 2026-10-20:
 - **Health tasks:** a periodic check that templates still deploy, and evaluation licences
   (Windows 11 lasts 90 days) are rebuilt in time.
 - **Nested ESXi:** the ISO needs a Broadcom login; Jake may supply it.
-- **Exchange:** heavy, with licensing to work out.
-- **Older releases:** CentOS 6 and 8, Windows Server 2008 R2 to 2016, Parrot 6, and the Windows
-  variant of Metasploitable 3. Jake has offered ISOs.
+- **Older releases:** Windows Server 2008 R2 to 2016 and Parrot 6. Jake has offered ISOs.
 
 ## The lab today
 
