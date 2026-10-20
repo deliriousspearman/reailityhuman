@@ -35,7 +35,9 @@ systemctl enable -q open-vm-tools
 
 echo "==> Network"
 port=$(awk '$1 == "bridge-ports" { print $2; exit }' /etc/network/interfaces)
-[[ -n $port ]] || { echo "No bridge-ports in /etc/network/interfaces." >&2; exit 1; }
+# Proxmox VE 7 on Debian (packer/proxmox7): no bridge yet, just the adapter on DHCP.
+[[ -n $port ]] || port=$(awk '$1 == "iface" && $4 == "dhcp" && $2 != "lo" { print $2; exit }' /etc/network/interfaces)
+[[ -n $port ]] || { echo "No bridge-ports or DHCP adapter in /etc/network/interfaces." >&2; exit 1; }
 # The installer may pin the adapter's name to its MAC (a .link file, naming it nic0); clones have their
 # own MAC, so drop the pin and use the name the kernel gives the adapter by its place in the VM, which
 # clones share: udev's first of onboard, slot and path names.

@@ -28,6 +28,13 @@ find /var/log -type f \( -name '*.log' -o -name '*.gz' -o -name '*.[0-9]' \) -ex
 rm -rf /var/log/lab-deploy/* /root/.bash_history /tmp/proxmox
 echo "cleaned=$(date -u +%Y-%m-%dT%H:%MZ)" >>/etc/lab-template
 
+# A build user (packer/proxmox7 signs in as one, through Debian's installer), if there was one.
+if [[ -n ${SUDO_USER:-} && $SUDO_USER != root ]]; then
+	echo "==> User $SUDO_USER"
+	rm -f "/etc/sudoers.d/$SUDO_USER"
+	userdel -r -f "$SUDO_USER" 2>&1 | grep -v -e "mail spool" -e "currently used by process" || true
+fi
+
 echo "==> Powering off"
 sync
 systemctl poweroff
