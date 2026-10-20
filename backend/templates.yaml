@@ -484,6 +484,21 @@
   adminGroup: wheel
   access: [ssh, console]
 
+# CentOS 6: the oldest legacy practice target (packer/centos-legacy -var version=6): out of support since
+# 2020, packages from the vault (6.10), VMware Tools from EPEL's archive, SysV init. Its SSH (OpenSSH
+# 5.3) only takes old algorithms and RSA keys: modern clients may need options to connect.
+- template: centos
+  version: "6"
+  # Built by Packer (packer/build.sh centos-legacy -var version=6 -var iso=CentOS-6.10-x86_64-minimal.iso) on 2026-10-20.
+  vsphere: Labs/Templates/tpl-centos-6-20261020
+  cpu: 1
+  memoryGB: 1
+  diskGB: 20
+  username: labuser
+  family: legacy
+  adminGroup: wheel
+  access: [ssh, console]
+
 # Metasploitable 2: a deliberately vulnerable Ubuntu 8.04, deployed as the complete image it is
 # (packer/metasploitable/import-ms2.sh: Rapid7's image, with VMware's frozen Tools 10.0.12 added so
 # the panel sees its address). Its own sign-in, msfadmin / msfadmin, is on every machine: keep these

@@ -16,6 +16,9 @@ enabled=0
 REPO
 chroot "$root" yum -y -q --disablerepo='*' --enablerepo=lab-centos7-vault install open-vm-tools
 chroot "$root" systemctl enable vmtoolsd
+# Its service starts only where systemd detects VMware, and dom0 runs under Xen (systemd sees none).
+mkdir -p "$root/etc/systemd/system/vmtoolsd.service.d"
+printf '[Unit]\nConditionVirtualization=\n' >"$root/etc/systemd/system/vmtoolsd.service.d/lab.conf"
 mkdir -p "$root/root/.ssh"
 echo "${ssh_public_key}" >"$root/root/.ssh/authorized_keys"
 chmod 700 "$root/root/.ssh"
