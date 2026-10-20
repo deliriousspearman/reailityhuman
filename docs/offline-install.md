@@ -1,7 +1,15 @@
 # Offline install: design
 
 One script installs the whole lab, the panel and its templates, on a network with no internet. This
-is the design, agreed on 2026-10-20. The runbook will replace it once the script is built.
+is the design, agreed on 2026-10-20; the runbook will replace it.
+
+**Status (2026-10-20):** built (`deploy/bundle.sh`, `deploy/install.sh`, `deploy/install/`) and
+rehearsed once: a bundle without media, installed on a fresh Ubuntu 24.04 VM with no internet and no
+Docker. Docker from the bundle, the panel, the checks against vCenter, a TrueNAS CORE build, the
+catalogue, its lifecycle test through the new panel and the report all worked; a re-run resumed.
+Still to do: a rehearsal with the media folder and LAN mirrors (a Linux build with extras, and
+Windows); the builds marked "needs internet" in `manifest.toml` (OPNsense, pfSense, CentOS 6 to 8,
+Proxmox, XCP-ng, Parrot) made to take mirrors; the runbook.
 
 ## The two halves
 

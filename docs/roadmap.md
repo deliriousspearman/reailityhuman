@@ -177,7 +177,9 @@ Added by Jake on 2026-10-20:
 - **OS and distribution icons** on the catalogue and machine pages.
 - **The offline install:** one script that installs the panel and builds every template on a network
   without internet, with checks first (vCenter, ISOs, mirrors, media, room) and a choice to skip what
-  isn't ready. Design agreed 2026-10-20: [offline-install.md](offline-install.md). In progress.
+  isn't ready. Design agreed 2026-10-20: [offline-install.md](offline-install.md). Built and rehearsed
+  once offline (TrueNAS CORE); next: a rehearsal with media and mirrors, and the builds still marked
+  "needs internet".
 - **ProLabs** based on the `/home/user/coding/vuln-ad` project (see "ProLabs" above).
 - **Other platforms:** how hard it would be to run the panel on a standalone ESXi host (no vCenter) or
   on Nutanix (AHV, through Prism's API) instead of vCenter.
