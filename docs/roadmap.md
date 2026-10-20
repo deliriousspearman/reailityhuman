@@ -1,6 +1,6 @@
 # Roadmap
 
-Where lab-deploy stands and what comes next. Last updated 2026-10-20. The original design is in
+Where lab-deploy stands and what comes next. Last updated 2026-10-20 (afternoon). The original design is in
 [plan.md](plan.md); building templates is in [build-templates.md](build-templates.md).
 
 ## Where things stand
@@ -20,12 +20,23 @@ deployed by CI.
 | Windows Server | 2025 (desktop and Core), 2022, 2019 |
 | Windows | 11 Enterprise (90-day evaluation; TPM checks skipped) |
 | Security | Kali 2026.2, Parrot 7.4 |
-| Firewalls and routers | OPNsense 26.7, VyOS (rolling) |
+| Firewalls and routers | OPNsense 26.7, pfSense CE 2.7.2, VyOS (rolling) |
+| Hypervisors | Proxmox VE 9.2 (nested) |
+| Storage | TrueNAS SCALE 25.10, TrueNAS CORE 13.3 |
 | Practice targets | Metasploitable 2 and 3 (Linux), as complete images |
 
 **Extras:** web servers, WordPress, Nextcloud, databases with sample data, mail, FTP, desktop and
 RDP, IIS, SQL Server, Outlook. Also Docker, with Juice Shop, DVWA, Uptime Kuma, Vaultwarden, Gitea
 and Grafana baked into the templates so they work offline.
+
+**Active Directory** (finished 2026-10-20). Two extras:
+- **Domain controller** (Windows Server): installs AD DS and DNS and creates a new forest; the machine's
+  user becomes a domain administrator.
+- **Join a domain** (all Windows): pick a running domain controller from your machines; the panel
+  passes its address and sign-in to the join, keeping only its id. This is a new kind of option,
+  "machine", that other features can reuse.
+- Tested live: a Server 2025 controller and a Server 2025 Core member, with the controller's user
+  signing in to the member as a domain user.
 
 **Browser console** (finished 2026-10-19). Open console on a machine's page shows its screen, keyboard
 and mouse in the browser.
@@ -44,6 +55,7 @@ and mouse in the browser.
 
 | Item | What's needed | Then |
 |---|---|---|
+| MikroTik CHR 7 | mikrotik.com is unreachable from the lab network (every host times out). Download the stable "Cloud Hosted Router" VMDK image (`chr-7.x.vmdk.zip`) from mikrotik.com/download elsewhere and put it where Claude can reach it | Import it as a complete image, as Metasploitable was |
 | Windows 10 | The ISO in the datastore's `ISO/` folder (Enterprise LTSC 2021 or 22H2, x64, en-US), its file name, and a key if it isn't an evaluation | Build with `packer/windows` (as Windows 11, `version = "10"`), run the e2e tests, add it to `templates.yaml` |
 | Firefox black screen | Testing on the one affected Firefox: without extensions, then with `privacy.resistFingerprinting` off. Canvas blockers stop the screen drawing | A fix if it isn't the browser's settings |
 | Workstation snapshot | Delete the snapshot of the ESXi VM taken before the datastore was extended | — |
@@ -84,7 +96,8 @@ Open the console on each of these and check the screen, the keyboard, and Ctrl+A
 | Windows 11 | The sign-in screen and Ctrl+Alt+Del |
 | Windows Server 2025 desktop | As Windows 11 |
 | Windows Server 2025 Core | The text console |
-| OPNsense | Its console menu |
+| OPNsense, pfSense | Their console menus |
+| Proxmox VE, TrueNAS | Their console menus and sign-in |
 | VyOS | Its sign-in |
 | Kali or Parrot | A desktop at a high resolution, to check scaling |
 | Metasploitable 2 | An old VMware Tools version |
@@ -92,43 +105,11 @@ Open the console on each of these and check the screen, the keyboard, and Ctrl+A
 Fix what turns up. Add a note on the console page for any system that needs one, for example how to
 sign in at the OPNsense menu.
 
-### 3. Active Directory domain (large)
-
-**Goal.** Deploy a working Windows domain from the panel: a domain controller, then members that
-join it.
-
-**Approach.**
-- **Domain controller:**
-  - Windows Server 2025 (desktop or Core) gets a "Domain controller" extra.
-  - Options: the domain name (default `lab.example`), the NetBIOS name, and the Directory Services
-    Restore Mode password (default: the machine's password).
-  - At first boot it installs AD DS and DNS and creates the forest. The machine restarts, and the
-    deploy waits until the domain answers.
-- **Members:**
-  - Other Windows machines get a "Join a domain" extra: choose a domain controller from your
-    running machines.
-  - The panel sets the member's DNS to the controller's address, joins it with the controller's
-    credentials, and restarts it.
-- **Linux members (later):** realmd/sssd join, as an option on the Linux templates.
-- **Panel:** show the domain and how to sign in (`LAB\user`) on both machines' pages. Reset and
-  redeploy of the controller must warn that members lose their trust.
-
-**Open questions:**
-- One domain per person, or shared domains?
-- What happens to members when their controller expires or is destroyed: expire together, or warn?
-- Are AD Certificate Services wanted as an option?
-
-**Done when:** a controller and a Windows 11 member deploy from the panel, a domain user signs in on
-the member, and the e2e tests cover it.
-
-### 4. More templates (medium, each)
+### 3. More templates (medium, each)
 
 | Template | Approach | Notes |
 |---|---|---|
-| Proxmox VE 9 | Unattended install (Proxmox's answer file), nested virtualisation switched on in the VM | Needs "expose hardware virtualisation" on the VM, and more memory |
-| MikroTik CHR 7 | Complete image (image family): import the official VMDK | Free licence is speed-limited to 1 Mbit/s, fine for labs |
-| TrueNAS SCALE | Unattended install is limited: as Parrot, import once, then automate | Needs a second disk for a pool |
-| TrueNAS CORE | As SCALE, on FreeBSD (like OPNsense's tooling) | End of life; only if wanted for practice |
+| MikroTik CHR 7 | Complete image (image family): import the official VMDK | Waiting for the download (see above) |
 | Debian 8 to 11 | The Debian builds with older preseeds; the legacy family for 8 and 9 | Archive mirrors for old releases |
 | Windows 7 | Legacy Windows build: BIOS, older unattend, no Cloudbase-Init support for the newest versions | ISO from Jake |
 | Windows 10 | See "Waiting on Jake" | — |
@@ -136,7 +117,7 @@ the member, and the e2e tests cover it.
 Each follows the usual path: `packer/<name>`, ISO in `scripts/isos/isos.txt`, entry in
 `templates.yaml`, e2e tests, commit.
 
-### 5. ProLabs: the first multi-machine lab (large)
+### 4. ProLabs: the first multi-machine lab (large)
 
 **Goal.** A lab of several machines deployed together on a network of their own, as the LMS's Pro Lab
 pages describe.
@@ -156,7 +137,7 @@ Windows workstation, with deliberate Active Directory weaknesses. Draw these fro
 - SMB signing off
 
 **Builds on:**
-- the AD domain feature (item 3);
+- the Active Directory extras (done);
 - a lab definition format (machines, roles, network, which weaknesses);
 - deploy and reset of the whole lab as one unit (snapshot revert per machine);
 - a network per lab instance, which needs VLANs or port groups (see "Later").
@@ -164,7 +145,7 @@ Windows workstation, with deliberate Active Directory weaknesses. Draw these fro
 **Open questions:** shared instance or one per person? How are learners reached: VPN, or the
 browser console only, to start with?
 
-### 6. Capacity warnings (small)
+### 5. Capacity warnings (small)
 
 Alerts on the panel's Admin page, and refusal to deploy, when one of these runs low:
 - the datastore;
@@ -184,7 +165,6 @@ two need a way to read them: an agent or a check on the PC, and the DHCP server'
   config" button on machine pages is a placeholder for this).
 - **Health tasks:** a periodic check that templates still deploy, and evaluation licences
   (Windows 11 lasts 90 days) are rebuilt in time.
-- **pfSense:** its installer now needs the internet and an account; revisit if that changes.
 - **Nested ESXi:** the ISO needs a Broadcom login; Jake may supply it.
 - **Exchange:** heavy, with licensing to work out.
 - **Older releases:** CentOS 6 and 8, Windows Server 2008 R2 to 2016, Parrot 6, and the Windows
