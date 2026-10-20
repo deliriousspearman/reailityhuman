@@ -157,6 +157,15 @@ two need a way to read them: an agent or a check on the PC, and the DHCP server'
 
 ## Later
 
+Added by Jake on 2026-10-20:
+- **OS and distribution icons** on the catalogue and machine pages.
+- **An offline setup script** for the Packer side: checks every ISO and media file is present (and
+  matches its checksum) before building, and walks through the build and setup steps on a network
+  with no internet.
+- **ProLabs** based on the `/home/user/coding/vuln-ad` project (see "ProLabs" above).
+- **Other platforms:** how hard it would be to run the panel on a standalone ESXi host (no vCenter) or
+  on Nutanix (AHV, through Prism's API) instead of vCenter.
+
 - **Sign-in:**
   - accounts, owners and admins;
   - limit consoles and passwords to a machine's owner and admins;

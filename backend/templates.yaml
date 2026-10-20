@@ -453,6 +453,20 @@
   adminGroup: wheel
   access: [ssh, console]
 
+# CentOS 8: as CentOS 7, a legacy practice target (packer/centos-legacy -var version=8): out of
+# support since 2021, packages from the vault (8.5.2111), lab-firstboot, no extras.
+- template: centos
+  version: "8"
+  # Built by Packer (packer/build.sh centos-legacy -var version=8 -var iso=CentOS-8.5.2111-x86_64-boot.iso) on 2026-10-20.
+  vsphere: Labs/Templates/tpl-centos-8-20261020
+  cpu: 2
+  memoryGB: 2
+  diskGB: 20
+  username: labuser
+  family: legacy
+  adminGroup: wheel
+  access: [ssh, console]
+
 # Metasploitable 2: a deliberately vulnerable Ubuntu 8.04, deployed as the complete image it is
 # (packer/metasploitable/import-ms2.sh: Rapid7's image, with VMware's frozen Tools 10.0.12 added so
 # the panel sees its address). Its own sign-in, msfadmin / msfadmin, is on every machine: keep these
