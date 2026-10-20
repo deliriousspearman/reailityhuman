@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Makes the offline install's bundle (docs/offline-install.md): everything deploy/install.sh needs on a
 # network without internet, in one folder to carry across. Run it from the repo, on a Linux machine
-# with internet, Docker, Node.js (npm) and about 15 GB free (35 GB with --images):
+# with internet, Docker and about 15 GB free (35 GB with --images); Node.js too, or its image is used:
 #
 #   deploy/bundle.sh <folder> [--images] [--no-media]
 #
@@ -39,7 +39,13 @@ step "The project at $(git -C "$repo" rev-parse --short HEAD), with the panel's 
 rm -rf "$out/repo"
 mkdir "$out/repo"
 git -C "$repo" archive HEAD | tar -x -C "$out/repo"
-(cd "$out/repo/frontend" && npm ci --no-audit --no-fund --loglevel=error && npm run build >/dev/null && rm -rf node_modules .svelte-kit)
+if command -v npm >/dev/null; then
+	(cd "$out/repo/frontend" && npm ci --no-audit --no-fund --loglevel=error && npm run build >/dev/null)
+else # Node.js's image instead
+	docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp -v "$out/repo/frontend:/w" -w /w node:22-alpine \
+		sh -c 'npm ci --no-audit --no-fund --loglevel=error && npm run build >/dev/null'
+fi
+rm -rf "$out/repo/frontend/node_modules" "$out/repo/frontend/.svelte-kit"
 cp "$repo/deploy/install.sh" "$out/install.sh"
 cp "$repo/deploy/install/lab-install.toml.example" "$out/lab-install.toml.example"
 
