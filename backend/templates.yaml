@@ -125,6 +125,18 @@
   adminGroup: sudo
   access: [ssh, console]
 
+- template: debian
+  version: "8"
+  # Built by Packer (packer/build.sh debian -var version=8 -var iso=…) on 2026-10-20.
+  vsphere: Labs/Templates/tpl-debian-8-20261020
+  cpu: 1
+  memoryGB: 1
+  diskGB: 25
+  username: labuser
+  family: legacy
+  adminGroup: sudo
+  access: [ssh, console]
+
 # Windows Server 2025, with Desktop Experience and as Server Core (packer/windows-server, or by hand:
 # docs/setup-vsphere.md, "Windows Server templates"). Windows needs more memory: Core runs in 2 GB, the
 # desktop wants 4.
