@@ -7,9 +7,10 @@
 #   packer/mikrotik/import-chr.sh [--credentials FILE]
 #
 # It downloads the CHR disk image (checked against MikroTik's SHA-256), converts it for vSphere, and
-# builds a VM around it: BIOS, LSI Logic, two vmxnet3 adapters on the lab network (ether1 takes an
-# address by DHCP, as CHR does out of the box; ether2 too). It then starts it and, at its console,
-# signs in as admin (no password, as shipped), sets the password, and shuts it down; then takes the
+# builds a VM around it: BIOS, LSI Logic, two vmxnet3 adapters on the lab network (each takes an
+# address by DHCP). It then starts it and, at its console, signs in as admin (no password, as
+# shipped), sets the password, adds a startup script that keeps the adapters named ether1, ether2
+# with DHCP on clones, and shuts it down; then takes the
 # "clean" snapshot and makes it a template. CHR reports its address to vSphere itself.
 #
 # The free licence limits each interface to 1 Mbit/s: plenty for practising configuration.
@@ -89,7 +90,12 @@ type_line "$PASSWORD"
 sleep 1
 type_line "$PASSWORD"
 sleep 3
-type_line "/ip dhcp-client add interface=ether2 disabled=no"
+# RouterOS ties interface names to MAC addresses, so on a clone (new MACs) the adapters would be
+# ether3 and ether4, with ether1's DHCP client left on an interface that's gone. At every boot this
+# names them ether1, ether2… in order again, drops DHCP clients on missing interfaces, and gives each
+# adapter one.
+# shellcheck disable=SC2016 # RouterOS's variables, escaped for its own quoting
+type_line '/system scheduler add name=lab-interfaces start-time=startup on-event=":delay 3s; :local k 1; :foreach i in=[/interface ethernet find] do={/interface ethernet set \$i name=(\"lab-tmp\" . \$k); :set k (\$k + 1)}; :set k 1; :foreach i in=[/interface ethernet find] do={/interface ethernet set \$i name=(\"ether\" . \$k); :set k (\$k + 1)}; /ip dhcp-client remove [find where invalid]; :foreach i in=[/interface ethernet find] do={:local n [/interface ethernet get \$i name]; :if ([:len [/ip dhcp-client find where interface=\$n]] = 0) do={/ip dhcp-client add interface=\$n disabled=no}}"'
 sleep 2
 type_line "/system shutdown"
 sleep 2
