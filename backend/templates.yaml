@@ -153,6 +153,22 @@
   access: [rdp, ssh, console]
   extras: [iis, mssql, outlook, join-domain]
 
+# pfSense CE: a firewall (packer/pfsense). 2.7.2 is the last release with an offline installer. No
+# cloud-init: scripts/template/pfsense/lab-firstboot sets admin's password, SSH key and the host name
+# with pfSense's own functions at first boot (family legacy). Both adapters are DHCP clients on the lab
+# network for now, with no DHCP server; WAN lets in the web UI, SSH and ping.
+- template: pfsense
+  version: "2.7.2"
+  # Built by Packer (packer/build.sh pfsense) on 2026-10-20.
+  vsphere: Labs/Templates/tpl-pfsense-2.7.2-20261020
+  cpu: 2
+  memoryGB: 2
+  diskGB: 16
+  username: admin
+  family: legacy
+  adminGroup: admins
+  access: [web, ssh, console]
+
 # OPNsense: a firewall (packer/opnsense). No cloud-init: scripts/template/opnsense/lab-firstboot sets
 # root's password, SSH key and the host name in its config.xml at first boot (family legacy). Both
 # adapters are DHCP clients on the lab network for now, with no DHCP server; WAN lets in the web UI,

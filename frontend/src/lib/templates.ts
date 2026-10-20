@@ -20,7 +20,8 @@ export const templates: MachineTemplate[] = [
 		versions: [{ version: '2.7.2' }],
 		resources: { cpu: 2, memoryGB: 2, diskGB: 16 },
 		access: ['web', 'ssh', 'console'],
-		credentials: 'admin / pfsense',
+		webUrl: 'https://{ip}/',
+		credentials: 'admin / set on first deploy',
 	},
 	{
 		id: 'opnsense',

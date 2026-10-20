@@ -1,0 +1,64 @@
+#!/usr/local/bin/php -f
+<?php
+/*
+ * The lab panel's first boot for pfSense templates (installed by prepare-pfsense.sh, run at the end
+ * of every boot as the configuration's shellcmd). pfSense has no cloud-init, so like
+ * ../legacy/lab-firstboot this reads the guestinfo.lab.* keys the panel sets
+ * (backend/app/cloudinit.py: legacy_guestinfo) through VMware Tools, and sets with pfSense's own
+ * functions:
+ *   - the hostname;
+ *   - admin's password (the machine's, as a SHA-512 hash: pfSense takes one as it is) and SSH key;
+ * then writes /var/lib/lab-deploy/extras.status, which the panel waits for as the sign the machine is
+ * ready. It acts once per machine (guestinfo.lab.instance); a reset reverts the disk, so it runs
+ * again. The panel's user is admin, pfSense's administrator.
+ */
+require_once("config.inc");
+require_once("auth.inc");
+require_once("system.inc");
+require_once("util.inc");
+
+$dir = "/var/lib/lab-deploy";
+@mkdir($dir, 0755, true);
+@mkdir("/var/log/lab-deploy", 0755, true);
+$log = fopen("/var/log/lab-deploy/firstboot.log", "a");
+
+function say($text) {
+	global $log;
+	fwrite($log, "== " . gmdate("Y-m-d H:i:s") . " {$text}\n");
+}
+
+function rpc($key) {
+	$out = array();
+	exec("/usr/local/bin/vmware-rpctool " . escapeshellarg("info-get guestinfo.lab.{$key}") . " 2>/dev/null", $out, $rc);
+	return $rc == 0 ? trim(implode("\n", $out)) : "";
+}
+
+$instance = rpc("instance");
+if ($instance === "") {
+	say("No panel data (guestinfo.lab.instance): nothing to do.");
+	exit(0);
+}
+if (@file_get_contents("{$dir}/instance") === $instance) {
+	say("Already set up for {$instance}.");
+	exit(0);
+}
+$host = rpc("hostname");
+say("Setting up {$instance}: host {$host}");
+
+config_set_path("system/hostname", $host);
+$admin = &getUserEntryByUID(0);
+unset($admin["bcrypt-hash"], $admin["password"]);
+$admin["sha512-hash"] = rpc("password");
+// Base64 already, as pfSense keeps keys.
+$admin["authorizedkeys"] = rpc("sshkey");
+write_config("Lab panel: this machine's name, and admin's password and key");
+local_user_set($admin);
+system_hostname_configure();
+system_hosts_generate();
+
+file_put_contents("{$dir}/instance", $instance);
+// Empty: no extras on pfSense. Written last, in one go, readable by the panel.
+$tmp = tempnam($dir, "status");
+chmod($tmp, 0644);
+rename($tmp, "{$dir}/extras.status");
+say("Done.");
