@@ -224,6 +224,23 @@
   access: [web, ssh, console]
   webUrl: http://{ip}/
 
+# Microsoft Exchange: Windows Server 2025 with Exchange Server SE's files and prerequisites baked in
+# (packer/windows-server -var exchange=true). Its one extra, Exchange, joins a domain controller's
+# domain and installs the Mailbox role. Exchange wants memory: 10 GB here, the least that runs well.
+- template: exchange
+  version: "SE"
+  # Built by Packer (packer/build.sh windows-server -var exchange=true -var office=false -var sql_server=false) on 2026-10-20.
+  vsphere: Labs/Templates/tpl-windows-server-2025-exchange-20261020
+  cpu: 4
+  memoryGB: 10
+  diskGB: 100
+  username: labadmin
+  family: windows
+  adminGroup: Administrators
+  access: [web, rdp, ssh, console]
+  webUrl: "https://{ip}/owa"
+  extras: [exchange]
+
 # OPNsense: a firewall (packer/opnsense). No cloud-init: scripts/template/opnsense/lab-firstboot sets
 # root's password, SSH key and the host name in its config.xml at first boot (family legacy). Both
 # adapters are DHCP clients on the lab network for now, with no DHCP server; WAN lets in the web UI,

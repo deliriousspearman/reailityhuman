@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<!--
+  XCP-ng's installer answers (xcp-ng.pkr.hcl serves this, and post-install.sh, from Packer's web
+  server). Local storage as ext (thin), the management interface on DHCP, root's password the build's
+  (clean-xcp-ng.sh locks it), and post-install.sh run once the files are on the new disk.
+-->
+<installation srtype="ext">
+  <primary-disk>sda</primary-disk>
+  <keymap>us</keymap>
+  <root-password>${root_password}</root-password>
+  <source type="local"/>
+  <admin-interface name="eth0" proto="dhcp"/>
+  <timezone>UTC</timezone>
+  <script stage="filesystem-populated" type="url">${post_install_url}</script>
+</installation>

@@ -1,0 +1,13 @@
+[Unit]
+Description=Lab panel first boot (XCP-ng): management network, hostname, root's password and key
+After=xapi.service vmtoolsd.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/lab-firstboot
+RemainAfterExit=yes
+TimeoutStartSec=10min
+
+[Install]
+WantedBy=multi-user.target

@@ -83,12 +83,19 @@ else
 	if [[ $OS == debian ]] && grep -rqs archive.debian.org /etc/apt/sources.list /etc/apt/sources.list.d; then
 		# An archived release: its Release files are past their dates, and 8 and 9's signing keys
 		# have expired.
+		# The archive can be slow: retry, and skip the source packages nothing here needs.
 		{
 			echo 'Acquire::Check-Valid-Until "false";'
+			echo 'Acquire::Retries "5";'
 			if ((VERSION <= 9)); then echo 'APT::Get::AllowUnauthenticated "true";'; fi
 		} >/etc/apt/apt.conf.d/99lab-archive
+		sed -i '/^deb-src /d' /etc/apt/sources.list
 	fi
-	apt-get -q update
+	for try in 1 2 3; do
+		apt-get -q update && break
+		((try < 3)) || exit 1
+		sleep 30
+	done
 	apt-get -yq install open-vm-tools openssh-server sudo
 	# growpart, for an LVM root (Ubuntu's install; Debian's preseed makes plain partitions).
 	if [[ $OS == ubuntu ]]; then apt-get -yq install cloud-guest-utils; fi
@@ -100,7 +107,8 @@ echo "==> Root filesystem"
 ROOT_DEV=$(findmnt -no SOURCE /)
 if lvs "$ROOT_DEV" >/dev/null 2>&1; then
 	pv=$(pvs --noheadings -o pv_name | head -1 | tr -d ' ')
-	disk=/dev/$(lsblk -no PKNAME "$pv")
+	# The disk the volume's partition is on (CentOS 6's lsblk has no PKNAME: from the name, then).
+	disk=/dev/$(lsblk -no PKNAME "$pv" 2>/dev/null || basename "$pv" | sed 's/[0-9]*$//')
 	part=${pv##*[!0-9]}
 	command -v growpart >/dev/null || yum -y -q install cloud-utils-growpart # (Ubuntu: cloud-guest-utils, above)
 	growpart "$disk" "$part" || true

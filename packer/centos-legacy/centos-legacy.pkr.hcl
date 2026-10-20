@@ -142,10 +142,12 @@ source "vsphere-iso" "centos_legacy" {
     "<tab><wait> ks=http://{{ .HTTPIP }}:{{ .HTTPPort }}/ks.cfg<enter>",
   ] : ["<up><wait><enter>"]
 
-  ip_wait_timeout      = "60m"
-  communicator         = "ssh"
-  ssh_username         = "builder"
-  ssh_private_key_file = var.ssh_private_key_file
+  ip_wait_timeout = "60m"
+  communicator    = "ssh"
+  ssh_username    = "builder"
+  # CentOS 6's OpenSSH (5.3) predates the build's ed25519 key: it signs in with the build password.
+  ssh_private_key_file = var.version == "6" ? null : var.ssh_private_key_file
+  ssh_password         = var.version == "6" ? var.build_password : null
   ssh_timeout          = "60m"
 
   shutdown_command    = "sudo bash /tmp/legacy/clean-legacy.sh --yes"

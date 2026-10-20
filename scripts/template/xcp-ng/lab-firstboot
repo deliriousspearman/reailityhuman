@@ -1,0 +1,68 @@
+#!/bin/bash
+# The lab panel's first boot for XCP-ng templates (installed by prepare-xcp-ng.sh, run at each boot
+# once XAPI is up). XCP-ng has no cloud-init for itself, so like ../legacy/lab-firstboot this reads the
+# guestinfo.lab.* keys the panel sets (backend/app/cloudinit.py: legacy_guestinfo) through VMware
+# Tools. On a new machine:
+#   1. if the management network still belongs to the template's adapter (XAPI keeps it by MAC
+#      address), resets networking onto this machine's eth0, by DHCP, and restarts;
+#   2. sets the host's name, root's password (the machine's, as a SHA-512 hash) and SSH key, and makes
+#      new SSH host keys;
+#   3. writes /var/lib/lab-deploy/extras.status, which the panel waits for as the sign it's ready.
+# It acts once per machine (guestinfo.lab.instance); a reset reverts the disk, so it runs again. The
+# panel's user is root, XCP-ng's administrator (also Xen Orchestra's and XCP-ng Center's sign-in).
+set -u
+
+DIR=/var/lib/lab-deploy
+LOG_DIR=/var/log/lab-deploy
+mkdir -p "$DIR" "$LOG_DIR"
+chmod 755 "$DIR" "$LOG_DIR"
+exec >>"$LOG_DIR/firstboot.log" 2>&1
+echo "== $(date -u '+%Y-%m-%d %H:%M:%S') lab-firstboot"
+
+rpc() { vmware-rpctool "info-get guestinfo.lab.$1" 2>/dev/null; }
+instance=$(rpc instance)
+if [ -z "$instance" ]; then
+	echo "No panel data (guestinfo.lab.instance): nothing to do."
+	exit 0
+fi
+if [ "$(cat "$DIR/instance" 2>/dev/null)" = "$instance" ]; then
+	echo "Already set up for $instance."
+	exit 0
+fi
+
+# 1. The management network, on this machine's adapter.
+mac=$(cat /sys/class/net/eth0/address 2>/dev/null)
+pif=$(xe pif-list management=true --minimal 2>/dev/null)
+pif_mac=$([ -n "$pif" ] && xe pif-param-get uuid="$pif" param-name=MAC 2>/dev/null)
+if [ "$pif_mac" != "$mac" ] && [ "$(cat "$DIR/network-reset" 2>/dev/null)" != "$instance" ]; then
+	echo "Management network on $pif_mac, but eth0 is $mac: resetting it, then restarting."
+	echo "$instance" >"$DIR/network-reset"
+	echo yes | xe-reset-networking --device=eth0 --mode=dhcp
+	reboot
+	exit 0
+fi
+
+# 2. This machine's name, root's password and key, and SSH host keys.
+host=$(rpc hostname)
+echo "Setting up $instance: host $host"
+uuid=$(xe host-list --minimal)
+xe host-param-set uuid="$uuid" name-label="$host"
+xe host-set-hostname-live host-uuid="$uuid" host-name="$host"
+rpc password | sed 's/^/root:/' | chpasswd -e
+key=$(rpc sshkey | base64 -d 2>/dev/null || true)
+if [ -n "$key" ]; then
+	mkdir -p /root/.ssh
+	grep -qxF "$key" /root/.ssh/authorized_keys 2>/dev/null || echo "$key" >>/root/.ssh/authorized_keys
+	chmod 700 /root/.ssh
+	chmod 600 /root/.ssh/authorized_keys
+fi
+rm -f /etc/ssh/ssh_host_*
+ssh-keygen -A
+systemctl restart sshd
+
+echo "$instance" >"$DIR/instance"
+# 3. Empty: no extras on XCP-ng. Written last, in one go, readable by the panel.
+tmp=$(mktemp "$DIR/status.XXXXXX")
+chmod 644 "$tmp"
+mv "$tmp" "$DIR/extras.status"
+echo "Done."
