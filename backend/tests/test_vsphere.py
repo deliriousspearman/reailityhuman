@@ -164,3 +164,14 @@ def test_reading_a_guest_file_waits_through_tools_restarting():
     vc.cfg = settings()
     vc.content = SimpleNamespace(guestOperationsManager=SimpleNamespace(fileManager=SimpleNamespace(InitiateFileTransferFromGuest=transfer)))
     assert vc.read_guest_file(None, "labadmin", "pw", r"C:\ProgramData\lab-deploy\extras.status") is None
+
+
+def test_first_ipv4_skips_placeholders():
+    from types import SimpleNamespace
+
+    from app.vsphere import first_ipv4
+
+    # RouterOS reports 0.0.0.0 until DHCP gives it an address.
+    assert first_ipv4("0.0.0.0", []) is None
+    nic = SimpleNamespace(ipAddress=["0.0.0.0", "fe80::1", "169.254.1.1", "192.0.2.7"])
+    assert first_ipv4("0.0.0.0", [nic]) == "192.0.2.7"

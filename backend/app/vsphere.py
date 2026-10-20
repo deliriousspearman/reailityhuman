@@ -104,7 +104,8 @@ def first_ipv4(ip_address: str | None, nets) -> str | None:
             ip = ipaddress.ip_address(text)
         except ValueError:
             continue
-        if ip.version == 4 and not ip.is_link_local and not ip.is_loopback:
+        # Not 0.0.0.0, which some guests (RouterOS) report before DHCP has given them an address.
+        if ip.version == 4 and not ip.is_link_local and not ip.is_loopback and not ip.is_unspecified:
             return text
     return None
 
