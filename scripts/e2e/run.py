@@ -35,7 +35,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from checks import CASES, base_checks  # noqa: E402
+from checks import CASES, RESET_MARKER, base_checks  # noqa: E402
 
 OWNER = "e2e"
 STABLE = {"running", "stopped", "expired", "error"}
@@ -306,7 +306,7 @@ class Runner:
             m = None
             try:
                 m = self._deploy(t, [{"id": extra, "options": opts}], r)
-                run_checks(base_checks(t.family, t.access, m["name"]) + case["checks"], m, t.windows)
+                run_checks(base_checks(t.family, t.access, m["name"], t.template) + case["checks"], m, t.windows)
                 r.steps.append("checks passed")
             finally:
                 if m:
@@ -319,12 +319,17 @@ class Runner:
             m = None
             try:
                 m = self._deploy(t, [], r)
-                checks = base_checks(t.family, t.access, m["name"])
+                checks = base_checks(t.family, t.access, m["name"], t.template)
                 run_checks(checks, m, t.windows)
                 can_ssh = "ssh" in t.access
                 marker = "$HOME\\e2e-marker.txt" if t.windows else "~/e2e-marker"
+                write = f"Set-Content {marker} here" if t.windows else f"echo here > {marker}"
+                test = f"Test-Path {marker}" if t.windows else f"test -e {marker} && echo yes || echo no"
+                present = ("true", "yes")
+                if t.template in RESET_MARKER:
+                    write, test, mark = RESET_MARKER[t.template]
+                    present = (mark,)
                 if can_ssh:
-                    write = f"Set-Content {marker} here" if t.windows else f"echo here > {marker}"
                     ssh(m["ip"], m["username"], m["password"], write, t.windows)
                 for action in ("stop", "start", "reboot", "reset"):
                     say(r.name, "→", action)
@@ -333,8 +338,8 @@ class Runner:
                         run_checks(checks, m, t.windows)
                     r.steps.append(f"{action} ok")
                 if can_ssh:
-                    test = f"Test-Path {marker}" if t.windows else f"test -e {marker} && echo yes || echo no"
-                    if ssh(m["ip"], m["username"], m["password"], test, t.windows).strip().lower() not in ("false", "no"):
+                    out = ssh(m["ip"], m["username"], m["password"], test, t.windows).strip().lower()
+                    if any(p in out for p in present):
                         raise Failed("after reset, the file written before is still there")
                     r.steps.append("reset removed the marker; password still works")
                 say(r.name, "→ redeploy")

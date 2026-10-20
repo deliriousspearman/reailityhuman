@@ -105,12 +105,22 @@ CASES: dict[str, list[dict]] = {
 }
 
 
-def base_checks(family: str, access: list[str], name: str) -> list[tuple]:
+# Systems whose shell has no `hostname`: a command that shows its user signed in, and what it prints.
+SIGN_IN_CHECK = {"mikrotik": ("/system identity print", "name")}
+# Systems without a POSIX shell: how the lifecycle test leaves a mark before a reset (which must undo
+# it), as (command that makes it, command that shows it, text that's there while it is).
+RESET_MARKER = {"mikrotik": ("/system identity set name=e2e-marker", "/system identity print", "e2e-marker")}
+
+
+def base_checks(family: str, access: list[str], name: str, template: str = "") -> list[tuple]:
     """What every machine gets: it answers where its template says it does, under its own name (a
     complete image, family image, keeps its own, so only that its user signs in)."""
     checks: list[tuple] = []
     if "ssh" in access:
-        checks.append(("ssh", "hostname", "" if family == "image" else name))
+        if template in SIGN_IN_CHECK:
+            checks.append(("ssh", *SIGN_IN_CHECK[template]))
+        else:
+            checks.append(("ssh", "hostname", "" if family == "image" else name))
     if "rdp" in access:
         checks.append(("tcp", 3389))
     if "web" in access and family == "image":
