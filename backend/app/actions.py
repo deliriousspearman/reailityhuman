@@ -53,6 +53,13 @@ def deploy(vc: VCenter, m: Machine) -> None:
     if tpl is None:
         raise VSphereError(f"{m.template} {m.version} can't be deployed (not in templates.yaml)")
     chosen = m.extras or []
+    if extras.machine_options(chosen):
+        # Another machine's details (e.g. a domain controller's address and sign-in), as they are now.
+        with session() as s:
+            try:
+                chosen = extras.expand(chosen, lambda machine_id: s.get(Machine, machine_id))
+            except extras.ExtraError as e:
+                raise VSphereError(str(e)) from e
     if tpl.family == "windows":
         # SSH only where the template offers it: Windows may have OpenSSH installed but meant to be off.
         ssh = not tpl.access or "ssh" in tpl.access
@@ -245,6 +252,7 @@ def _await_setup(vc: VCenter, vm, m: Machine) -> None:
     else:
         add_log(m.id, f"Installing extras: {names}…" if chosen else "Finishing setting up (its user and SSH)…", "muted")
         timeout = settings().extras_timeout_seconds
+    timeout += 60 * sum(x.setup_minutes for c in chosen if (x := extras.find(c["id"])))
     try:
         text = _wait_for_status(vc, vm, m, family, timeout)
     finally:

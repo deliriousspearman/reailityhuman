@@ -168,7 +168,13 @@
 	/** What an option starts as when its extra is ticked: blank for text (its default shows as a
 	 * placeholder), the default for a choice or a tick box. */
 	function pickedDefault(o: ExtraOption): string {
+		if (o.type === 'machine') return candidates(o)[0]?.id ?? '';
 		return o.type === 'choice' || o.type === 'boolean' ? o.default || (o.type === 'boolean' ? 'no' : '') : '';
+	}
+
+	/** The machines a machine option can name: running ones with its extra (e.g. domain controllers). */
+	function candidates(o: ExtraOption) {
+		return store.machines.filter((m) => m.state === 'running' && m.ip && m.extras.some((x) => x.id === o.extra));
 	}
 
 	/** Ticked extras that ticking this one would replace, as "A", "A and B" or "A, B and C". */
@@ -185,6 +191,11 @@
 
 	function optionProblem(o: ExtraOption, value: string): string | null {
 		if (o.type === 'choice' || o.type === 'boolean') return null; // can only be one of its values
+		if (o.type === 'machine') {
+			if (candidates(o).some((m) => m.id === value)) return null;
+			const needed = store.config?.services.find((x) => x.id === o.extra)?.name ?? o.extra;
+			return candidates(o).length ? 'Choose one.' : `Deploy a machine with ${needed} first, and wait until it's ready.`;
+		}
 		const v = value.trim().toLowerCase().replace(/\.$/, '');
 		if (!v) return o.required ? `Fill in ${o.label.toLowerCase()}.` : null;
 		if (o.type === 'hostname' && (v.length > 253 || !store.matches(store.config?.rules.hostname, v))) {
@@ -279,7 +290,7 @@
 										{#if on}
 											{#each x.options.filter((o) => shown(o, picked[x.id])) as o (o.id)}
 												{@const problem = optionProblem(o, picked[x.id][o.id] ?? '')}
-												{@const fallback = store.optionDefault(o.default, name || 'name')}
+												{@const fallback = o.type === 'machine' ? '' : store.optionDefault(o.default, name || 'name')}
 												{#if o.type === 'boolean'}
 													<label class="extra-flag">
 														<input
@@ -293,12 +304,20 @@
 												{:else}
 													<div class="field extra-option">
 														<label for="opt-{x.id}-{o.id}">
-															{o.label}{#if !o.required && o.type !== 'choice'}<span class="optional">optional</span>{/if}
+															{o.label}{#if !o.required && o.type !== 'choice' && o.type !== 'machine'}<span class="optional">optional</span>{/if}
 														</label>
 														{#if o.type === 'choice'}
 															<select id="opt-{x.id}-{o.id}" class="input" bind:value={picked[x.id][o.id]} aria-describedby="opt-{x.id}-{o.id}-hint">
 																{#each o.choices ?? [] as c (c.value)}
 																	<option value={c.value}>{c.label}</option>
+																{/each}
+															</select>
+														{:else if o.type === 'machine'}
+															<select id="opt-{x.id}-{o.id}" class="input" bind:value={picked[x.id][o.id]} aria-invalid={!!problem} aria-describedby="opt-{x.id}-{o.id}-hint">
+																{#each candidates(o) as m (m.id)}
+																	<option value={m.id}>{m.name} ({m.ip})</option>
+																{:else}
+																	<option value="">None running</option>
 																{/each}
 															</select>
 														{:else}

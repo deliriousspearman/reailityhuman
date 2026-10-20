@@ -100,7 +100,7 @@
   username: labadmin
   family: windows
   access: [rdp, ssh, console]
-  extras: [iis, mssql, outlook]   # SQL Server and Outlook: built with prepare.ps1 -SqlServer and -Office
+  extras: [iis, mssql, outlook, domain-controller, join-domain]   # SQL Server and Outlook: built with prepare.ps1 -SqlServer and -Office
 - template: windows-server
   version: "2022"
   # Built by Packer (packer/build.sh windows-server -var version=2022) on 2026-10-18, with Office's and
@@ -112,7 +112,7 @@
   username: labadmin
   family: windows
   access: [rdp, ssh, console]
-  extras: [iis, mssql, outlook]
+  extras: [iis, mssql, outlook, domain-controller, join-domain]
 - template: windows-server
   version: "2019"
   # Built by Packer (packer/build.sh windows-server -var version=2019) on 2026-10-18, with Office's and
@@ -124,7 +124,7 @@
   username: labadmin
   family: windows
   access: [rdp, ssh, console]
-  extras: [iis, mssql, outlook]
+  extras: [iis, mssql, outlook, domain-controller, join-domain]
 - template: windows-server
   version: "2025 Core"
   # Built by Packer (packer/build.sh windows-server -var edition=core) on 2026-10-16, with SQL Server's files.
@@ -135,7 +135,7 @@
   username: labadmin
   family: windows
   access: [rdp, ssh, console]
-  extras: [iis, mssql]   # not Outlook: it needs the desktop
+  extras: [iis, mssql, domain-controller, join-domain]   # not Outlook: it needs the desktop
 
 # Windows 11 Enterprise, the 90-day evaluation (packer/windows): no virtual TPM, Setup's hardware checks
 # skipped, so BitLocker, Credential Guard and Windows Hello for Business aren't available. Rebuild it
@@ -151,7 +151,7 @@
   username: labuser
   family: windows
   access: [rdp, ssh, console]
-  extras: [iis, mssql, outlook]
+  extras: [iis, mssql, outlook, join-domain]
 
 # OPNsense: a firewall (packer/opnsense). No cloud-init: scripts/template/opnsense/lab-firstboot sets
 # root's password, SSH key and the host name in its config.xml at first boot (family legacy). Both

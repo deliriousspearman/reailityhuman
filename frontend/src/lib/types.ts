@@ -195,9 +195,9 @@ export interface ExtraOption {
 	help: string;
 	/**
 	 * `hostname`: a DNS name, optionally "*."-prefixed. `text`: checked by the API. `choice`: one of
-	 * `choices`. `boolean`: "yes" or "no".
+	 * `choices`. `boolean`: "yes" or "no". `machine`: the id of a running machine with `extra`.
 	 */
-	type: 'hostname' | 'text' | 'choice' | 'boolean';
+	type: 'hostname' | 'text' | 'choice' | 'boolean' | 'machine';
 	required: boolean;
 	/** Used when left blank. {hostname} is the machine's name; {fqdn} adds PanelConfig.machineDomain. */
 	default: string;
@@ -207,6 +207,8 @@ export interface ExtraOption {
 	choices?: { value: string; label: string }[];
 	/** Shown only when other options of the extra have one of these values. */
 	when?: Record<string, string[]>;
+	/** For `machine`: the extra the chosen machine must have, e.g. domain-controller. */
+	extra?: string;
 }
 
 /** An optional service set up on a machine's first boot (backend/extras.yaml). */

@@ -16,7 +16,8 @@ export const templates: MachineTemplate[] = [
 		category: 'Firewalls and routers',
 		os: 'FreeBSD',
 		description: 'Firewall and router. Put it in front of your other machines to practise rules, NAT and VPNs.',
-		versions: [{ version: '2.8.0' }, { version: '2.7.2' }],
+		// 2.7.2: the last release with an offline installer.
+		versions: [{ version: '2.7.2' }],
 		resources: { cpu: 2, memoryGB: 2, diskGB: 16 },
 		access: ['web', 'ssh', 'console'],
 		credentials: 'admin / pfsense',
@@ -227,20 +228,6 @@ export const templates: MachineTemplate[] = [
 		resources: { cpu: 2, memoryGB: 2, diskGB: 20 },
 		access: ['ssh', 'console'],
 		credentials: 'labuser / set on first deploy',
-	},
-
-	// Windows Server: ready-made domain
-	{
-		id: 'ad-domain',
-		name: 'Active Directory domain',
-		category: 'Windows Server',
-		os: 'Windows',
-		description: 'Windows Server already promoted to a domain controller for lab.example, with sample users, groups and OUs.',
-		versions: [{ version: '2025' }, { version: '2022' }, { version: '2019' }],
-		resources: { cpu: 2, memoryGB: 4, diskGB: 60 },
-		access: ['rdp', 'console'],
-		credentials: 'LAB\\Administrator / set on first deploy',
-		flags: ['licence'],
 	},
 
 	// Firewalls and routers

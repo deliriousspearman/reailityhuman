@@ -832,3 +832,83 @@
       $link = (New-Object -ComObject WScript.Shell).CreateShortcut("$env:PUBLIC\Desktop\Outlook.lnk")
       $link.TargetPath = $exe
       $link.Save()
+
+# Active Directory: a Windows Server machine becomes a domain's first domain controller; other
+# Windows machines join that domain, choosing the controller from the running machines (a machine
+# option: the panel passes its address, domain and sign-in to the script, as dc_*).
+- id: domain-controller
+  name: Domain controller
+  category: Active Directory
+  description: Makes this server the first domain controller of a new Active Directory forest, with its DNS. Its user becomes a domain administrator.
+  ports: [53, 88, 389, 636, 3268]
+  password: true
+  setupMinutes: 20
+  notes:
+    - "Domain {domain} (short name {netbios}): sign in as {netbios}\\{username} with the machine's password, over Remote Desktop or SSH."
+    - "Other Windows machines join it with the Join a domain extra, choosing this machine. They use it for DNS, so keep it running while they're in use."
+    - "Its address came from DHCP. If it changes (say, after a long time off), redeploy the machines in its domain."
+  options:
+    - id: domain
+      label: Domain name
+      type: hostname
+      default: lab.internal
+      help: The domain's DNS name, two labels or more, e.g. corp.lab.internal.
+    - id: netbios
+      label: Short name
+      type: text
+      pattern: "[A-Za-z][A-Za-z0-9-]{0,14}"
+      default: LAB
+      help: The domain's NetBIOS name, as in LAB\user. Up to 15 letters, digits or hyphens.
+  windows:
+    script: |
+      if (-not (Get-Command Install-WindowsFeature -ErrorAction SilentlyContinue)) {
+        throw "A domain controller needs Windows Server."
+      }
+      if ($domain -notlike '*.*' -or $domain.StartsWith('*')) {
+        throw "The domain name needs two labels or more, e.g. lab.internal."
+      }
+      # Already promoted: the first-boot script does the rest (the user into Domain Admins).
+      if ((Get-CimInstance Win32_ComputerSystem).DomainRole -ge 4) { exit 0 }
+      Install-WindowsFeature -Name AD-Domain-Services -IncludeManagementTools | Out-Null
+      # The built-in Administrator becomes the domain's, and promotion wants it to have a strong
+      # password: a random one. It stays switched off, as the first-boot script left it.
+      $random = -join ((48..57) + (65..90) + (97..122) | Get-Random -Count 24 | ForEach-Object { [char]$_ }) + 'aA1!'
+      Get-LocalUser | Where-Object { $_.SID.Value -like 'S-1-5-21-*-500' } |
+        Set-LocalUser -Password (ConvertTo-SecureString $random -AsPlainText -Force)
+      Import-Module ADDSDeployment
+      # Directory Services Restore Mode's password: the machine's.
+      $safe = ConvertTo-SecureString $password -AsPlainText -Force
+      $result = Install-ADDSForest -DomainName $domain -DomainNetbiosName $netbios.ToUpper() -SafeModeAdministratorPassword $safe `
+        -InstallDns -NoRebootOnCompletion -Force -WarningAction SilentlyContinue
+      if ($result.Status -ne 'Success') { throw "Promotion failed: $($result.Message)" }
+      exit 3010
+
+- id: join-domain
+  name: Join a domain
+  category: Active Directory
+  description: Joins this machine to the domain of a domain controller you've deployed, which it then uses for DNS. Domain users can sign in to it.
+  setupMinutes: 5
+  notes:
+    - "Sign in with a domain account, e.g. the domain controller's user as DOMAIN\\user (its page has the details). This machine's own user still works, as .\\{username}."
+  options:
+    - id: dc
+      label: Domain controller
+      type: machine
+      extra: domain-controller
+      help: A running machine with the Domain controller extra.
+  windows:
+    script: |
+      $computer = Get-CimInstance Win32_ComputerSystem
+      if ($computer.PartOfDomain -and $computer.Domain -eq $dc_domain) { exit 0 }
+      # The domain controller answers DNS for the domain, and forwards other names to the LAN's DNS.
+      $adapter = Get-NetAdapter | Where-Object Status -eq 'Up' | Select-Object -First 1
+      Set-DnsClientServerAddress -InterfaceIndex $adapter.ifIndex -ServerAddresses $dc_ip
+      Clear-DnsClientCache
+      $deadline = (Get-Date).AddMinutes(5)
+      while (-not (Resolve-DnsName -Name "_ldap._tcp.dc._msdcs.$dc_domain" -Type SRV -ErrorAction SilentlyContinue)) {
+        if ((Get-Date) -gt $deadline) { throw "Can't find the domain $dc_domain through $dc_name ($dc_ip)." }
+        Start-Sleep -Seconds 10
+      }
+      $credential = New-Object PSCredential("$($dc_netbios.ToUpper())\$dc_username", (ConvertTo-SecureString $dc_password -AsPlainText -Force))
+      Add-Computer -DomainName $dc_domain -Credential $credential -Force -WarningAction SilentlyContinue
+      exit 3010

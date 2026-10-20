@@ -1,0 +1,14 @@
+[Unit]
+Description=Lab panel first boot (Proxmox VE): hostname, password, /etc/hosts
+After=network-online.target
+Wants=network-online.target
+Before=pve-cluster.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/lab-firstboot hosts
+RemainAfterExit=yes
+TimeoutStartSec=5min
+
+[Install]
+WantedBy=multi-user.target

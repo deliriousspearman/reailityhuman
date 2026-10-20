@@ -9,7 +9,7 @@
 # It downloads the ISO, checks its SHA-256, uploads it, then deletes the local copy (--keep keeps
 # it, e.g. to carry it to an offline network). Already on the datastore: nothing to do. The file is
 # saved under the name in isos.txt's URL, or the name given after it (for links that redirect). A
-# compressed one (.bz2 or .xz, as OPNsense publishes it) is checked as downloaded, then unpacked.
+# compressed one (.bz2, .xz or .gz, as OPNsense and pfSense publish theirs) is checked as downloaded, then unpacked.
 #
 # vCenter comes from the environment: GOVC_URL (vCenter's address), GOVC_DATACENTER and
 # GOVC_DATASTORE (default: Datacenter and datastore1); GOVC_INSECURE=1 for a self-signed
@@ -48,6 +48,7 @@ read -r _ url sum file < <(entries | awk -v n="$name" '$1 == n') || die "no ISO 
 file=${file:-${url##*/}}
 iso=${file%.bz2}
 iso=${iso%.xz}
+iso=${iso%.gz}
 
 if ((upload)); then
 if [[ -n $credentials ]]; then
@@ -98,6 +99,7 @@ fi
 case $file in
 	*.bz2) echo "Unpacking $file…"; bunzip2 -f "$STAGING/$file" ;;
 	*.xz) echo "Unpacking $file…"; xz -d -f "$STAGING/$file" ;;
+	*.gz) echo "Unpacking $file…"; gunzip -f "$STAGING/$file" ;;
 esac
 if ! ((upload)); then
 	echo "Done: $STAGING/$iso"

@@ -1,0 +1,22 @@
+# Proxmox VE's installer answers (proxmox.pkr.hcl puts this on a CD labelled PROXMOX-AIS, which the
+# prepared ISO looks for). The password and key are the build's own: clean-proxmox.sh removes both.
+[global]
+keyboard = "en-us"
+country = "us"
+fqdn = "pve-template.lab.example"
+mailto = "root@localhost"
+timezone = "UTC"
+root-password = "${root_password}"
+root-ssh-keys = ["${ssh_key}"]
+reboot-on-error = false
+
+[network]
+source = "from-dhcp"
+
+[disk-setup]
+filesystem = "ext4"
+disk-list = ["sda"]
+
+[first-boot]
+source = "from-iso"
+ordering = "network-online"

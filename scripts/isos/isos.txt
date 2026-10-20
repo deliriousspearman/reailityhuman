@@ -42,3 +42,10 @@ opnsense-26.7  https://pkg.opnsense.org/releases/26.7/OPNsense-26.7-dvd-amd64.is
 # Debian: the netinst ISOs (packer/debian installs the rest from the mirror).
 debian-13        https://cdimage.debian.org/debian-cd/current/amd64/iso-cd/debian-13.7.0-amd64-netinst.iso    https://cdimage.debian.org/debian-cd/current/amd64/iso-cd/SHA256SUMS
 debian-12        https://cdimage.debian.org/cdimage/archive/12.15.0/amd64/iso-cd/debian-12.15.0-amd64-netinst.iso    https://cdimage.debian.org/cdimage/archive/12.15.0/amd64/iso-cd/SHA256SUMS
+# pfSense CE: 2.7.2 is the last release with an offline installer (later ones download as they install).
+# Netgate's mirror; published gzip-compressed, which fetch.sh checks then unpacks.
+pfsense-2.7.2    https://atxfiles.netgate.com/mirror/downloads/pfSense-CE-2.7.2-RELEASE-amd64.iso.gz  https://atxfiles.netgate.com/mirror/downloads/pfSense-CE-2.7.2-RELEASE-amd64.iso.gz.sha256
+proxmox-ve-9.2   https://enterprise.proxmox.com/iso/proxmox-ve_9.2-1.iso    https://enterprise.proxmox.com/iso/SHA256SUMS
+# TrueNAS: each .sha256 next to the ISO holds the hash alone (CORE's names a build path), so pinned here.
+truenas-scale-25.10  https://download.truenas.com/TrueNAS-SCALE-Goldeye/25.10.7/TrueNAS-SCALE-25.10.7.iso  54ce9441ce66966a392e28f63604ca3c2c083d0bec4db7bb5af2f74f7a007c8e
+truenas-core-13.3    https://download.freenas.org/13.3/STABLE/U1.2/x64/TrueNAS-13.3-U1.2.iso  9810e0a64c0460485a3150e90660bfc1442033ca88b9f00d3d761b1bd7848db1

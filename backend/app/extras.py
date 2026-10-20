@@ -40,7 +40,9 @@ def log_file(family: str, extra_id: str) -> str:
 # A DNS name: labels of letters, digits and hyphens (not at either end), optionally "*."-prefixed.
 _LABEL = r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?"
 HOSTNAME_RULE = re.compile(rf"^(?:\*\.)?{_LABEL}(?:\.{_LABEL})*$")
-OPTION_TYPES = ("hostname", "text", "choice", "boolean")
+OPTION_TYPES = ("hostname", "text", "choice", "boolean", "machine")
+# A "machine" option's value: a machine's id (api.new_id).
+MACHINE_ID_RULE = re.compile(r"^m-[0-9a-f]{4}$")
 # Variables every script already has, so no option may be called one of them.
 RESERVED = ("hostname", "username", "password")
 # What a boolean option's value can be given as; it reaches scripts as "yes" or "no".
@@ -189,6 +191,10 @@ class Option:
     # Shown on the deploy form only when other options have these values, e.g. a domain name only
     # with HTTPS ticked. (It still gets its default either way.)
     when: dict[str, tuple[str, ...]] = field(default_factory=dict)
+    # For type "machine": the extra the chosen machine must have (e.g. a domain controller). The
+    # script gets that machine's details as <id>_ip, <id>_name, <id>_username, <id>_password and
+    # <id>_<option> for each of that extra's options (expand()).
+    extra: str = ""
 
 
 @dataclass(frozen=True)
@@ -213,6 +219,8 @@ class Extra:
     # app's admin account. The worker then clears it from vCenter once the machine is set up.
     password: bool = False
     options: tuple[Option, ...] = ()
+    # Minutes a deploy waits for it beyond the usual, e.g. a domain controller's promotion.
+    setup_minutes: int = 0
     # family -> (packages, script)
     families: dict[str, tuple[tuple[str, ...], str]] = field(default_factory=dict)
 
@@ -238,6 +246,7 @@ def extras() -> dict[str, Extra]:
                 pattern=o.get("pattern"),
                 choices=tuple((str(c["value"]), c["label"]) for c in o.get("choices", [])),
                 when={k: tuple(str(v) for v in vs) for k, vs in o.get("when", {}).items()},
+                extra=o.get("extra", ""),
             )
             for o in e.get("options", [])
         )
@@ -246,6 +255,8 @@ def extras() -> dict[str, Extra]:
                 raise ValueError(f"extras.yaml: {e['id']}.{o.id} has unknown type '{o.type}'")
             if o.type == "choice" and o.default not in {v for v, _ in o.choices}:
                 raise ValueError(f"extras.yaml: {e['id']}.{o.id}: a choice needs choices, and a default that's one of them")
+            if o.type == "machine" and (not o.extra or o.default):
+                raise ValueError(f"extras.yaml: {e['id']}.{o.id}: a machine option names its extra, and has no default")
             if o.type == "boolean" and o.default.lower() not in _YES | _NO | {""}:
                 raise ValueError(f"extras.yaml: {e['id']}.{o.id}: a boolean's default is yes or no")
             if unknown := set(o.when) - {other.id for other in options}:
@@ -266,6 +277,7 @@ def extras() -> dict[str, Extra]:
             notes=tuple(_conditional(n) for n in e.get("notes", [])),
             password=bool(e.get("password", False)),
             options=options,
+            setup_minutes=int(e.get("setupMinutes", 0)),
             families={f: (tuple(e[f].get("packages", [])), e[f]["script"]) for f in FAMILIES if f in e},
         )
     return {i: replace(x, conflicts=tuple(y.id for y in out.values() if clashes(x, y))) for i, x in out.items()}
@@ -308,6 +320,9 @@ def _check_value(x: Extra, o: Option, value: str) -> str:
     elif o.type == "choice":
         if value not in {v for v, _ in o.choices}:
             raise ExtraError(f"{x.name}: '{value}' isn't one of the choices for {o.label.lower()}.")
+    elif o.type == "machine":
+        if not MACHINE_ID_RULE.match(value):
+            raise ExtraError(f"{x.name}: choose a machine for {o.label.lower()}.")
     elif o.type == "boolean":
         if value.lower() not in _YES | _NO:
             raise ExtraError(f"{x.name}: {o.label.lower()} is yes or no.")
@@ -335,6 +350,9 @@ def resolve(offered: tuple[str, ...], chosen: list[dict], hostname: str, memory_
             raise ExtraError(f"'{c['id']}' isn't an extra this template offers.")
         if memory_gb is not None and x.min_memory_gb > memory_gb:
             raise ExtraError(f"{x.name} needs at least {x.min_memory_gb} GB of memory, and this machine has {memory_gb} GB.")
+        # A machine joining another's (say, a domain) can't be one itself.
+        if mine := [find(o.extra).name for o in x.options if o.type == "machine" and o.extra in ids]:
+            raise ExtraError(f"{x.name} can't be combined with {', '.join(mine)}: it joins another machine's.")
         if clash := [find(i).name for i in ids if i in x.conflicts]:
             raise ExtraError(f"{x.name} can't be combined with {', '.join(clash)}: they'd use the same port.")
         given = c.get("options") or {}
@@ -344,6 +362,8 @@ def resolve(offered: tuple[str, ...], chosen: list[dict], hostname: str, memory_
         for o in x.options:
             value = str(given.get(o.id) or "").strip()
             if not value:
+                if o.type == "machine":
+                    raise ExtraError(f"{x.name}: choose a machine for {o.label.lower()}.")
                 if o.required:
                     raise ExtraError(f"{x.name}: fill in {o.label.lower()}.")
                 value = fill_default(o.default, hostname) if o.type in ("hostname", "text") else o.default or "no"
@@ -364,8 +384,47 @@ def ps_string(value: str) -> str:
 
 
 def needs_password(chosen: list[dict]) -> bool:
-    """Whether any of these extras' scripts get the machine's password as it is."""
-    return any((x := find(c["id"])) and x.password for c in chosen)
+    """Whether any of these extras' scripts get a password as it is: the machine's, or another
+    machine's through a machine option."""
+    return any((x := find(c["id"])) and (x.password or any(o.type == "machine" for o in x.options)) for c in chosen)
+
+
+def machine_options(chosen: list[dict]) -> list[tuple[Extra, Option, str]]:
+    """The machine options among these (resolved) extras, with the machine id each names."""
+    return [(x, o, c["options"][o.id]) for c in chosen if (x := find(c["id"])) for o in x.options if o.type == "machine"]
+
+
+def check_machine(x: Extra, o: Option, other) -> None:
+    """Whether `other` (a Machine, or None) can be what a machine option names: it exists, has the
+    option's extra, and is running with an address."""
+    wanted = find(o.extra)
+    what = wanted.name.lower() if wanted else o.extra
+    if other is None:
+        raise ExtraError(f"{x.name}: the machine chosen for {o.label.lower()} no longer exists.")
+    if o.extra not in {c["id"] for c in other.extras or []}:
+        raise ExtraError(f"{x.name}: {other.name} isn't a {what}.")
+    if other.state != "running" or not other.ip:
+        raise ExtraError(f"{x.name}: {other.name} isn't running yet. Wait until it's ready, then deploy this.")
+
+
+def expand(chosen: list[dict], machine) -> list[dict]:
+    """The chosen extras with each machine option's details added for the script (see Option.extra):
+    `machine(id)` gives the Machine, or None. Done when the machine is deployed, so a reset applies
+    what was set then."""
+    out = []
+    for c in chosen:
+        x = find(c["id"])
+        options = dict(c["options"])
+        for o in x.options if x else ():
+            if o.type != "machine":
+                continue
+            other = machine(options[o.id])
+            check_machine(x, o, other)
+            options |= {f"{o.id}_ip": other.ip, f"{o.id}_name": other.name, f"{o.id}_username": other.username, f"{o.id}_password": other.password}
+            theirs = next(oc for oc in other.extras if oc["id"] == o.extra)
+            options |= {f"{o.id}_{k}": v for k, v in theirs["options"].items()}
+        out.append({"id": c["id"], "options": options})
+    return out
 
 
 def script(x: Extra, family: str, hostname: str, options: dict[str, str], username: str = "", password: str = "") -> str:

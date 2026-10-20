@@ -1,0 +1,13 @@
+[Unit]
+Description=Lab panel first boot (Proxmox VE): node certificate, SSH key, ready sign
+After=pve-cluster.service pveproxy.service open-vm-tools.service
+Requires=pve-cluster.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/lab-firstboot node
+RemainAfterExit=yes
+TimeoutStartSec=5min
+
+[Install]
+WantedBy=multi-user.target

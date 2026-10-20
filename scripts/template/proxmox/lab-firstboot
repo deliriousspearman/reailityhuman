@@ -1,0 +1,84 @@
+#!/bin/bash
+# The lab panel's first boot for Proxmox VE templates (installed by prepare-proxmox.sh). Proxmox has no
+# cloud-init for itself, so like ../legacy/lab-firstboot this reads the guestinfo.lab.* keys the
+# panel sets (backend/app/cloudinit.py: legacy_guestinfo) through VMware Tools. Two stages:
+#
+#   lab-firstboot hosts   # every boot, before Proxmox's cluster filesystem starts (it needs the node's
+#                         # name to resolve to its own address): /etc/hosts gets the DHCP address;
+#                         # on a new machine, first the hostname (the node's name), root's password and
+#                         # new SSH host keys
+#   lab-firstboot node    # after it has started: the node's certificate for the new name, the old
+#                         # name's leftovers, root's SSH key, then extras.status, which the panel
+#                         # waits for as the sign the machine is ready
+#
+# It acts once per machine (guestinfo.lab.instance); a reset reverts the disk, so it runs again. The
+# panel's user is root, Proxmox's administrator (root@pam in its web interface).
+set -u
+
+DIR=/var/lib/lab-deploy
+LOG_DIR=/var/log/lab-deploy
+mkdir -p "$DIR" "$LOG_DIR"
+chmod 755 "$DIR" "$LOG_DIR"
+exec >>"$LOG_DIR/firstboot.log" 2>&1
+echo "== $(date -u '+%Y-%m-%d %H:%M:%S') lab-firstboot ${1:-}"
+
+rpc() { vmware-rpctool "info-get guestinfo.lab.$1" 2>/dev/null; }
+instance=$(rpc instance)
+
+case ${1:-} in
+hosts)
+	if [ -n "$instance" ] && [ "$(cat "$DIR/instance" 2>/dev/null)" != "$instance" ]; then
+		host=$(rpc hostname)
+		echo "Setting up $instance: host $host"
+		old=$(hostname)
+		[ "$old" != "$host" ] && echo "$old" >"$DIR/old-node"
+		hostnamectl set-hostname "$host"
+		rpc password | sed 's/^/root:/' | chpasswd -e
+		rm -f /etc/ssh/ssh_host_*
+		ssh-keygen -A
+		echo "$instance" >"$DIR/instance.pending"
+	fi
+	# The bridge's address from DHCP (networking.service has brought it up; wait a little for a lease).
+	ip=""
+	for _ in $(seq 60); do
+		ip=$(ip -4 -o addr show dev vmbr0 scope global 2>/dev/null | awk '{ sub(/\/.*/, "", $4); print $4; exit }')
+		[ -n "$ip" ] && break
+		sleep 2
+	done
+	host=$(hostname)
+	if [ -n "$ip" ]; then
+		# One line for this node, replacing any earlier one (by name, or the template's).
+		sed -i -E "/[[:space:]]($host|pve-template)([.[:space:]]|\$)/d" /etc/hosts
+		echo "$ip $host.lab.example $host" >>/etc/hosts
+		echo "$host is $ip"
+	else
+		echo "No address on vmbr0 yet: /etc/hosts unchanged."
+	fi
+	;;
+node)
+	[ -f "$DIR/instance.pending" ] || { echo "Nothing to finish."; exit 0; }
+	if [ -f "$DIR/old-node" ]; then
+		old=$(cat "$DIR/old-node")
+		# The template's node: nothing ran on it, so nothing to move.
+		[ -n "$old" ] && [ "$old" != "$(hostname)" ] && rm -rf "/etc/pve/nodes/$old"
+		rm -f "$DIR/old-node"
+	fi
+	pvecm updatecerts --force
+	# root's keys live in the cluster filesystem (/root/.ssh/authorized_keys links there).
+	key=$(rpc sshkey | base64 -d 2>/dev/null || true)
+	if [ -n "$key" ]; then
+		grep -qxF "$key" /etc/pve/priv/authorized_keys 2>/dev/null || echo "$key" >>/etc/pve/priv/authorized_keys
+	fi
+	systemctl restart pveproxy ssh
+	mv "$DIR/instance.pending" "$DIR/instance"
+	# Empty: no extras on Proxmox. Written last, in one go, readable by the panel.
+	tmp=$(mktemp "$DIR/status.XXXXXX")
+	chmod 644 "$tmp"
+	mv "$tmp" "$DIR/extras.status"
+	echo "Done."
+	;;
+*)
+	echo "usage: lab-firstboot hosts|node" >&2
+	exit 2
+	;;
+esac

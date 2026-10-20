@@ -127,6 +127,8 @@ def extra_out(x: extras.Extra) -> dict:
                 **({"pattern": o.pattern} if o.pattern else {}),
                 **({"choices": [{"value": v, "label": label} for v, label in o.choices]} if o.choices else {}),
                 **({"when": {k: list(vs) for k, vs in o.when.items()}} if o.when else {}),
+                # For a machine option: the extra the machine must have.
+                **({"extra": o.extra} if o.extra else {}),
             }
             for o in x.options
         ],
@@ -290,6 +292,8 @@ def deploy_machine(req: DeployRequest, db: Db) -> dict:
     password = tpl.fixed_password or password
     try:
         chosen = extras.resolve(tpl.extras, [c.model_dump() for c in req.extras], req.name, tpl.memory_gb)
+        for x, o, other_id in extras.machine_options(chosen):
+            extras.check_machine(x, o, db.get(Machine, other_id))
     except extras.ExtraError as e:
         raise HTTPException(422, str(e)) from e
     if db.scalar(select(Machine).where(Machine.name == req.name)):
@@ -334,7 +338,11 @@ def deploy_machine(req: DeployRequest, db: Db) -> dict:
     add_log(db, m, f"Deploy requested by {owner} ({'kept permanently' if req.hours is None else hours_label(req.hours)})", "muted")
     for c in chosen:
         x = extras.find(c["id"])
-        details = ", ".join(f"{o.label.lower()} {c['options'][o.id]}" for o in x.options if c["options"].get(o.id))
+        def shown(o: extras.Option) -> str:
+            value = c["options"][o.id]
+            return (other.name if (other := db.get(Machine, value)) else value) if o.type == "machine" else value
+
+        details = ", ".join(f"{o.label.lower()} {shown(o)}" for o in x.options if c["options"].get(o.id))
         add_log(db, m, f"With {x.name}{f' ({details})' if details else ''}", "muted")
     queue(db, m, "deploy", owner)
     db.refresh(m)
