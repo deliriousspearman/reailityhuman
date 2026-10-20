@@ -72,6 +72,9 @@ iface vmbr0 inet dhcp
 
 source /etc/network/interfaces.d/*
 NET
+# A pending change Proxmox would apply at the next boot, over this (installing Proxmox VE 7 on Debian
+# leaves one).
+rm -f /etc/network/interfaces.new
 update-initramfs -u -k all >/dev/null
 echo "  vmbr0: DHCP, on $name (was $port)"
 
