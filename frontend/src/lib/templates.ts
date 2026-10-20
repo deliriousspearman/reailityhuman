@@ -138,7 +138,7 @@ export const templates: MachineTemplate[] = [
 		os: 'Linux',
 		description: 'Open-source hypervisor, running nested so you can create VMs and containers inside it.',
 		versions: [{ version: '9' }, { version: '8' }, { version: '7', eol: true }],
-		resources: { cpu: 4, memoryGB: 8, diskGB: 64 },
+		resources: { cpu: 4, memoryGB: 6, diskGB: 64 },
 		access: ['web', 'ssh', 'console'],
 		webUrl: 'https://{ip}:8006/',
 		credentials: 'root / set on first deploy',

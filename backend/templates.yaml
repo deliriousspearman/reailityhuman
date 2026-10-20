@@ -199,6 +199,23 @@
   family: vyos
   access: [ssh, console]
 
+# Proxmox VE: a hypervisor, nested (packer/proxmox; the VM exposes hardware virtualisation, so its own
+# VMs run with KVM). No cloud-init for itself: scripts/template/proxmox/lab-firstboot sets the node's
+# name, root's password and key, and keeps /etc/hosts on its DHCP address (family legacy). Web
+# interface on 8006, as root@pam.
+- template: proxmox
+  version: "9"
+  # Built by Packer (packer/build.sh proxmox) on 2026-10-20: Proxmox VE 9.2.
+  vsphere: Labs/Templates/tpl-proxmox-9.2-20261020
+  cpu: 4
+  memoryGB: 6
+  diskGB: 64
+  username: root
+  family: legacy
+  adminGroup: root
+  access: [web, ssh, console]
+  webUrl: "https://{ip}:8006/"
+
 # Kali Linux and Parrot Security: attack boxes, reached over Remote Desktop to their own desktop
 # (packer/kali, or by hand: docs/setup-vsphere.md, "Kali Linux and Parrot Security templates"). Not
 # the desktop extra: they have their own; nor MySQL: Debian has only MariaDB.
