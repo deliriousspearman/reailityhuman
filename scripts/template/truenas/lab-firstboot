@@ -1,5 +1,5 @@
-#!/bin/bash
-# The lab panel's first boot for TrueNAS SCALE templates (installed by prepare-truenas.sh, run by the
+#!/usr/bin/env bash
+# The lab panel's first boot for TrueNAS templates, SCALE and CORE (installed by prepare-truenas.sh, run by the
 # middleware at the end of each boot: an init script, POSTINIT). TrueNAS has no cloud-init, so like
 # ../legacy/lab-firstboot this reads the guestinfo.lab.* keys the panel sets
 # (backend/app/cloudinit.py: legacy_guestinfo) through VMware Tools, and sets through the middleware:
@@ -9,7 +9,7 @@
 #   - new SSH host keys (the template's were deleted), also kept in the database;
 # then writes /var/lib/lab-deploy/extras.status, which the panel waits for as the sign the machine is
 # ready. It acts once per machine (guestinfo.lab.instance); a reset reverts the disk, so it runs again.
-# The panel's user is truenas_admin, TrueNAS's administrator.
+# The panel's user is TrueNAS's administrator: truenas_admin on SCALE, root on CORE.
 set -u
 
 DIR=/var/lib/lab-deploy
@@ -20,6 +20,8 @@ exec >>"$LOG_DIR/firstboot.log" 2>&1
 echo "== $(date -u '+%Y-%m-%d %H:%M:%S') lab-firstboot"
 
 rpc() { vmware-rpctool "info-get guestinfo.lab.$1" 2>/dev/null; }
+# Base64 the same way on SCALE (Linux) and CORE (FreeBSD).
+b64() { openssl base64 -A <"$1"; }
 instance=$(rpc instance)
 if [ -z "$instance" ]; then
 	echo "No panel data (guestinfo.lab.instance): nothing to do."
@@ -37,8 +39,9 @@ set -e
 midclt call network.configuration.update "$(jq -nc --arg h "$host" '{hostname: $h}')" >/dev/null
 id=$(midclt call user.query "$(jq -nc --arg u "$user" '[["username", "=", $u]]')" '{"get": true}' | jq .id)
 midclt call datastore.update account.bsdusers "$id" "$(jq -nc --arg h "$(rpc password)" '{bsdusr_unixhash: $h}')" >/dev/null
-midclt call etc.generate shadow >/dev/null
-key=$(rpc sshkey | base64 -d 2>/dev/null || true)
+# The system's password file, from the database: shadow on SCALE, master.passwd ("user") on CORE.
+if [ "$(uname -s)" = FreeBSD ]; then midclt call etc.generate user >/dev/null; else midclt call etc.generate shadow >/dev/null; fi
+key=$(rpc sshkey | openssl base64 -d -A 2>/dev/null || true)
 if [ -n "$key" ]; then
 	midclt call user.update "$id" "$(jq -nc --arg k "$key" '{sshpubkey: $k}')" >/dev/null
 fi
@@ -48,7 +51,7 @@ tmp=$(mktemp -d)
 update='{}'
 for type in rsa ecdsa ed25519; do
 	ssh-keygen -q -t "$type" -N "" -C "" -f "$tmp/$type"
-	update=$(jq -c --arg k "$(base64 -w0 "$tmp/$type")" --arg p "$(base64 -w0 "$tmp/$type.pub")" \
+	update=$(jq -c --arg k "$(b64 "$tmp/$type")" --arg p "$(b64 "$tmp/$type.pub")" \
 		". + {\"ssh_host_${type}_key\": \$k, \"ssh_host_${type}_key_pub\": \$p}" <<<"$update")
 done
 rm -rf "$tmp"

@@ -93,9 +93,10 @@ source "vsphere-iso" "truenas" {
   CPUs                 = 2
   RAM                  = 8192
   disk_controller_type = ["pvscsi"]
-  # The boot disk, then two data disks for a pool.
+  # Three disks the same size: the installer lists them in its own order and takes the first, which
+  # becomes the boot disk; the other two are for a pool.
   storage {
-    disk_size             = 32768
+    disk_size             = 20480
     disk_thin_provisioned = true
   }
   storage {
@@ -141,7 +142,7 @@ source "vsphere-iso" "truenas" {
   ssh_password    = var.build_password
   ssh_timeout     = "60m"
 
-  shutdown_command    = "sh /tmp/truenas/clean-truenas.sh --yes"
+  shutdown_command    = "bash /tmp/truenas/clean-truenas.sh --yes"
   shutdown_timeout    = "15m"
   create_snapshot     = true
   snapshot_name       = "clean"
@@ -157,7 +158,7 @@ build {
   }
 
   provisioner "shell" {
-    inline          = ["sh /tmp/truenas/prepare-truenas.sh"]
+    inline          = ["bash /tmp/truenas/prepare-truenas.sh"]
     execute_command = "chmod +x {{ .Path }}; env {{ .Vars }} {{ .Path }}"
   }
 

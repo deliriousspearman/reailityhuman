@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Prepares a freshly installed TrueNAS SCALE VM to become a panel template (packer/truenas-scale runs
-# it with sudo, from this folder copied to /tmp/truenas):
+# Prepares a freshly installed TrueNAS VM, SCALE or CORE, to become a panel template (packer/truenas-scale
+# runs it with sudo, packer/truenas-core as root; from this folder copied to /tmp/truenas):
 #
 #   sudo bash prepare-truenas.sh [--dry-run]
 #
@@ -17,18 +17,23 @@ fi
 [[ $EUID -eq 0 ]] || { echo "Run this with sudo." >&2; exit 1; }
 command -v midclt >/dev/null || { echo "This isn't TrueNAS." >&2; exit 1; }
 version=$(cat /etc/version)
-echo "==> TrueNAS SCALE $version"
+if [[ $(uname -s) == FreeBSD ]]; then edition=core admin=root; else edition=scale admin=truenas_admin; fi
+echo "==> TrueNAS ${edition^^} $version"
 
 echo "==> VMware Tools"
 command -v vmware-rpctool >/dev/null || { echo "No vmware-rpctool." >&2; exit 1; }
-systemctl is-active --quiet open-vm-tools || systemctl is-active --quiet vmtoolsd
+pgrep -x vmtoolsd >/dev/null || { echo "VMware Tools (vmtoolsd) isn't running." >&2; exit 1; }
 
 echo "==> SSH"
-midclt call ssh.update '{"passwordauth": true}' >/dev/null
+if [[ $edition == core ]]; then
+	midclt call ssh.update '{"passwordauth": true, "rootlogin": true}' >/dev/null
+else
+	midclt call ssh.update '{"passwordauth": true}' >/dev/null
+	id=$(midclt call user.query '[["username", "=", "truenas_admin"]]' '{"get": true}' | jq .id)
+	midclt call user.update "$id" '{"ssh_password_enabled": true}' >/dev/null
+fi
 midclt call service.update ssh '{"enable": true}' >/dev/null
-id=$(midclt call user.query '[["username", "=", "truenas_admin"]]' '{"get": true}' | jq .id)
-midclt call user.update "$id" '{"ssh_password_enabled": true}' >/dev/null
-echo "  on, with passwords"
+echo "  on, with passwords, for $admin"
 
 echo "==> lab-firstboot"
 install -m 755 "$here/lab-firstboot" /root/lab-firstboot
@@ -38,5 +43,5 @@ if [[ $(midclt call initshutdownscript.query '[["command", "=", "/root/lab-first
 fi
 echo "  installed: runs at the end of each boot, acts once per machine"
 
-printf 'os=truenas-scale %s\nfamily=legacy\nprepared=%s\n' "$version" "$(date -u +%Y-%m-%dT%H:%MZ)" >/root/lab-template
+printf 'os=truenas-%s %s\nfamily=legacy\nprepared=%s\n' "$edition" "$version" "$(date -u +%Y-%m-%dT%H:%MZ)" >/root/lab-template
 echo "==> Done. Run clean-truenas.sh next."

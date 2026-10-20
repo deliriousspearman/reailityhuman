@@ -216,6 +216,38 @@
   access: [web, ssh, console]
   webUrl: "https://{ip}:8006/"
 
+# TrueNAS SCALE: the Linux NAS (packer/truenas-scale). Three 20 GB disks: one boots, two are empty,
+# for a pool. No cloud-init: scripts/template/truenas/lab-firstboot (a middleware init script) sets the
+# hostname, truenas_admin's password in TrueNAS's database, its key and new SSH host keys (family
+# legacy). Its web interface signs in as truenas_admin.
+- template: truenas-scale
+  version: "25.10"
+  # Built by Packer (packer/build.sh truenas-scale) on 2026-10-20: 25.10.7.
+  vsphere: Labs/Templates/tpl-truenas-scale-25.10-20261020
+  cpu: 2
+  memoryGB: 8
+  diskGB: 60
+  username: truenas_admin
+  family: legacy
+  adminGroup: builtin_administrators
+  access: [web, ssh, console]
+
+# TrueNAS CORE: the FreeBSD NAS, in maintenance mode (packer/truenas-core). Three 20 GB disks: one
+# boots, two are empty, for a pool. No cloud-init: scripts/template/truenas/lab-firstboot (a
+# middleware init script) sets the hostname, root's password in TrueNAS's database, its key and new
+# SSH host keys (family legacy). Its web interface signs in as root.
+- template: truenas-core
+  version: "13.3"
+  # Built by Packer (packer/build.sh truenas-core) on 2026-10-20: 13.3-U1.2.
+  vsphere: Labs/Templates/tpl-truenas-core-13.3-20261020
+  cpu: 2
+  memoryGB: 8
+  diskGB: 60
+  username: root
+  family: legacy
+  adminGroup: wheel
+  access: [web, ssh, console]
+
 # Kali Linux and Parrot Security: attack boxes, reached over Remote Desktop to their own desktop
 # (packer/kali, or by hand: docs/setup-vsphere.md, "Kali Linux and Parrot Security templates"). Not
 # the desktop extra: they have their own; nor MySQL: Debian has only MariaDB.

@@ -18,6 +18,8 @@ as building by hand ([setup-vsphere.md](setup-vsphere.md), parts 2, 5 and 6), wh
 | Windows Server 2022, 2019 | `packer/build.sh windows-server -var version=2022` (or 2019) | ~45–70 min |
 | Windows 11 Enterprise (evaluation) | `packer/build.sh windows` | ~37 min |
 | OPNsense 26.7 | `packer/build.sh opnsense` | ~14 min |
+| pfSense CE 2.7.2 | `packer/build.sh pfsense` | ~10 min |
+| Proxmox VE 9 | `packer/proxmox/prepare-iso.sh` once, then `packer/build.sh proxmox` | ~15 min |
 | VyOS 1.5 rolling | `packer/vyos/build-iso.sh` once, then `packer/build.sh vyos` | ~8 min |
 | Metasploitable 2 | `packer/metasploitable/import-ms2.sh` | ~15 min |
 | Metasploitable 3 (Ubuntu 14.04) | `packer/metasploitable/import-ms3.sh` | ~30 min |
@@ -66,6 +68,22 @@ Rebuild it before the evaluation runs out (the date is on the desktop).
 into its `config.xml` at first boot. Its build types the installer's answers, and first switches the
 network adapters off for the live system at the boot loader: OPNsense's default would serve DHCP on
 the lab network. If `live.sh` ever finds an adapter in the live system, it powers the VM off.
+
+**pfSense** works the same way, with two differences. Its installer never brings the network up, so
+the build only has to keep the installed system from starting with pfSense's defaults (interfaces
+named `em0`/`em1`, which stop the first boot to ask for interfaces, and a DHCP server on LAN): it
+picks the installer's Shell at the end, where `live.sh` puts the lab's `config.xml` on the new disk.
+Its `lab-firstboot` runs at the end of each boot (the configuration's `shellcmd`) and sets the host
+name and admin's password and key through pfSense's own PHP functions; pfSense takes the panel's
+SHA-512 hash as it is. 2.7.2 is the last release whose installer works offline.
+
+**Proxmox VE** installs unattended with Proxmox's own automated installer: `prepare-iso.sh` (once per
+release, where `fetch.sh` runs) makes an ISO that reads its answers from a CD the build attaches, and
+adds a first-boot script that installs VMware Tools. The VM has nested virtualisation on. Its
+`lab-firstboot` (`scripts/template/proxmox/`, family `legacy`) runs in two parts around Proxmox's
+cluster filesystem: before it, the node's name, root's password, and `/etc/hosts` pointing at the
+machine's DHCP address (Proxmox won't start otherwise); after it, the node's certificate and root's
+SSH key. The bridge `vmbr0` takes its address from DHCP.
 
 **VyOS** builds from our own ISO (part 2), whose cloud-init takes the panel's settings from vCenter
 (the `vyos` family): the user through cloud-config `users` (with none there, VyOS adds `vyos` /
@@ -220,6 +238,9 @@ packer/build.sh windows-server                        # Desktop Experience: with
 packer/build.sh windows-server -var edition=core      # Server Core: SQL Server, no Office
 packer/build.sh windows                               # Windows 11: with Office and SQL Server
 packer/build.sh opnsense
+packer/build.sh pfsense
+packer/proxmox/prepare-iso.sh --credentials ~/.config/lab-deploy/vcenter-build   # once per release
+packer/build.sh proxmox
 packer/build.sh vyos                                  # after build-iso.sh (part 2)
 packer/build.sh kali
 packer/parrot/import-base.sh ~/Parrot-security-7.4_amd64.ova --credentials ~/.config/lab-deploy/vcenter-build

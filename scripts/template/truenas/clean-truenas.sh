@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
-# Removes a prepared TrueNAS SCALE VM's identity and the build's access, then powers it off, ready to
-# become a panel template (packer/truenas-scale runs it with sudo as the build's shutdown):
+# Removes a prepared TrueNAS VM's identity and the build's access, then powers it off, ready to become a
+# panel template (packer/truenas-scale and truenas-core run it as root, as the build's shutdown):
 #
 #   sudo bash clean-truenas.sh --yes
 #
-# It locks truenas_admin (no password, no key, sudo with a password again: each machine sets its own
+# It locks the administrator, truenas_admin on SCALE or root on CORE (no password, no key; on SCALE,
+# sudo with a password again: each machine sets its own
 # from lab-firstboot), deletes the SSH host keys (lab-firstboot makes each machine its own), and puts
 # the hostname back; then the panel's first-boot markers, logs and history.
 set -euo pipefail
@@ -12,11 +13,16 @@ set -euo pipefail
 [[ ${1:-} == --yes ]] || { echo "This locks truenas_admin and powers the VM off: run it with --yes." >&2; exit 1; }
 [[ $EUID -eq 0 ]] || { echo "Run this with sudo." >&2; exit 1; }
 
-echo "==> truenas_admin: no password, no key"
-id=$(midclt call user.query '[["username", "=", "truenas_admin"]]' '{"get": true}' | jq .id)
-midclt call user.update "$id" '{"sshpubkey": null, "sudo_commands_nopasswd": []}' >/dev/null
+if [[ $(uname -s) == FreeBSD ]]; then admin=root; else admin=truenas_admin; fi
+echo "==> $admin: no password, no key"
+id=$(midclt call user.query "$(jq -nc --arg u "$admin" '[["username", "=", $u]]')" '{"get": true}' | jq .id)
+if [[ $admin == root ]]; then
+	midclt call user.update "$id" '{"sshpubkey": null}' >/dev/null
+else
+	midclt call user.update "$id" '{"sshpubkey": null, "sudo_commands_nopasswd": []}' >/dev/null
+fi
 midclt call datastore.update account.bsdusers "$id" '{"bsdusr_unixhash": "*", "bsdusr_smbhash": "*"}' >/dev/null
-midclt call etc.generate shadow >/dev/null
+if [[ $admin == root ]]; then midclt call etc.generate user >/dev/null; else midclt call etc.generate shadow >/dev/null; fi
 
 echo "==> Identity and traces"
 midclt call network.configuration.update '{"hostname": "truenas"}' >/dev/null
@@ -28,4 +34,4 @@ echo "cleaned=$(date -u +%Y-%m-%dT%H:%MZ)" >>/root/lab-template
 
 echo "==> Powering off"
 sync
-systemctl poweroff
+if [[ $(uname -s) == FreeBSD ]]; then shutdown -p now; else systemctl poweroff; fi

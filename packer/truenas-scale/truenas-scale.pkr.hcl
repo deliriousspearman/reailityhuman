@@ -165,8 +165,9 @@ build {
   }
 
   provisioner "shell" {
-    inline          = ["bash /tmp/truenas/prepare-truenas.sh"]
-    execute_command = "chmod +x {{ .Path }}; sudo env {{ .Vars }} {{ .Path }}"
+    inline = ["bash /tmp/truenas/prepare-truenas.sh"]
+    # Through bash: /tmp is mounted noexec, and TrueNAS's sudo (log_subcmds) stops a script run directly.
+    execute_command = "sudo bash {{ .Path }}"
   }
 
   post-processor "manifest" {
