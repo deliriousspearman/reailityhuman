@@ -96,7 +96,7 @@ variable "build_password" {
 
 locals {
   isos = {
-    "centos-stream" = "CentOS-Stream-9-20261013.0-x86_64-boot.iso"
+    "centos-stream" = "CentOS-Stream-9-latest-x86_64-boot.iso"
     "rocky"         = "Rocky-9.8-x86_64-boot.iso"
     "alma"          = "AlmaLinux-9.8-x86_64-boot.iso"
   }

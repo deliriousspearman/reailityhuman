@@ -56,12 +56,14 @@ while read -r name url sum file; do
 	file=${file:-${url##*/}}
 	[[ $file =~ \.(bz2|xz|gz)$ ]] && continue
 	if [[ $sum == http* ]]; then
-		sum=$(curl -fsSL "$sum" | awk -v f="$file" '
+		list=$sum
+		sum=$(curl -fsSL "$list" | awk -v f="$file" '
 			$1 == "SHA256" && $2 == "(" f ")" && $3 == "=" { print $4; exit }
-			{ n = $2; sub(/^\*/, "", n) } n == f { print $1; exit }')
+			{ n = $2; sub(/^\*/, "", n) } n == f { print $1; exit }' || true)
+		[[ -n $sum ]] || echo "  $name: no checksum for $file in $list (isos.txt out of date?)" >&2
 	fi
 	[[ $sum =~ ^[0-9a-fA-F]{64}$ ]] || continue
-	size=$(curl -fsSIL "$url" | tr -d '\r' | awk 'tolower($1) == "content-length:" { n = $2 } END { print n + 0 }')
+	size=$(curl -fsSIL "$url" | tr -d '\r' | awk 'tolower($1) == "content-length:" { n = $2 } END { printf "%.0f", n }' || true)
 	echo "$name $file $size ${sum,,}"
 done < <(grep -vE '^\s*(#|$)' "$repo/scripts/isos/isos.txt") >"$out/repo/deploy/install/isos.sha256"
 echo "  $(wc -l <"$out/repo/deploy/install/isos.sha256") ISOs"
