@@ -967,7 +967,9 @@
       # Then Exchange's setup, as the domain administrator: it prepares the schema and the domain, which
       # the machine's own account can't. A scheduled task runs it as that user, and this waits for it.
       function Invoke-AsAdmin([string]$Name, [string]$Command, [int]$Hours) {
-        $action = New-ScheduledTaskAction -Execute 'cmd.exe' -Argument "/c $Command"
+        # The whole command in one more pair of quotes: cmd.exe strips the first and last quote of
+        # what follows /c when it starts with one.
+        $action = New-ScheduledTaskAction -Execute 'cmd.exe' -Argument "/c `"$Command`""
         Register-ScheduledTask -TaskName $Name -Action $action -User $admin -Password $dc_password -RunLevel Highest -Force | Out-Null
         Start-ScheduledTask -TaskName $Name
         Start-Sleep -Seconds 10
