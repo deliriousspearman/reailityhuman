@@ -244,7 +244,7 @@ export const templates: MachineTemplate[] = [
 		resources: { cpu: 1, memoryGB: 1, diskGB: 1 },
 		access: ['web', 'ssh', 'console'],
 		webUrl: 'http://{ip}/',
-		credentials: 'admin / (no password)',
+		credentials: 'admin / mikrotik-lab',
 	},
 
 	// Security

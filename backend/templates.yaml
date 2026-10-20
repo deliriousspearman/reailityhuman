@@ -169,6 +169,23 @@
   adminGroup: admins
   access: [web, ssh, console]
 
+# MikroTik CHR: RouterOS 7 for VMs (packer/mikrotik/import-chr.sh: MikroTik's image, with admin's
+# password set). RouterOS can't take the panel's settings, so it's a complete image (family image)
+# with the same sign-in on every machine. ether1 and ether2 take addresses by DHCP on the lab network.
+# The free licence limits each interface to 1 Mbit/s.
+- template: mikrotik
+  version: "7"
+  # Imported on 2026-10-20 from chr-7.24.5.vmdk.zip.
+  vsphere: Labs/Templates/tpl-mikrotik-7.24.5-20261020
+  cpu: 1
+  memoryGB: 1
+  diskGB: 1
+  username: admin
+  password: mikrotik-lab
+  family: image
+  access: [web, ssh, console]
+  webUrl: http://{ip}/
+
 # OPNsense: a firewall (packer/opnsense). No cloud-init: scripts/template/opnsense/lab-firstboot sets
 # root's password, SSH key and the host name in its config.xml at first boot (family legacy). Both
 # adapters are DHCP clients on the lab network for now, with no DHCP server; WAN lets in the web UI,
