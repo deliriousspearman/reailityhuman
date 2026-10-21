@@ -45,27 +45,33 @@ if ((DRY_RUN)); then
 fi
 
 if [[ $OS == centos ]]; then
-	echo "==> Packages (from vault.centos.org)"
+	echo "==> Packages (from ${LAB_VAULT:-vault.centos.org})"
 	# The mirrorlist service is gone: the last release's packages live on the vault.
 	case $VERSION in
 	6) release=6.10 ;;
 	8) release=8.5.2111 ;;
 	*) release=$(grep -oE '[0-9]+\.[0-9]+\.[0-9]+' /etc/redhat-release || echo 7.9.2009) ;;
 	esac
+	# LAB_VAULT: a LAN mirror of this release's vault folder instead (offline builds).
+	vault=${LAB_VAULT:-http://vault.centos.org/$release}
+	vault=${vault%/}
 	for repo in /etc/yum.repos.d/CentOS-*.repo; do
 		# 6 and 7 name the release folder centos/$releasever; 8, $contentdir/$releasever.
 		sed -i -e 's/^mirrorlist=/#mirrorlist=/' \
-			-e "s|^#\?baseurl=http://mirror.centos.org/centos/\$releasever/|baseurl=http://vault.centos.org/$release/|" \
-			-e "s|^#\?baseurl=http://mirror.centos.org/\$contentdir/\$releasever/|baseurl=http://vault.centos.org/$release/|" "$repo"
+			-e "s|^#\?baseurl=http://mirror.centos.org/centos/\$releasever/|baseurl=$vault/|" \
+			-e "s|^#\?baseurl=http://mirror.centos.org/\$contentdir/\$releasever/|baseurl=$vault/|" "$repo"
 	done
 	if ((VERSION == 6)); then
-		# CentOS 6 has no VMware Tools of its own: EPEL's archived ones.
-		cat >/etc/yum.repos.d/epel-archive.repo <<'REPO'
+		# CentOS 6 has no VMware Tools of its own: EPEL's archived ones (LAB_EPEL6: a LAN mirror of
+		# them instead), checked with EPEL 6's key, which this folder carries (fingerprint
+		# 8C3B E96A F230 9184 DA5C 0DAE 3B49 DF2A 0608 B895).
+		install -m 644 "$(dirname "$0")/RPM-GPG-KEY-EPEL-6" /etc/pki/rpm-gpg/RPM-GPG-KEY-EPEL-6
+		cat >/etc/yum.repos.d/epel-archive.repo <<REPO
 [epel-archive]
 name=EPEL 6 (archived)
-baseurl=http://archives.fedoraproject.org/pub/archive/epel/6/$basearch/
+baseurl=${LAB_EPEL6:-http://archives.fedoraproject.org/pub/archive/epel/6/\$basearch/}
 gpgcheck=1
-gpgkey=https://dl.fedoraproject.org/pub/epel/RPM-GPG-KEY-EPEL-6
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-EPEL-6
 REPO
 	fi
 	yum -y -q clean all

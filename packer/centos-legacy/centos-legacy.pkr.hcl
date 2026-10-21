@@ -166,7 +166,7 @@ build {
   }
 
   provisioner "shell" {
-    inline = ["sudo bash /tmp/legacy/prepare-legacy.sh"]
+    inline = ["sudo LAB_VAULT=${local.vault} LAB_EPEL6=${var.epel6} bash /tmp/legacy/prepare-legacy.sh"]
   }
 
   post-processor "manifest" {
