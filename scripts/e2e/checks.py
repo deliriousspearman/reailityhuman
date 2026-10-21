@@ -54,7 +54,50 @@ CASES: dict[str, list[dict]] = {
     ],
     "sqlite": [{"options": {"sample_data": "yes"}, "checks": [("ssh", "sqlite3 ~/chinook.db 'SELECT count(*) FROM Track'", CHINOOK_TRACKS)]}],
     "mail": [{"options": {}, "checks": [("tcp", 25), ("tcp", 143), ("tcp", 587), ("tcp", 993), ("http", "http", 80, "/", "Roundcube")]}],
+    # Full mail servers: webmail, and the user's mailbox over IMAP with the machine's password.
+    "iredmail": [
+        {
+            "options": {"users": "alice"},
+            "checks": [
+                ("tcp", 25), ("tcp", 587), ("tcp", 993),
+                ("http", "https", 443, "/mail/", "Roundcube"),
+                ("http", "https", 443, "/iredadmin/", "iRedAdmin"),
+                ("ssh", "curl -sk imaps://127.0.0.1/ -u {username}@lab.example:{password}", "INBOX"),
+                ("ssh", "curl -sk imaps://127.0.0.1/ -u alice@lab.example:{password}", "INBOX"),
+            ],
+        }
+    ],
+    "zimbra": [
+        {
+            "options": {"users": "alice"},
+            "checks": [
+                ("tcp", 25), ("tcp", 993), ("tcp", 7071),
+                ("http", "https", 443, "/", "Zimbra"),
+                ("ssh", "curl -sk imaps://127.0.0.1/ -u {username}@lab.example:{password}", "INBOX"),
+                ("ssh", "curl -sk imaps://127.0.0.1/ -u alice@lab.example:{password}", "INBOX"),
+            ],
+        }
+    ],
     "ftp": [{"options": {}, "checks": [("tcp", 21)]}],
+    "minio": [
+        {
+            "options": {"bucket": "e2e"},
+            "checks": [
+                ("http", "http", 9000, "/minio/health/live", None),
+                ("http", "http", 9001, "/", "MinIO Console"),
+                ("ssh", "mc ls lab", "e2e/"),
+                ("ssh", "mc admin info lab", "online"),
+            ],
+        }
+    ],
+    "python": [
+        {"options": {"version": "3.15"}, "checks": [("ssh", "python3.15 -c 'import ssl, sys; print(sys.version)'", "3.15.0")]},
+        {"options": {"version": "3.8"}, "checks": [("ssh", "pip3.8 --version", "python 3.8")]},
+        {
+            "options": {"version": "2.7", "make_default": "yes"},
+            "checks": [("ssh", "python --version 2>&1; python -c 'import ssl; print(ssl.OPENSSL_VERSION)'", "Python 2.7.18"), ("ssh", "pip2 --version", "python 2.7")],
+        },
+    ],
     "desktop": [{"options": {}, "checks": [("tcp", 3389)]}],
     "iis": [{"options": {}, "checks": [("http", "http", 80, "/", None)]}],
     # Docker and the container apps (their images are in the template; nothing is pulled).
