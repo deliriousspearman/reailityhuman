@@ -162,16 +162,11 @@ two need a way to read them: an agent or a check on the PC, and the DHCP server'
   the offline install's current work, before MinIO.
 - **Metasploitable 3 (Windows):** Rapid7's image as it is; its expired evaluation shuts it down
   hourly, which the catalogue says ("Shuts down hourly").
-- **MinIO:** an extra, built from source at RELEASE.2025-04-22 (the last free release with the full
-  admin console; MinIO's binaries and images are no longer published, and its repository is archived),
-  with `mc`. Alternatives if needed: RustFS, Garage, SeaweedFS.
-- **iRedMail 1.8.8:** an extra on Ubuntu 24.04 and 22.04 and Debian 12 (a full mail stack: Postfix,
-  Dovecot, Roundcube, SOGo, iRedAdmin, spam and virus filtering). Clashes with the Mail server extra and
-  the web extras. 4 GB.
-- **Zimbra 8.8.15 GA (open source):** its own template on Ubuntu 20.04, unpatched on purpose (known
-  vulnerabilities, for practice); configured at first boot (domain, admin password). 8 GB.
-- **Python versions:** an extra with a version choice (uv's standalone builds, baked in for offline),
-  on Ubuntu and Kali first; the system's python3 untouched. Waiting on which versions, and one or several.
+- **MinIO, iRedMail, Zimbra and Python versions** (2026-10-21): extras `minio` (RELEASE.2025-04-22,
+  the last with the full console, and `mc`, built from source), `iredmail` (1.8.8, on Ubuntu 24.04 and
+  26.04, Debian 12 and 13; installed at first boot from what the template keeps, so offline too) and
+  `python` (one of 2.7 and 3.8–3.15 per machine, beside the system's); and a Zimbra 8.8.15 GA template
+  (Ubuntu 20.04, unpatched on purpose, configured at first boot). See build-templates.md.
 - **Mail, suggested:** Mailpit (a mail catcher for apps) and GoPhish (phishing exercises), both small
   Docker extras; Mailcow for a realistic organisation mail server.
 

@@ -61,6 +61,8 @@ It gathers:
 **What `media/` holds:**
 - WordPress, Nextcloud and Chinook (the databases' sample data);
 - the container apps' images: Juice Shop, DVWA, Uptime Kuma, Grafana, Vaultwarden and Gitea;
+- Python 2.7 to 3.15, iRedMail with what its installer fetches, Zimbra 8.8.15's tarball, and MinIO
+  and `mc` (built from source: about 12 minutes and 3 GB free);
 - Cloudbase-Init and Exchange's prerequisites;
 - VMware Tools for OPNsense and pfSense;
 - Packer;
@@ -208,6 +210,7 @@ What each mirror must hold, by template. The install checks each one for the fil
 | `centos_vault` | vault.centos.org | CentOS 6–8, XCP-ng (its VMware Tools) | `<release>/…/repodata/repomd.xml` |
 | `epel_archive` | archives.fedoraproject.org/pub/archive/epel | CentOS 6 | `6/x86_64/repodata/repomd.xml` |
 | `proxmox` | download.proxmox.com/debian | Proxmox VE 7–9 | `pve/dists/<codename>/Release` |
+| `zimbra` | repo.zimbra.com (`apt/87` and `apt/8815`, focal) | Zimbra 8.8.15 | `apt/8815/dists/focal/Release` |
 
 These need no mirror:
 - **Windows, TrueNAS and VyOS:** their ISOs hold everything.

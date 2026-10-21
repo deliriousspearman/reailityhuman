@@ -61,6 +61,17 @@ isos = ["ubuntu-20.04"]
 mirrors = ["ubuntu:dists/focal/Release"]
 extras = true
 
+# Zimbra 8.8.15: Ubuntu 20.04 with Zimbra installed (its extra, zimbra, configures it). Its third-party
+# packages come from Zimbra's apt repository: the zimbra mirror.
+[[template]]
+id = "zimbra-8.8.15"
+catalogue = "zimbra 8.8.15"
+build = "packer/build.sh ubuntu"
+vars = ["zimbra=true", "version=20.04", "iso=ubuntu-20.04.6-live-server-amd64.iso", "apt_mirror={mirror.ubuntu}", "media_url={media}", "zimbra_mirror={mirror.zimbra}"]
+isos = ["ubuntu-20.04"]
+mirrors = ["ubuntu:dists/focal/Release", "zimbra:apt/8815/dists/focal/Release"]
+media = ["linux/zimbra/zcs-8.8.15_GA_4179.UBUNTU20_64.20211118033954.tgz"]
+
 [[template]]
 id = "ubuntu-18.04"
 catalogue = "ubuntu 18.04"
@@ -416,6 +427,10 @@ uptime-kuma = ["linux/docker/uptime-kuma.tar"]
 grafana = ["linux/docker/grafana.tar"]
 vaultwarden = ["linux/docker/vaultwarden.tar"]
 gitea = ["linux/docker/gitea.tar"]
+minio = ["linux/minio/minio", "linux/minio/mc"]
+python = ["linux/python/Python-2.7.18.tgz", "linux/python/openssl-1.1.1w.tar.gz"]
+iredmail = ["linux/iredmail/iRedMail-1.8.8.tar.gz"]
+zimbra = ["linux/zimbra/zcs-8.8.15_GA_4179.UBUNTU20_64.20211118033954.tgz"]
 outlook = ["windows/office/setup.exe"]
 mssql = ["iso:sql-server-2025", "windows/chinook/Chinook_SqlServer.sql"]
 

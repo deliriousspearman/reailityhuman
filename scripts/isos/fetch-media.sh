@@ -6,9 +6,10 @@
 #
 # It fills <folder> with, each checked against its published or pinned checksum:
 #   linux/     WordPress, WP-CLI, Nextcloud, Chinook, the container apps' Docker images (if this
-#              machine has Docker), the Pythons (2.7-3.15), iRedMail, and MinIO and mc (built here
-#              from source: 5-15 minutes, 3 GB free), for prepare.sh. Serve this folder's parent on a
-#              LAN web server and pass the address to the Linux builds: -var media_url=http://…
+#              machine has Docker), the Pythons (2.7-3.15), iRedMail, Zimbra 8.8.15's tarball (its
+#              template's other packages come from a mirror of repo.zimbra.com), and MinIO and mc
+#              (built here from source: 5-15 minutes, 3 GB free), for prepare.sh. Serve this folder's
+#              parent on a LAN web server and pass the address to the Linux builds: -var media_url=http://…
 #   windows/   Cloudbase-Init, Chinook's SQL Server script and Exchange's prerequisites (Visual C++
 #              2012 and 2013, URL Rewrite). Pass the folder to the Windows build:
 #              -var media_dir=<folder>. Office's files go in windows/office (see its README.txt).
@@ -28,7 +29,7 @@ images=0
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 prepare=$here/../template/prepare.sh
 packer_dir=$here/../../packer
-mkdir -p "$out"/{linux/{wordpress,wp-cli,nextcloud,chinook,docker,python,iredmail,minio},windows/{cloudbase-init,chinook,office,exchange},packer}
+mkdir -p "$out"/{linux/{wordpress,wp-cli,nextcloud,chinook,docker,python,iredmail,minio,zimbra},windows/{cloudbase-init,chinook,office,exchange},packer}
 out=$(cd "$out" && pwd)
 
 # What prepare.sh and the Windows build use: keep in step with them.
@@ -105,6 +106,12 @@ tar -xzOf "$out/linux/iredmail/iRedMail-1.8.8.tar.gz" --wildcards '*/pkgs/pkgs.s
 	get "https://dl.iredmail.org/yum/misc/${file#misc/}" "$out/linux/iredmail/${file#misc/}"
 	check "$out/linux/iredmail/${file#misc/}" "$sum" sha256
 done
+
+step "Linux: Zimbra 8.8.15 GA, for the Zimbra template (scripts/template/zimbra/prepare-zimbra.sh)"
+zimbra=$here/../template/zimbra/prepare-zimbra.sh
+zcs=$(grep -oE '^TARBALL=[^ ]+' "$zimbra" | cut -d= -f2).tgz
+get "https://files.zimbra.com/downloads/8.8.15_GA/$zcs" "$out/linux/zimbra/$zcs"
+check "$out/linux/zimbra/$zcs" "$(grep -oE '^SHA256=[0-9a-f]{64}' "$zimbra" | cut -d= -f2)" sha256
 
 step "Linux: MinIO and mc, built from source (scripts/template/build-minio.sh)"
 if [[ -s $out/linux/minio/SHA256SUMS ]] && (cd "$out/linux/minio" && sha256sum -c --quiet SHA256SUMS 2>/dev/null); then

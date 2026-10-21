@@ -35,6 +35,7 @@ centos_stream = "http://mirror.lab.example/centos-stream"   # as mirror.stream.c
 centos_vault = "http://mirror.lab.example/centos-vault"     # as vault.centos.org (CentOS 6, 7, 8)
 epel_archive = "http://mirror.lab.example/epel-archive"     # as archives.fedoraproject.org/pub/archive/epel (CentOS 6)
 proxmox = "http://mirror.lab.example/proxmox"               # as download.proxmox.com/debian
+zimbra = "http://mirror.lab.example/zimbra"                 # as repo.zimbra.com (apt/87 and apt/8815, focal)
 # internet = false
 
 [templates]

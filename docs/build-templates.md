@@ -25,6 +25,7 @@ as building by hand ([setup-vsphere.md](setup-vsphere.md), parts 2, 5 and 6), wh
 | XCP-ng 8.3 | `packer/build.sh xcp-ng -var http_ip=<this machine's address>` | ~8 min |
 | MikroTik CHR 7 | `packer/mikrotik/import-chr.sh` | ~5 min |
 | Exchange Server SE | `packer/build.sh windows-server -var exchange=true -var office=false -var sql_server=false` | ~40 min |
+| Zimbra 8.8.15 (Ubuntu 20.04) | `packer/build.sh ubuntu -var zimbra=true -var version=20.04 -var iso=ubuntu-20.04.6-live-server-amd64.iso` | ~30 min |
 | TrueNAS SCALE 25.10 | `packer/build.sh truenas-scale` | ~25 min |
 | TrueNAS CORE 13.3 | `packer/build.sh truenas-core` | ~25 min |
 | VyOS 1.5 rolling | `packer/vyos/build-iso.sh` once, then `packer/build.sh vyos` | ~8 min |
@@ -136,6 +137,20 @@ features, Visual C++ 2012 and 2013, URL Rewrite and UCMA). Its Exchange extra jo
 controller's domain (deploy one first: Windows Server with the Domain controller extra) and runs setup
 as that controller's user, who's in Schema Admins and Enterprise Admins. Without a product key it's a
 180-day trial.
+
+**Zimbra 8.8.15** has a template of its own too: Ubuntu 20.04 built with `-var zimbra=true`, which runs
+`prepare.sh --extras=zimbra` and so `scripts/template/zimbra/prepare-zimbra.sh`: Zimbra's GA tarball
+(build 4179, none of the later patches), installed but not configured, with its third-party packages
+from Zimbra's apt repository (repo.zimbra.com, still up; offline, `-var zimbra_mirror=` a mirror of
+it). Its Zimbra extra configures it at each machine's first boot (`zmsetup.pl -c`, about 20 minutes)
+for the machine's name and mail domain, its user the administrator. No other extras go in it.
+
+**MinIO** (an extra) has no published binaries any more: `scripts/template/build-minio.sh` builds the
+April 2025 release and `mc` from source with Go, during the template's build (about 12 minutes; it fits
+the 2 GB build VM), or offline into the media folder. **Python** (an extra) keeps 2.7 to 3.15 in the
+template: 3.x as python-build-standalone's builds, 2.7 built there from source with OpenSSL 1.1.1.
+**iRedMail** (an extra on Ubuntu 24.04 and 26.04, Debian 12 and 13) keeps its installer and the packages
+it installs in the template, and installs at first boot from those alone.
 
 **VyOS** builds from our own ISO (part 2), whose cloud-init takes the panel's settings from vCenter
 (the `vyos` family): the user through cloud-config `users` (with none there, VyOS adds `vyos` /
@@ -260,8 +275,9 @@ internet, gather them first on a machine with internet, and carry them across:
    scripts/isos/fetch-media.sh /path/to/lab-media
    ```
 
-   About 3 GB: WordPress, WP-CLI, Nextcloud, Chinook and the container apps' Docker images
-   (`linux/`, the images only if the machine running it has Docker); Cloudbase-Init and Chinook for
+   About 4 GB: WordPress, WP-CLI, Nextcloud, Chinook and the container apps' Docker images (the
+   images only if the machine running it has Docker), the Pythons, iRedMail, Zimbra's tarball, and
+   MinIO and `mc` built from source (`linux/`); Cloudbase-Init and Chinook for
    SQL Server (`windows/`); Packer and its plugin (`packer/`); and `SHA256SUMS` of all of it. Check
    the copy on arrival with `cd lab-media && sha256sum -c SHA256SUMS`.
 2. **Office's files**, for the Outlook extra: on a Windows PC with internet, as in

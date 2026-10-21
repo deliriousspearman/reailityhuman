@@ -35,7 +35,7 @@ FIELDS = [
     ("media", "port", "Port the installer serves the media folder on", 8690),
 ]
 MIRRORS = ["ubuntu", "debian", "debian_security", "debian_archive", "kali", "parrot", "rocky", "alma",
-           "centos_stream", "centos_vault", "epel_archive", "proxmox"]
+           "centos_stream", "centos_vault", "epel_archive", "proxmox", "zimbra"]
 
 
 class ConfigError(Exception):
