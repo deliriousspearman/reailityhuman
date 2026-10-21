@@ -6,6 +6,7 @@
 	import { templateFor } from '$lib/templates';
 	import type { SingleMachine } from '$lib/types';
 	import Icon from './Icon.svelte';
+	import OsLogo from './OsLogo.svelte';
 	import Status from './Status.svelte';
 
 	let {
@@ -37,8 +38,11 @@
 				<tr>
 					<th scope="row"><a href="/machines/{m.id}">{m.name}</a></th>
 					<td>
-						<span class="os" data-os={t.os.toLowerCase()}>{t.os}</span>
-						{t.name} {m.version}
+						<span class="runs">
+							<OsLogo id={t.id} name={t.name} size="sm" />
+							<span class="os" data-os={t.os.toLowerCase()}>{t.os}</span>
+							{t.name} {m.version}
+						</span>
 					</td>
 					{#if owners}<td class="mono">{m.owner}</td>{/if}
 					<td class="mono">{m.ip || '–'}</td>
@@ -70,6 +74,11 @@
 </div>
 
 <style>
+	.runs {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.5rem;
+	}
 	td .os {
 		margin-inline-end: 0.4rem;
 	}

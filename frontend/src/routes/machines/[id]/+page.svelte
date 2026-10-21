@@ -4,6 +4,7 @@
 	import ActivityLog from '$lib/components/ActivityLog.svelte';
 	import ConfirmDialog, { type ConfirmRequest } from '$lib/components/ConfirmDialog.svelte';
 	import Icon from '$lib/components/Icon.svelte';
+	import OsLogo from '$lib/components/OsLogo.svelte';
 	import Status from '$lib/components/Status.svelte';
 	import { ago, clock, duration, inWords, isBusy, jobStates, singleMachineStates, tookLabel } from '$lib/format';
 	import { api } from '$lib/api';
@@ -115,12 +116,15 @@
 	</nav>
 
 	<header class="title-row">
-		<div>
-			<h1>{m.name}</h1>
-			<p class="subtitle">
-				<Status {...singleMachineStates[m.state]} />
-				<span><span class="os" data-os={t.os.toLowerCase()}>{t.os}</span> {t.name} {m.version}</span>
-			</p>
+		<div class="who">
+			<OsLogo id={t.id} name={t.name} size="lg" />
+			<div>
+				<h1>{m.name}</h1>
+				<p class="subtitle">
+					<Status {...singleMachineStates[m.state]} />
+					<span><span class="os" data-os={t.os.toLowerCase()}>{t.os}</span> {t.name} {m.version}</span>
+				</p>
+			</div>
 		</div>
 
 		{#if canControl}
@@ -344,6 +348,12 @@
 <ConfirmDialog bind:request />
 
 <style>
+	.who {
+		display: flex;
+		align-items: center;
+		gap: 1rem;
+		min-width: 0;
+	}
 	.breadcrumbs {
 		margin-bottom: 1.25rem;
 		font-size: 0.875rem;

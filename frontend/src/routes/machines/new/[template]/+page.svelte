@@ -3,6 +3,7 @@
 	import { page } from '$app/state';
 	import { untrack } from 'svelte';
 	import Icon from '$lib/components/Icon.svelte';
+	import OsLogo from '$lib/components/OsLogo.svelte';
 	import { clock, hoursLabel, inWords } from '$lib/format';
 	import { ApiError } from '$lib/api';
 	import { store } from '$lib/store.svelte';
@@ -240,6 +241,7 @@
 	</nav>
 
 	<header class="title">
+		<OsLogo id={template.id} name={template.name} size="lg" />
 		<h1>Deploy {template.name}</h1>
 		<span class="os" data-os={template.os.toLowerCase()}>{template.os}</span>
 	</header>

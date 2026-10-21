@@ -4,6 +4,7 @@
 	import MachineTable from '$lib/components/MachineTable.svelte';
 	import { store } from '$lib/store.svelte';
 	import { categories, findTemplate, flagNotes, templates } from '$lib/templates';
+	import OsLogo from '$lib/components/OsLogo.svelte';
 	import { categorySlug } from '$lib/nav';
 	import { withPlanned } from '$lib/services';
 	import type { Service } from '$lib/types';
@@ -188,7 +189,10 @@
 					{@const r = store.asDeployed(t).resources}
 					<article class="template" class:soon={!live}>
 						<header>
-							<h4>{#if live}<a href="/machines/new/{t.id}">{t.name}</a>{:else}{t.name}{/if}</h4>
+							<div class="title">
+								<OsLogo id={t.id} name={t.name} />
+								<h4>{#if live}<a href="/machines/new/{t.id}">{t.name}</a>{:else}{t.name}{/if}</h4>
+							</div>
 							<span class="os" data-os={t.os.toLowerCase()}>{t.os}</span>
 						</header>
 						<p>{t.description}</p>
@@ -314,6 +318,16 @@
 	.group h3 span {
 		font: 600 0.8rem var(--lms-mono);
 		color: var(--lms-gray-3);
+	}
+	.template .title {
+		display: flex;
+		align-items: center;
+		gap: 0.65rem;
+		min-width: 0;
+	}
+	.template.soon .title :global(.logo) {
+		filter: grayscale(1);
+		opacity: 0.6;
 	}
 	.template h4 {
 		margin: 0;
