@@ -90,6 +90,8 @@ The machines' templates are built unattended with Packer (`packer/build.sh <temp
 `scripts/isos/fetch.sh` puts on the datastore, online or from a carried-in media folder offline.
 `scripts/e2e/run.py` then deploys real machines through the panel and checks every extra works. The
 runbook: [docs/build-templates.md](docs/build-templates.md); by hand: [docs/setup-vsphere.md](docs/setup-vsphere.md).
+On a network without internet, one script installs the panel and builds the templates from a bundle
+made beforehand: [docs/offline-install.md](docs/offline-install.md).
 
 ## Conventions
 

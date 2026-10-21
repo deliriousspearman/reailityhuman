@@ -19,7 +19,7 @@ as building by hand ([setup-vsphere.md](setup-vsphere.md), parts 2, 5 and 6), wh
 | Windows 11 Enterprise (evaluation) | `packer/build.sh windows` | ~37 min |
 | OPNsense 26.7 | `packer/build.sh opnsense` | ~14 min |
 | pfSense CE 2.7.2 | `packer/build.sh pfsense` | ~10 min |
-| Proxmox VE 9 | `packer/proxmox/prepare-iso.sh` once, then `packer/build.sh proxmox` | ~15 min |
+| Proxmox VE 9 | `packer/proxmox/prepare-iso.sh` once (`--force` after changing `first-boot.sh`, which it bakes in), then `packer/build.sh proxmox` | ~15 min |
 | Proxmox VE 8 | `packer/proxmox/prepare-iso.sh proxmox-ve-8.4` once, then `packer/build.sh proxmox -var version=8.4 -var iso=proxmox-ve_8.4-1-auto.iso` | ~8 min |
 | Proxmox VE 7 | `packer/build.sh proxmox7` | ~30 min |
 | XCP-ng 8.3 | `packer/build.sh xcp-ng -var http_ip=<this machine's address>` | ~8 min |
@@ -247,6 +247,9 @@ from <https://deb.parrot.sh/parrot/iso/>, check it against `signed-hashes.txt` t
 part 4.
 
 ## 3. Offline: what to bring
+
+**The offline install does all of this in one script:** [offline-install.md](offline-install.md). By hand, as
+below.
 
 The builds normally download packages and a few files during the build. On a network without
 internet, gather them first on a machine with internet, and carry them across:

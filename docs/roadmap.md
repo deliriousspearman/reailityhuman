@@ -180,9 +180,9 @@ two need a way to read them: an agent or a check on the PC, and the DHCP server'
 Added by Jake on 2026-10-20:
 - **The offline install:** one script that installs the panel and builds every template on a network
   without internet, with checks first (vCenter, ISOs, mirrors, media, room) and a choice to skip what
-  isn't ready. Design agreed 2026-10-20: [offline-install.md](offline-install.md). Built and rehearsed
-  once offline (TrueNAS CORE); next: a rehearsal with media and mirrors, and the builds still marked
-  "needs internet".
+  isn't ready. Done 2026-10-21: [offline-install.md](offline-install.md) is the runbook. Rehearsed
+  offline twice (the panel, TrueNAS CORE; Ubuntu 26.04 with every extra through a mirror and the media
+  folder, Windows Server Core), and every template's build checked against mirrors and media.
 - **ProLabs** based on the `/home/user/coding/vuln-ad` project (see "ProLabs" above).
 - **Other platforms:** how hard it would be to run the panel on a standalone ESXi host (no vCenter) or
   on Nutanix (AHV, through Prism's API) instead of vCenter.
