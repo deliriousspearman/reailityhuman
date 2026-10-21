@@ -3,8 +3,10 @@
 # proxmox.pkr.hcl. Run it where scripts/isos/fetch.sh runs (Linux, with internet and Docker), with the
 # same GOVC_* settings and credentials:
 #
-#   packer/proxmox/prepare-iso.sh [--credentials FILE] [proxmox-ve-8.4]
+#   packer/proxmox/prepare-iso.sh [--credentials FILE] [--force] [proxmox-ve-8.4]
 #
+# An -auto ISO already on the datastore is kept; --force makes it again (after first-boot.sh changes,
+# which are baked into it).
 # It fetches the ISO named in isos.txt (the newest proxmox-ve-*, or the one named) with fetch.sh
 # --no-upload, then runs Proxmox's
 # proxmox-auto-install-assistant (in a Debian container) on it:
@@ -22,10 +24,11 @@ export STAGING
 GOVC_IMAGE=${GOVC_IMAGE:-vmware/govc:v0.55.2}
 export GOVC_DATACENTER=${GOVC_DATACENTER:-Datacenter} GOVC_DATASTORE=${GOVC_DATASTORE:-datastore1}
 
-credentials="" name=""
+credentials="" name="" force=0
 while (($#)); do
 	case $1 in
 	--credentials) credentials=${2:?--credentials needs a file}; shift ;;
+	--force) force=1 ;;
 	*) name=$1 ;;
 	esac
 	shift
@@ -51,8 +54,11 @@ govc() {
 		-e GOVC_INSECURE -v "$STAGING:$STAGING" --entrypoint /govc "$GOVC_IMAGE" "$@"
 }
 if govc datastore.ls "ISO/$auto" >/dev/null 2>&1; then
-	echo "[$GOVC_DATASTORE] ISO/$auto is already there."
-	exit 0
+	if ((!force)); then
+		echo "[$GOVC_DATASTORE] ISO/$auto is already there (--force makes it again)."
+		exit 0
+	fi
+	govc datastore.rm "ISO/$auto"
 fi
 
 "$isos/fetch.sh" "$name" --no-upload
