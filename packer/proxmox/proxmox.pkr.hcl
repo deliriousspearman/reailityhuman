@@ -51,6 +51,20 @@ variable "apt_mirror" {
   default = ""
 }
 
+# Offline: LAN mirrors of deb.debian.org/debian, security.debian.org/debian-security and
+# download.proxmox.com/debian. They go on the answer CD, where the ISO's first-boot script reads them.
+variable "debian_mirror" {
+  type    = string
+  default = ""
+}
+variable "debian_security_mirror" {
+  type    = string
+  default = ""
+}
+variable "proxmox_mirror" {
+  type    = string
+  default = ""
+}
 variable "version" {
   type    = string
   default = "9.2"
@@ -111,6 +125,11 @@ source "vsphere-iso" "proxmox" {
       root_password = var.build_password
       ssh_key       = var.ssh_public_key
     })
+    "mirrors.env" = join("\n", [
+      "DEBIAN_MIRROR='${trimsuffix(var.debian_mirror, "/")}'",
+      "DEBIAN_SECURITY_MIRROR='${trimsuffix(var.debian_security_mirror, "/")}'",
+      "PROXMOX_MIRROR='${trimsuffix(var.proxmox_mirror, "/")}'", "",
+    ])
   }
   remove_cdrom = true
 

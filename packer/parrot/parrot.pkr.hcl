@@ -56,8 +56,12 @@ variable "ssh_public_key" {
   type    = string
   default = ""
 }
-# Offline: as for Ubuntu (ubuntu.pkr.hcl). Parrot's packages also need its repository: point
-# /etc/apt/sources.list.d/parrot.list at a LAN mirror in the base VM.
+# Offline: as for Ubuntu (ubuntu.pkr.hcl), and parrot_mirror, a LAN mirror of deb.parrot.sh/parrot,
+# which the build puts in the base VM's sources before preparing it.
+variable "parrot_mirror" {
+  type    = string
+  default = ""
+}
 variable "media_url" {
   type    = string
   default = ""
@@ -143,7 +147,12 @@ build {
   }
 
   provisioner "shell" {
-    inline = ["sudo env ${local.media_env} bash /tmp/prepare.sh ${local.extras_flag}"]
+    inline = concat(
+      var.parrot_mirror == "" ? [] : [
+        "sudo sed -i -E 's#https?://deb\\.parrot\\.sh/(direct/)?parrot/?#${trimsuffix(var.parrot_mirror, "/")}/#g' /etc/apt/sources.list /etc/apt/sources.list.d/*.list",
+      ],
+      ["sudo env ${local.media_env} bash /tmp/prepare.sh ${local.extras_flag}"],
+    )
   }
 
   post-processor "manifest" {

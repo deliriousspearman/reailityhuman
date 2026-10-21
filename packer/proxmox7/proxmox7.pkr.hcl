@@ -47,6 +47,11 @@ variable "apt_mirror" {
   default = ""
 }
 # Debian's archive, as host and directory; a LAN mirror of it when offline.
+# Offline: a LAN mirror of download.proxmox.com/debian (install-pve7.sh).
+variable "proxmox_mirror" {
+  type    = string
+  default = ""
+}
 variable "debian_mirror_host" {
   type    = string
   default = "deb.debian.org"
@@ -144,12 +149,12 @@ build {
   sources = ["source.vsphere-iso.proxmox7"]
 
   provisioner "file" {
-    sources     = ["${path.root}/install-pve7.sh", "${path.root}/../../scripts/template/proxmox"]
+    sources     = ["${path.root}/install-pve7.sh", "${path.root}/proxmox-release-bullseye.gpg", "${path.root}/../../scripts/template/proxmox"]
     destination = "/tmp/"
   }
 
   provisioner "shell" {
-    inline = ["sudo bash /tmp/install-pve7.sh", "sudo bash /tmp/proxmox/prepare-proxmox.sh"]
+    inline = ["sudo LAB_PROXMOX_MIRROR=${var.proxmox_mirror} bash /tmp/install-pve7.sh", "sudo bash /tmp/proxmox/prepare-proxmox.sh"]
   }
 
   post-processor "manifest" {

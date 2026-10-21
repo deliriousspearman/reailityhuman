@@ -155,6 +155,11 @@ two need a way to read them: an agent or a check on the PC, and the DHCP server'
 
 ### Queued (2026-10-20)
 
+- **OS and distribution icons** (moved up from "Later" on 2026-10-21): each template's logo on the
+  catalogue cards, the deploy page, the machines list and each machine's page, so the OS is obvious at a
+  glance. Inline SVGs bundled with the site (works offline, no icon CDN): Simple Icons' (CC0) where it
+  has one, a plain lettered badge where it doesn't (Microsoft's logos aren't in it, for one). Next after
+  the offline install's current work, before MinIO.
 - **Metasploitable 3 (Windows):** Rapid7's image as it is; its expired evaluation shuts it down
   hourly, which the catalogue says ("Shuts down hourly").
 - **MinIO:** an extra, built from source at RELEASE.2025-04-22 (the last free release with the full
@@ -173,7 +178,6 @@ two need a way to read them: an agent or a check on the PC, and the DHCP server'
 ## Later
 
 Added by Jake on 2026-10-20:
-- **OS and distribution icons** on the catalogue and machine pages.
 - **The offline install:** one script that installs the panel and builds every template on a network
   without internet, with checks first (vCenter, ISOs, mirrors, media, room) and a choice to skip what
   isn't ready. Design agreed 2026-10-20: [offline-install.md](offline-install.md). Built and rehearsed

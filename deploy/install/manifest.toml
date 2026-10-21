@@ -201,7 +201,6 @@ build = "packer/build.sh centos-legacy"
 vars = ["version=8", "iso=CentOS-8.5.2111-x86_64-boot.iso", "vault={mirror.centos_vault}/8.5.2111", "http_ip={http_ip}"]
 isos = ["centos-8"]
 mirrors = ["centos_vault:8.5.2111/BaseOS/x86_64/os/repodata/repomd.xml"]
-internet = "prepare-legacy.sh switches the installed system's repositories to vault.centos.org"
 
 [[template]]
 id = "centos-7"
@@ -210,7 +209,6 @@ build = "packer/build.sh centos-legacy"
 vars = ["vault={mirror.centos_vault}/7.9.2009", "http_ip={http_ip}"]
 isos = ["centos-7"]
 mirrors = ["centos_vault:7.9.2009/os/x86_64/repodata/repomd.xml"]
-internet = "prepare-legacy.sh switches the installed system's repositories to vault.centos.org"
 
 [[template]]
 id = "centos-6"
@@ -219,7 +217,6 @@ build = "packer/build.sh centos-legacy"
 vars = ["version=6", "iso=CentOS-6.10-x86_64-minimal.iso", "vault={mirror.centos_vault}/6.10", "epel6={mirror.epel_archive}/6/x86_64/", "http_ip={http_ip}"]
 isos = ["centos-6"]
 mirrors = ["centos_vault:6.10/os/x86_64/repodata/repomd.xml", "epel_archive:6/x86_64/repodata/repomd.xml"]
-internet = "prepare-legacy.sh uses vault.centos.org, EPEL's archive and its key from dl.fedoraproject.org"
 
 # Windows (autounattend; the media folder's windows/ part goes on a CD)
 [[template]]
@@ -314,33 +311,33 @@ media = ["images/chr-7.24.5.vmdk.zip"]
 id = "proxmox-9"
 catalogue = "proxmox 9"
 build = "packer/build.sh proxmox"
+vars = ["debian_mirror={mirror.debian}", "debian_security_mirror={mirror.debian_security}", "proxmox_mirror={mirror.proxmox}"]
 isos = ["file:proxmox-ve_9.2-1-auto.iso"]
-internet = "its first boot and prepare-proxmox.sh install packages from Debian's and Proxmox's repositories"
+mirrors = ["debian:dists/trixie/Release", "proxmox:pve/dists/trixie/Release"]
 
 [[template]]
 id = "proxmox-8"
 catalogue = "proxmox 8"
 build = "packer/build.sh proxmox"
-vars = ["version=8.4", "iso=proxmox-ve_8.4-1-auto.iso"]
+vars = ["version=8.4", "iso=proxmox-ve_8.4-1-auto.iso", "debian_mirror={mirror.debian}", "debian_security_mirror={mirror.debian_security}", "proxmox_mirror={mirror.proxmox}"]
 isos = ["file:proxmox-ve_8.4-1-auto.iso"]
-internet = "its first boot and prepare-proxmox.sh install packages from Debian's and Proxmox's repositories"
+mirrors = ["debian:dists/bookworm/Release", "proxmox:pve/dists/bookworm/Release"]
 
 [[template]]
 id = "proxmox-7"
 catalogue = "proxmox 7"
 build = "packer/build.sh proxmox7"
-vars = ["debian_mirror_host={mirror.debian.host}", "debian_mirror_dir={mirror.debian.path}", "http_ip={http_ip}"]
+vars = ["debian_mirror_host={mirror.debian.host}", "debian_mirror_dir={mirror.debian.path}", "proxmox_mirror={mirror.proxmox}", "http_ip={http_ip}"]
 isos = ["debian-11"]
-mirrors = ["debian:dists/bullseye/Release"]
-internet = "install-pve7.sh adds Proxmox's repository and key from download.proxmox.com"
+mirrors = ["debian:dists/bullseye/Release", "proxmox:pve/dists/bullseye/Release"]
 
 [[template]]
 id = "xcp-ng"
 catalogue = "xcp-ng 8.3"
 build = "packer/build.sh xcp-ng"
-vars = ["http_ip={http_ip}"]
+vars = ["http_ip={http_ip}", "vault={mirror.centos_vault}/7.9.2009"]
 isos = ["xcp-ng-8.3"]
-internet = "its post-install script installs VMware Tools from vault.centos.org"
+mirrors = ["centos_vault:7.9.2009/os/x86_64/repodata/repomd.xml"]
 
 # Storage
 [[template]]
@@ -375,11 +372,10 @@ base = true
 id = "parrot"
 catalogue = "parrot 7"
 build = "packer/build.sh parrot"
-vars = ["media_url={media}"]
+vars = ["parrot_mirror={mirror.parrot}", "media_url={media}"]
 needs = ["parrot-base"]
 mirrors = ["parrot:dists/echo/Release"]
 extras = true
-internet = "its packages come from the mirror set in the base VM, which the install doesn't change yet"
 
 # Practice targets (Rapid7's images, imported whole)
 [[template]]

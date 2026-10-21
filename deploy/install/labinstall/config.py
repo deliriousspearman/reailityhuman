@@ -34,8 +34,8 @@ FIELDS = [
     ("templates", "remove_isos", "After building, remove ISOs: ask, none, all or keep-windows", "ask"),
     ("media", "port", "Port the installer serves the media folder on", 8690),
 ]
-MIRRORS = ["ubuntu", "debian", "debian_archive", "kali", "parrot", "rocky", "alma", "centos_stream",
-           "centos_vault", "epel_archive", "proxmox"]
+MIRRORS = ["ubuntu", "debian", "debian_security", "debian_archive", "kali", "parrot", "rocky", "alma",
+           "centos_stream", "centos_vault", "epel_archive", "proxmox"]
 
 
 class ConfigError(Exception):

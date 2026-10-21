@@ -25,6 +25,7 @@ template_folder = "Labs/Templates"
 [mirrors]
 ubuntu = "http://mirror.lab.example/ubuntu"                 # as archive.ubuntu.com/ubuntu
 debian = "http://mirror.lab.example/debian"                 # as deb.debian.org/debian (13, 12, 11)
+debian_security = "http://mirror.lab.example/debian-security" # as security.debian.org/debian-security (Proxmox; optional)
 debian_archive = "http://mirror.lab.example/debian-archive" # as archive.debian.org/debian (10, 9, 8)
 kali = "http://mirror.lab.example/kali"                     # as http.kali.org/kali
 parrot = "http://mirror.lab.example/parrot"                 # as deb.parrot.sh/parrot
