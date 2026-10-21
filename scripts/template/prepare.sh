@@ -243,7 +243,7 @@ bake_desktop() {
 MINIO_FROM=${MINIO_FROM:-}
 bake_minio() {
 	local dir
-	dir=$(mktemp -d)
+	dir=$(mktemp -d /var/tmp/lab-bake.XXXXXX)
 	if [[ -n $MINIO_FROM ]]; then
 		for f in minio mc SHA256SUMS; do curl -fsSL -o "$dir/$f" "$MINIO_FROM/$f"; done
 		(cd "$dir" && sha256sum -c --quiet SHA256SUMS)
@@ -287,7 +287,7 @@ bake_python() {
 	done
 
 	# 2.7, for /opt/python/2.7 (where the extra unpacks it), packed the way the others are (in python/).
-	dir=$(mktemp -d)
+	dir=$(mktemp -d /var/tmp/lab-bake.XXXXXX)
 	curl -fsSL -o "$dir/python.tgz" "${PYTHON_FROM:-https://www.python.org/ftp/python/2.7.18}/Python-2.7.18.tgz"
 	echo "$PYTHON2_SHA256  $dir/python.tgz" | sha256sum -c --quiet
 	curl -fsSL -o "$dir/openssl.tgz" "${PYTHON_FROM:-https://github.com/openssl/openssl/releases/download/OpenSSL_1_1_1w}/openssl-1.1.1w.tar.gz"

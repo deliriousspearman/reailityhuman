@@ -47,9 +47,11 @@ curl -fsSL -o "$dir/zcs.tgz" "$ZIMBRA_URL/$TARBALL.tgz"
 echo "$SHA256  $dir/zcs.tgz" | sha256sum -c --quiet
 tar -xzf "$dir/zcs.tgz" -C "$dir"
 rm "$dir/zcs.tgz"
-# Its installer wants this machine's name in /etc/hosts with a real address: a stand-in while it
-# runs. (Each machine's own goes in when the extra configures it.)
+# Its installer wants this machine's full name (hostname --fqdn) in /etc/hosts with a real address:
+# a stand-in while it runs, in place of Ubuntu's 127.0.1.1 line for the name. (Each machine's own goes
+# in when the extra configures it.)
 cp /etc/hosts "$dir/hosts"
+sed -i '/^127\.0\.1\.1\s/d' /etc/hosts
 echo "$(hostname -I | awk '{print $1}') $(hostname).lab.example $(hostname)" >>/etc/hosts
 # Its answers: these packages, from the repository set up above (not one it would write itself).
 printf 'INSTALL_PACKAGES="%s"\nUSE_ZIMBRA_PACKAGE_SERVER="no"\n' "$PACKAGES" >"$dir/answers"

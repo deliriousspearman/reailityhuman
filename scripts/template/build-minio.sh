@@ -4,8 +4,8 @@
 #
 #   bash build-minio.sh <folder>
 #
-# leaves <folder>/minio, <folder>/mc and <folder>/SHA256SUMS. Needs curl and about 3 GB free; takes
-# 5-15 minutes. prepare.sh runs it on template builds that have the internet; offline,
+# leaves <folder>/minio, <folder>/mc and <folder>/SHA256SUMS. Needs curl and about 3 GB free in
+# /var/tmp; takes 5-15 minutes. prepare.sh runs it on template builds that have the internet; offline,
 # scripts/isos/fetch-media.sh runs it into the media folder's linux/minio, and prepare.sh takes the
 # binaries from there (MINIO_FROM).
 #
@@ -29,7 +29,7 @@ if (($# != 1)); then
 	exit 1
 fi
 out=$(mkdir -p "$1" && cd "$1" && pwd)
-work=$(mktemp -d "${TMPDIR:-/var/tmp}/lab-minio.XXXXXX")
+work=$(mktemp -d /var/tmp/lab-minio.XXXXXX)
 trap 'chmod -R u+w "$work" 2>/dev/null; rm -rf "$work"' EXIT
 
 # get <file> <url> <sha256>
@@ -47,8 +47,11 @@ tar -xzf "$work/minio.tar.gz" -C "$work/minio" --strip-components=1
 tar -xzf "$work/mc.tar.gz" -C "$work/mc" --strip-components=1
 
 # Static binaries, as MinIO's Makefile builds them. GOTOOLCHAIN=local: this Go, not one go.mod asks to
-# download. -p 1: one package at a time, so it fits a 2 GB VM.
+# download. -p 1: one package at a time, so it fits a 2 GB VM. Its scratch files in the work folder
+# too: /tmp is a small RAM disk on newer systems (Ubuntu 26.04's), which the build overflows.
 export PATH=$work/go/bin:$PATH GOPATH=$work/gopath GOCACHE=$work/cache GOTOOLCHAIN=local CGO_ENABLED=0 GOFLAGS=-p=1
+export GOTMPDIR=$work/tmp TMPDIR=$work/tmp
+mkdir "$work/tmp"
 
 # version <release tag>: its date and time, as MinIO's builds stamp it (RELEASE.2025-04-22T22-12-26Z
 # -> 2025-04-22T22:12:26Z).
