@@ -38,6 +38,17 @@ class VCenter:
         except (OSError, ssl.SSLError, vmodl.MethodFault) as e:
             raise VCenterError(f"can't reach vCenter at {host}: {getattr(e, 'msg', None) or e}") from e
         self.content = self.si.RetrieveContent()
+        self._login = (user, password)
+
+    def fresh(self) -> None:
+        """Signs in again if vCenter has ended the session (it does after 30 idle minutes, and builds
+        take longer). On the same connection, so everything looked up through it keeps working."""
+        try:
+            if self.content.sessionManager.currentSession:
+                return
+        except vim.fault.NotAuthenticated:
+            pass
+        self.content.sessionManager.Login(*self._login)
 
     def close(self) -> None:
         Disconnect(self.si)
@@ -87,6 +98,7 @@ class VCenter:
 
     def files(self, inv: Inventory, folder: str) -> dict[str, int] | None:
         """The datastore folder's files and sizes; None if the folder doesn't exist."""
+        self.fresh()
         spec = vim.host.DatastoreBrowser.SearchSpec(details=vim.host.DatastoreBrowser.FileInfo.Details(fileSize=True))
         task = inv.datastore.browser.SearchDatastore_Task(f"[{inv.datastore.name}] {folder}", spec)
         try:
@@ -96,10 +108,12 @@ class VCenter:
         return {f.path: f.fileSize or 0 for f in result.file or []}
 
     def free_gb(self, inv: Inventory) -> float:
+        self.fresh()
         inv.datastore.RefreshDatastore()
         return inv.datastore.summary.freeSpace / 1024**3
 
     def delete_file(self, inv: Inventory, path: str) -> None:
+        self.fresh()
         self.wait(self.content.fileManager.DeleteDatastoreFile_Task(f"[{inv.datastore.name}] {path}", inv.datacenter))
 
     def file_url(self, inv: Inventory, path: str) -> str:
@@ -108,6 +122,7 @@ class VCenter:
 
     def open_file(self, inv: Inventory, path: str):
         """A datastore file, to read (signed in with this session's cookie)."""
+        self.fresh()
         req = urllib.request.Request(self.file_url(inv, path))
         req.add_header("Cookie", self.si._stub.cookie)
         return urllib.request.urlopen(req, context=self.context, timeout=60)
@@ -117,6 +132,7 @@ class VCenter:
     def vm_names(self, folder: vim.Folder | None) -> set[str]:
         if folder is None:
             return set()
+        self.fresh()
         view = self.content.viewManager.CreateContainerView(folder, [vim.VirtualMachine], True)
         try:
             return {vm.name for vm in view.view}
