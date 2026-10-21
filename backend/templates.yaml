@@ -177,8 +177,9 @@
   extras: [iis, mssql, outlook, domain-controller, join-domain]
 - template: windows-server
   version: "2025 Core"
-  # Built by Packer (packer/build.sh windows-server -var edition=core) on 2026-10-16, with SQL Server's files.
-  vsphere: Labs/Templates/tpl-windows-server-2025-core-20261016
+  # Built by Packer (packer/build.sh windows-server -var edition=core) on 2026-10-21, with SQL Server's files
+  # (and the media folder: the offline install's second rehearsal).
+  vsphere: Labs/Templates/tpl-windows-server-2025-core-20261021
   cpu: 2
   memoryGB: 2
   diskGB: 40

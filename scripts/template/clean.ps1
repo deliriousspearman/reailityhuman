@@ -81,14 +81,19 @@ Step 'Removing apps installed for one user only'
 # all (0x80073cf2): e.g. Microsoft Edge updating itself during the build on Windows Server 2022. Such
 # packages go; Windows' own provisioned apps stay.
 # (An array either way: Windows Server 2019 has no provisioned packages, and strict mode refuses
-# .DisplayName on nothing.)
-$provisioned = @(Get-AppxProvisionedPackage -Online | ForEach-Object { $_.DisplayName })
-Get-AppxPackage -AllUsers |
-    Where-Object { $_.Name -notin $provisioned -and -not $_.IsFramework -and -not $_.NonRemovable } |
-    ForEach-Object {
-        Write-Host "  $($_.PackageFullName)"
-        Remove-AppxPackage -Package $_.PackageFullName -AllUsers -ErrorAction Continue
-    }
+# .DisplayName on nothing.) Server Core has no app packages, nor the module these commands need: it
+# skips this.
+try {
+    $provisioned = @(Get-AppxProvisionedPackage -Online | ForEach-Object { $_.DisplayName })
+    Get-AppxPackage -AllUsers |
+        Where-Object { $_.Name -notin $provisioned -and -not $_.IsFramework -and -not $_.NonRemovable } |
+        ForEach-Object {
+            Write-Host "  $($_.PackageFullName)"
+            Remove-AppxPackage -Package $_.PackageFullName -AllUsers -ErrorAction Continue
+        }
+} catch {
+    Write-Host "    Skipped: no app packages here ($($_.Exception.Message.Trim()))"
+}
 
 Step 'Running sysprep: the VM shuts down when it has finished'
 & $Sysprep /generalize /oobe /shutdown "/unattend:$Unattend"

@@ -22,8 +22,9 @@ Remove-Item -Path 'C:\LabBuild' -Recurse -Force
 Remove-Item -Path 'C:\Windows\Temp\lab-bootstrap.log' -ErrorAction SilentlyContinue
 Unregister-ScheduledTask -TaskName 'LabBuildFinish' -Confirm:$false
 Stop-Transcript
-# Sysprep, which shuts the VM down. (C:\Windows\Temp is emptied by sysprep's own clean-up.)
-& C:\Windows\Temp\lab-finish\clean.ps1 -Yes
+# Sysprep, which shuts the VM down. (C:\Windows\Temp is emptied by sysprep's own clean-up.) Its
+# output in clean.log: if the VM doesn't shut down, that says why (build with -on-error=abort to look).
+& C:\Windows\Temp\lab-finish\clean.ps1 -Yes *> C:\Windows\Temp\lab-finish\clean.log
 '@
 
 $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-NoProfile -ExecutionPolicy Bypass -File $work\finish-task.ps1"
