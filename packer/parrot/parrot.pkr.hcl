@@ -106,6 +106,9 @@ locals {
     "NEXTCLOUD_URL=${local.media}/linux/nextcloud/latest.tar.bz2",
     "CHINOOK_URL=${local.media}/linux/chinook",
     "DOCKER_IMAGES_FROM=${local.media}/linux/docker",
+    "MINIO_FROM=${local.media}/linux/minio",
+    "PYTHON_FROM=${local.media}/linux/python",
+    "IREDMAIL_FROM=${local.media}/linux/iredmail",
   ])
 }
 
@@ -142,7 +145,7 @@ build {
   sources = ["source.vsphere-clone.parrot"]
 
   provisioner "file" {
-    sources     = ["${path.root}/../../scripts/template/prepare.sh", "${path.root}/../../scripts/template/clean.sh"]
+    sources     = ["${path.root}/../../scripts/template/prepare.sh", "${path.root}/../../scripts/template/build-minio.sh", "${path.root}/../../scripts/template/clean.sh"]
     destination = "/tmp/"
   }
 

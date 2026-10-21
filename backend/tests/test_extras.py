@@ -129,15 +129,15 @@ def test_catalogue_conflicts_are_worked_out():
     MySQL take port 3306, as do WordPress and Nextcloud's own MariaDB. Vaultwarden is HTTPS only, so
     it only clashes with what uses 443."""
     found = {i: set(x.conflicts) for i, x in extras.extras().items()}
-    web = {"nginx", "apache", "apache-https", "wordpress", "nextcloud", "nextcloud-snap", "mail", "iis",
+    web = {"nginx", "apache", "apache-https", "wordpress", "nextcloud", "nextcloud-snap", "mail", "iredmail", "zimbra", "iis",
            "juice-shop", "dvwa", "uptime-kuma", "grafana", "gitea"}
-    https = {"apache-https", "wordpress", "nextcloud", "nextcloud-snap", "mail", "vaultwarden"}
+    https = {"apache-https", "wordpress", "nextcloud", "nextcloud-snap", "mail", "iredmail", "zimbra", "vaultwarden"}
     mysql_port = {"wordpress", "nextcloud", "mariadb", "mysql"}
     for i in web | mysql_port:
         expected = (web if i in web else set()) | (mysql_port if i in mysql_port else set()) | (https if i in https else set())
         assert found[i] == expected - {i}, i
     assert found["vaultwarden"] == https - {"vaultwarden"}
-    for i in ("ftp", "desktop", "outlook", "postgresql", "sqlite", "mssql", "docker"):
+    for i in ("ftp", "desktop", "outlook", "postgresql", "sqlite", "mssql", "docker", "python", "minio"):
         assert found[i] == set(), i
 
 
@@ -292,7 +292,7 @@ def test_parse_status():
 def test_config_lists_extras_for_templates_that_have_them(offered):
     t = client.get("/api/config").json()["templates"][0]
     https = next(x for x in t["extras"] if x["id"] == "apache-https")
-    assert https["conflicts"] == ["nginx", "apache", "wordpress", "nextcloud", "nextcloud-snap", "mail", "juice-shop", "dvwa", "uptime-kuma", "grafana", "vaultwarden", "gitea", "iis"]
+    assert https["conflicts"] == ["nginx", "apache", "wordpress", "nextcloud", "nextcloud-snap", "mail", "iredmail", "zimbra", "juice-shop", "dvwa", "uptime-kuma", "grafana", "vaultwarden", "gitea", "iis"]
     assert https["options"][0]["id"] == "domain" and https["options"][0]["default"] == "{fqdn}"
 
 

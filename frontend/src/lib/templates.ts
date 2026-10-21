@@ -184,6 +184,19 @@ export const templates: MachineTemplate[] = [
 		credentials: "labadmin / set on first deploy; Outlook on the web: the domain controller's user",
 		flags: ['licence', 'domain'],
 	},
+	{
+		id: 'zimbra',
+		name: 'Zimbra',
+		category: 'Mail',
+		os: 'Linux',
+		description:
+			'Zimbra Collaboration 8.8.15 open source on Ubuntu 20.04: mail, calendar and contacts, with webmail and an admin console. The 2021 GA build, without later patches. Set up as it starts: about 20 minutes.',
+		versions: [{ version: '8.8.15', eol: true }],
+		resources: { cpu: 4, memoryGB: 8, diskGB: 40 },
+		access: ['web', 'ssh', 'console'],
+		webUrl: 'https://{ip}/',
+		credentials: 'ubuntu / set on first deploy; webmail and admin console (port 7071): ubuntu@<mail domain>',
+	},
 
 	// Storage
 	{

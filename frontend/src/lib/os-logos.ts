@@ -1,7 +1,7 @@
 // Logos for the catalogue's templates, so each OS is recognisable at a glance (OsLogo.svelte).
 // Brand marks from Simple Icons 15.22.0 (simpleicons.org, CC0; each brand's own guidelines apply),
 // inline so nothing loads from a CDN. Templates without one there (Microsoft's marks were removed
-// from it, and VyOS and XCP-ng have none) get a lettered badge in their colour.
+// from it, and VyOS, XCP-ng and Zimbra have none) get a lettered badge in their colour.
 
 export type OsLogo = { title: string; color: string; path: string } | { title: string; color: string; letters: string };
 
@@ -72,5 +72,6 @@ export const osLogos: Record<string, OsLogo> = {
 	windows: { title: 'Win', color: '#0078d4', letters: 'Win' },
 	'windows-server': { title: 'WS', color: '#0078d4', letters: 'WS' },
 	exchange: { title: 'Ex', color: '#0a64ad', letters: 'Ex' },
+	zimbra: { title: 'Zimbra', color: '#d0282d', letters: 'Zm' },
 	'xcp-ng': { title: 'XCP', color: '#0e7a6d', letters: 'XCP' },
 };

@@ -5,9 +5,10 @@
 #   scripts/isos/fetch-media.sh <folder> [--images]
 #
 # It fills <folder> with, each checked against its published or pinned checksum:
-#   linux/     WordPress, WP-CLI, Nextcloud, Chinook and the container apps' Docker images (if this
-#              machine has Docker), for prepare.sh. Serve this folder's parent on a LAN web server
-#              and pass the address to the Linux builds: -var media_url=http://…
+#   linux/     WordPress, WP-CLI, Nextcloud, Chinook, the container apps' Docker images (if this
+#              machine has Docker), the Pythons (2.7-3.15), iRedMail, and MinIO and mc (built here
+#              from source: 5-15 minutes, 3 GB free), for prepare.sh. Serve this folder's parent on a
+#              LAN web server and pass the address to the Linux builds: -var media_url=http://…
 #   windows/   Cloudbase-Init, Chinook's SQL Server script and Exchange's prerequisites (Visual C++
 #              2012 and 2013, URL Rewrite). Pass the folder to the Windows build:
 #              -var media_dir=<folder>. Office's files go in windows/office (see its README.txt).
@@ -27,7 +28,7 @@ images=0
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 prepare=$here/../template/prepare.sh
 packer_dir=$here/../../packer
-mkdir -p "$out"/{linux/{wordpress,wp-cli,nextcloud,chinook,docker},windows/{cloudbase-init,chinook,office,exchange},packer}
+mkdir -p "$out"/{linux/{wordpress,wp-cli,nextcloud,chinook,docker,python,iredmail,minio},windows/{cloudbase-init,chinook,office,exchange},packer}
 out=$(cd "$out" && pwd)
 
 # What prepare.sh and the Windows build use: keep in step with them.
@@ -79,6 +80,37 @@ if command -v docker >/dev/null; then
 		done
 else
 	echo "  skipped: no Docker here (the container apps' extras need these to build offline)" >&2
+fi
+
+# pinned <name>: a checksum prepare.sh pins, from its line "<name>=<sha256>".
+pinned() { grep -oE "^$1=[0-9a-f]{64}" "$prepare" | cut -d= -f2; }
+
+step "Linux: Python 2.7-3.15 (prepare.sh's PYTHON_BUILDS), and what 2.7 is built from"
+sed -n '/^declare -A PYTHON_BUILDS=(/,/^)/p' "$prepare" | grep -oE '"[^" ]+ [0-9a-f]{64}"' | tr -d '"' |
+	while read -r build sum; do
+		file=cpython-$build-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz
+		get "https://github.com/astral-sh/python-build-standalone/releases/download/${build#*+}/${file/+/%2B}" "$out/linux/python/$file"
+		check "$out/linux/python/$file" "$sum" sha256
+	done
+get https://www.python.org/ftp/python/2.7.18/Python-2.7.18.tgz "$out/linux/python/Python-2.7.18.tgz"
+check "$out/linux/python/Python-2.7.18.tgz" "$(pinned PYTHON2_SHA256)" sha256
+get https://github.com/openssl/openssl/releases/download/OpenSSL_1_1_1w/openssl-1.1.1w.tar.gz "$out/linux/python/openssl-1.1.1w.tar.gz"
+check "$out/linux/python/openssl-1.1.1w.tar.gz" "$(pinned OPENSSL111_SHA256)" sha256
+
+step "Linux: iRedMail 1.8.8, and what its installer fetches"
+get https://github.com/iredmail/iRedMail/archive/refs/tags/1.8.8.tar.gz "$out/linux/iredmail/iRedMail-1.8.8.tar.gz"
+check "$out/linux/iredmail/iRedMail-1.8.8.tar.gz" "$(pinned IREDMAIL_SHA256)" sha256
+tar -xzOf "$out/linux/iredmail/iRedMail-1.8.8.tar.gz" --wildcards '*/pkgs/pkgs.sha256' | while read -r sum file; do
+	[[ $file == *netdata* ]] && continue # not used
+	get "https://dl.iredmail.org/yum/misc/${file#misc/}" "$out/linux/iredmail/${file#misc/}"
+	check "$out/linux/iredmail/${file#misc/}" "$sum" sha256
+done
+
+step "Linux: MinIO and mc, built from source (scripts/template/build-minio.sh)"
+if [[ -s $out/linux/minio/SHA256SUMS ]] && (cd "$out/linux/minio" && sha256sum -c --quiet SHA256SUMS 2>/dev/null); then
+	echo "  built already"
+else
+	bash "$here/../template/build-minio.sh" "$out/linux/minio"
 fi
 
 step "FreeBSD: VMware Tools for OPNsense and pfSense, with their dependencies"

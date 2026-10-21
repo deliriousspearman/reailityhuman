@@ -62,8 +62,19 @@ variable "iso" {
 # --extras= for prepare.sh: "" bakes in every extra for Debian-family templates; "none" none.
 # Offline: where the media folder from scripts/isos/fetch-media.sh is served on the LAN (its linux/
 # part), e.g. http://mirror.lab.example/lab-media. prepare.sh then downloads WordPress, WP-CLI,
-# Nextcloud and Chinook from there. Empty: from their own sites. (The Nextcloud snap needs the Snap
+# Nextcloud, Chinook, the container images, MinIO, the Pythons and iRedMail from there. Empty: from
+# their own sites (MinIO: built from source). (The Nextcloud snap needs the Snap
 # Store: leave it out of offline builds with -var extras=… .)
+# The Zimbra template instead (scripts/template/zimbra): Ubuntu 20.04 with Zimbra 8.8.15 installed, and
+# no other extras. Offline, zimbra_mirror is a mirror of https://repo.zimbra.com, for its packages.
+variable "zimbra" {
+  type    = bool
+  default = false
+}
+variable "zimbra_mirror" {
+  type    = string
+  default = ""
+}
 variable "media_url" {
   type    = string
   default = ""
@@ -83,8 +94,9 @@ variable "ssh_private_key_file" { type = string }
 variable "ssh_public_key" { type = string }
 
 locals {
-  vm_name     = var.vm_name != "" ? var.vm_name : "tpl-ubuntu-${var.version}-${formatdate("YYYYMMDD", timestamp())}"
-  extras_flag = var.extras == "" ? "" : (var.extras == "none" ? "--no-extras" : "--extras=${var.extras}")
+  name        = var.zimbra ? "zimbra-8.8.15" : "ubuntu-${var.version}"
+  vm_name     = var.vm_name != "" ? var.vm_name : "tpl-${local.name}-${formatdate("YYYYMMDD", timestamp())}"
+  extras_flag = var.zimbra ? "--extras=zimbra" : (var.extras == "" ? "" : (var.extras == "none" ? "--no-extras" : "--extras=${var.extras}"))
   media       = trimsuffix(var.media_url, "/")
   # prepare.sh reads these from its environment (sudo would drop Packer's, hence env).
   media_env = local.media == "" ? "" : join(" ", [
@@ -93,7 +105,12 @@ locals {
     "NEXTCLOUD_URL=${local.media}/linux/nextcloud/latest.tar.bz2",
     "CHINOOK_URL=${local.media}/linux/chinook",
     "DOCKER_IMAGES_FROM=${local.media}/linux/docker",
+    "MINIO_FROM=${local.media}/linux/minio",
+    "PYTHON_FROM=${local.media}/linux/python",
+    "IREDMAIL_FROM=${local.media}/linux/iredmail",
+    "ZIMBRA_URL=${local.media}/linux/zimbra",
   ])
+  zimbra_env = var.zimbra_mirror == "" ? "" : "ZIMBRA_MIRROR=${trimsuffix(var.zimbra_mirror, "/")}"
 }
 
 source "vsphere-iso" "ubuntu" {
@@ -106,15 +123,15 @@ source "vsphere-iso" "ubuntu" {
   datastore           = var.datastore
   folder              = var.template_folder
   vm_name             = local.vm_name
-  notes               = "Ubuntu ${var.version} template for lab-deploy, built by Packer on ${formatdate("YYYY-MM-DD", timestamp())}."
+  notes               = "${var.zimbra ? "Zimbra 8.8.15 on Ubuntu 20.04" : "Ubuntu ${var.version}"} template for lab-deploy, built by Packer on ${formatdate("YYYY-MM-DD", timestamp())}."
 
   guest_os_type        = "ubuntu64Guest"
   firmware             = "efi"
   CPUs                 = 2
-  RAM                  = 2048
+  RAM                  = var.zimbra ? 4096 : 2048
   disk_controller_type = ["pvscsi"]
   storage {
-    disk_size             = 25600
+    disk_size             = var.zimbra ? 40960 : 25600
     disk_thin_provisioned = true
   }
   network_adapters {
@@ -162,16 +179,16 @@ build {
   sources = ["source.vsphere-iso.ubuntu"]
 
   provisioner "file" {
-    sources     = ["${path.root}/../../scripts/template/prepare.sh", "${path.root}/../../scripts/template/clean.sh"]
+    sources     = ["${path.root}/../../scripts/template/prepare.sh", "${path.root}/../../scripts/template/build-minio.sh", "${path.root}/../../scripts/template/clean.sh", "${path.root}/../../scripts/template/zimbra"]
     destination = "/tmp/"
   }
 
   provisioner "shell" {
-    inline = ["sudo env ${local.media_env} bash /tmp/prepare.sh ${local.extras_flag}"]
+    inline = ["sudo env ${local.media_env} ${local.zimbra_env} bash /tmp/prepare.sh ${local.extras_flag}"]
   }
 
   post-processor "manifest" {
-    output     = "${path.root}/../output/ubuntu-${var.version}.json"
+    output     = "${path.root}/../output/${local.name}.json"
     strip_path = true
     custom_data = {
       vm_name = local.vm_name

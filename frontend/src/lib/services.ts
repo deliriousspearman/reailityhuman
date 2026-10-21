@@ -26,22 +26,10 @@ const planned: Planned[] = [
 		description: 'Metrics collection and alerting, to pair with Grafana.',
 	},
 	{
-		id: 'minio',
-		name: 'MinIO',
-		category: 'Storage',
-		description: 'S3-compatible object storage, with a web console for buckets, users and access keys.',
-	},
-	{
 		id: 'pihole',
 		name: 'Pi-hole',
 		category: 'Network services',
 		description: 'DNS server that blocks ads and trackers. Handy as the DNS server for your other machines.',
-	},
-	{
-		id: 'zimbra',
-		name: 'Zimbra',
-		category: 'Mail',
-		description: 'Mail and collaboration server with webmail.',
 	},
 	{
 		id: 'gitlab',

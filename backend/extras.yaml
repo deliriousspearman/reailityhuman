@@ -491,6 +491,188 @@
       systemctl restart postfix
       systemctl restart dovecot
 
+- id: iredmail
+  name: iRedMail
+  category: Mail
+  description: "iRedMail 1.8.8: a full mail server (Postfix, Dovecot, Amavis with SpamAssassin, iRedAPD) with Roundcube webmail and the iRedAdmin web admin, mailboxes in MariaDB. Installed as the machine starts: about 10 minutes."
+  ports: [25, 80, 110, 143, 443, 465, 587, 993, 995, 4190]
+  password: true
+  setupMinutes: 20
+  links: ["https://{ip}/mail/", "https://{ip}/iredadmin/"]
+  notes:
+    - "Mailboxes: {username}@{domain}, postmaster@{domain} and any test users ({users}), each with the machine's password. {username}@{domain} and postmaster@{domain} are iRedAdmin's administrators."
+    - "IMAP 143 (STARTTLS) and 993, POP3 110 and 995, SMTP submission 587 and 465, all with a self-signed certificate. The server's name is {hostname}.{domain}."
+    - "ClamAV is installed but off: offline, it has no virus definitions."
+  options:
+    - id: domain
+      label: Mail domain
+      help: The domain mail is for, e.g. lab.example. The server is named <machine>.<domain>.
+      type: hostname
+      default: lab.example
+    - id: users
+      label: Test users
+      help: More mailboxes, separated by commas, e.g. alice, bob. Each gets the machine's password.
+      type: text
+      pattern: "[a-z][a-z0-9-]{0,30}(\\s*,\\s*[a-z][a-z0-9-]{0,30}){0,9}"
+  debian:
+    # Its installer and the files it fetches, in /opt/lab-deploy/iredmail (prepare.sh's bake_iredmail),
+    # with the packages it installs kept there, not installed: run as it is here, it installs from
+    # those alone, with no internet. Ubuntu 24.04 and 26.04, Debian 12 and 13 (what 1.8.8 supports).
+    packages: [dialog, wget]
+    script: |
+      src=/opt/lab-deploy/iredmail
+      [ -d "$src/iRedMail" ] || { echo "This template has no iRedMail: rebuild it with today's prepare.sh."; exit 1; }
+      fqdn=$hostname.$domain
+      # Its name, which the installer reads (and Postfix uses), in /etc/hosts too.
+      sed -i '/^127\.0\.1\.1\s/d' /etc/hosts
+      echo "127.0.1.1 $fqdn $hostname" >>/etc/hosts
+      # The installer, from a copy (it writes its settings and progress there). Its downloads are
+      # done (status_get_all): it goes straight to installing, from the kept packages only.
+      rm -rf /root/iRedMail
+      cp -a "$src/iRedMail" /root/iRedMail
+      cd /root/iRedMail
+      mkdir -p runtime
+      echo 'export status_get_all="DONE"' >runtime/install.status
+      rand() { openssl rand -hex 16; }
+      # Its settings, as its own setup dialog would write them. MariaDB, nginx, Roundcube and
+      # iRedAdmin; not SOGo, netdata (they'd need the internet) or Fail2ban (which would ban whoever
+      # practises on it). Its postmaster's password is a random one here, then the machine's below:
+      # the installer passes it on unquoted.
+      cat >config <<EOF
+      export STORAGE_BASE_DIR='/var/vmail'
+      export WEB_SERVER='NGINX'
+      export BACKEND_ORIG='MARIADB'
+      export BACKEND='MYSQL'
+      export FIRST_DOMAIN='$domain'
+      export DOMAIN_ADMIN_PASSWD_PLAIN='$(rand)'
+      export USE_IREDADMIN='YES'
+      export USE_ROUNDCUBE='YES'
+      export USE_SOGO='NO'
+      export USE_NETDATA='NO'
+      export USE_FAIL2BAN='NO'
+      EOF
+      for setting in VMAIL_DB_BIND_PASSWD VMAIL_DB_ADMIN_PASSWD MLMMJADMIN_API_AUTH_TOKEN NETDATA_DB_PASSWD \
+        MYSQL_ROOT_PASSWD AMAVISD_DB_PASSWD IREDADMIN_DB_PASSWD RCM_DB_PASSWD SOGO_DB_PASSWD \
+        SOGO_SIEVE_MASTER_PASSWD IREDAPD_DB_PASSWD FAIL2BAN_DB_PASSWD; do
+        echo "export $setting='$(rand)'" >>config
+      done
+      chmod 400 config
+      IREDMAIL_HOSTNAME=$fqdn APTGET="apt-get --no-download -o Dir::Cache::archives=$src/debs" \
+        AUTO_USE_EXISTING_CONFIG_FILE=y AUTO_INSTALL_WITHOUT_CONFIRM=y AUTO_CLEANUP_REMOVE_SENDMAIL=y \
+        AUTO_CLEANUP_REPLACE_FIREWALL_RULES=n AUTO_CLEANUP_RESTART_FIREWALL=n AUTO_CLEANUP_REPLACE_MYSQL_CONFIG=y \
+        bash iRedMail.sh </dev/null
+      grep -q 'status_cleanup="DONE"' runtime/install.status || { echo "iRedMail's installer didn't finish: /root/iRedMail/runtime/install.log"; exit 1; }
+      # No ClamAV: Amavis skips virus scanning instead of holding mail back for want of a scanner.
+      systemctl disable -q --now clamav-daemon clamav-freshclam 2>/dev/null || true
+      cat >>/etc/amavis/conf.d/50-user <<'EOF'
+
+      # Lab panel: no ClamAV (no virus definitions offline), so no virus scanning.
+      @bypass_virus_checks_maps = (1);
+      @av_scanners = ();
+      @av_scanners_backup = ();
+      1;
+      EOF
+      # Mailboxes with the machine's password: the user (an administrator, like postmaster) and the
+      # test users. As iRedMail's tools/create_mail_user_SQL.sh makes them.
+      hash=$(lab_sql_string "$(doveadm pw -s SSHA512 -p "$password")" mysql)
+      d=$(lab_sql_string "$domain" mysql)
+      {
+        echo "UPDATE mailbox SET password = $hash WHERE username = 'postmaster@$domain';"
+        IFS=', ' read -ra more <<<"$users"
+        for user in "$username" "${more[@]}"; do
+          [ -n "$user" ] || continue
+          u=$(lab_sql_string "$user@$domain" mysql)
+          echo "INSERT IGNORE INTO mailbox (username, password, name, storagebasedirectory, storagenode, maildir, quota, domain, active, passwordlastchange, created)"
+          echo "  VALUES ($u, $hash, $(lab_sql_string "$user" mysql), '/var/vmail', 'vmail1', $(lab_sql_string "$domain/$user/" mysql), 1024, $d, 1, NOW(), NOW());"
+          echo "INSERT IGNORE INTO forwardings (address, forwarding, domain, dest_domain, is_forwarding) VALUES ($u, $u, $d, $d, 1);"
+        done
+        u=$(lab_sql_string "$username@$domain" mysql)
+        echo "UPDATE mailbox SET isadmin = 1, isglobaladmin = 1 WHERE username = $u;"
+        echo "INSERT IGNORE INTO domain_admins (username, domain, created, active) VALUES ($u, 'ALL', NOW(), 1);"
+      } | mysql vmail
+      # Its installer asks for a restart to start everything as configured: the services instead.
+      systemctl daemon-reload
+      for unit in mariadb postfix dovecot amavis iredapd iredadmin mlmmjadmin nginx $(systemctl list-unit-files --no-legend 'php*-fpm.service' | awk '{print $1}'); do
+        systemctl cat "$unit" >/dev/null 2>&1 || continue
+        systemctl enable -q "$unit"
+        systemctl restart "$unit"
+      done
+      lab_wait_http https://127.0.0.1/mail/
+
+- id: zimbra
+  name: Zimbra
+  category: Mail
+  description: "Zimbra Collaboration 8.8.15, open source: mail, calendar and contacts, with its web client and admin console. The GA build (4179), without the patches after it. Set up as the machine starts: about 20 minutes."
+  ports: [25, 80, 110, 143, 443, 465, 587, 993, 995, 7071]
+  password: true
+  setupMinutes: 40
+  links: ["https://{ip}/", "https://{ip}:7071/"]
+  notes:
+    - "Sign in to webmail and to the admin console (port 7071) as {username}@{domain}, with the machine's password. Test users ({users}) have it too."
+    - "The server's name is {hostname}.{domain}. Its certificate is self-signed; antivirus is off (offline, ClamAV has no virus definitions)."
+  options:
+    - id: domain
+      label: Mail domain
+      help: The domain mail is for, e.g. lab.example. The server is named <machine>.<domain>.
+      type: hostname
+      default: lab.example
+    - id: users
+      label: Test users
+      help: More mailboxes, separated by commas, e.g. alice, bob. Each gets the machine's password.
+      type: text
+      pattern: "[a-z][a-z0-9-]{0,30}(\\s*,\\s*[a-z][a-z0-9-]{0,30}){0,9}"
+  debian:
+    # Zimbra is installed in its template, not configured (scripts/template/zimbra/prepare-zimbra.sh).
+    packages: []
+    script: |
+      [ -x /opt/zimbra/libexec/zmsetup.pl ] || { echo "This template has no Zimbra: use the Zimbra template."; exit 1; }
+      fqdn=$hostname.$domain
+      # Its name, with this machine's address (Zimbra won't take a loopback one), in /etc/hosts.
+      sed -i "/\s$hostname\(\s\|\$\)/d" /etc/hosts
+      echo "$(lab_ip) $fqdn $hostname" >>/etc/hosts
+      # Its settings: one server with everything, its user the administrator. Every address made from the
+      # domain is given, as the defaults are made from the machine's name before these are read. The
+      # password is a random one here (the file can't hold every character), the machine's below.
+      config=$(mktemp)
+      cat >"$config" <<EOF
+      HOSTNAME=$fqdn
+      LDAPHOST=$fqdn
+      SMTPHOST=$fqdn
+      DOCREATEDOMAIN=yes
+      CREATEDOMAIN=$domain
+      zimbraDefaultDomainName=$domain
+      DOCREATEADMIN=yes
+      CREATEADMIN=$username@$domain
+      CREATEADMINPASS=$(openssl rand -hex 16)
+      AVUSER=$username@$domain
+      AVDOMAIN=$domain
+      SMTPSOURCE=$username@$domain
+      SMTPDEST=$username@$domain
+      zimbraVersionCheckNotificationEmail=$username@$domain
+      zimbraVersionCheckNotificationEmailFrom=$username@$domain
+      TRAINSASPAM=spam.$(openssl rand -hex 4)@$domain
+      TRAINSAHAM=ham.$(openssl rand -hex 4)@$domain
+      VIRUSQUARANTINE=virus-quarantine.$(openssl rand -hex 4)@$domain
+      RUNAV=no
+      VERSIONUPDATECHECK=FALSE
+      zimbraIPMode=ipv4
+      STARTSERVERS=yes
+      EOF
+      /opt/zimbra/libexec/zmsetup.pl -c "$config" </dev/null
+      rm -f "$config"
+      zm() { su - zimbra -c "$(printf '%q ' "$@")"; }
+      # Mail for this server's own mailboxes goes by /etc/hosts, not DNS (the lab has none for it).
+      zm zmprov mcf zimbraMtaLmtpHostLookup native
+      zm zmprov sp "$username@$domain" "$password"
+      IFS=', ' read -ra more <<<"$users"
+      for user in "${more[@]}"; do
+        [ -n "$user" ] || continue
+        zm zmprov ca "$user@$domain" "$password"
+      done
+      zm zmmtactl restart
+      systemctl enable -q zimbra 2>/dev/null || true
+      lab_wait_http https://127.0.0.1/ 600
+
 - id: ftp
   name: FTP
   category: File transfer
@@ -604,6 +786,56 @@
       systemctl enable -q --now docker
       usermod -aG docker "$username"
 
+- id: python
+  name: Python
+  category: Developer tools
+  description: A Python of your choice, from 2.7 to 3.15, beside the system's own (which the system's tools keep using). With pip.
+  notes:
+    - "python{version} and pip{version}, in /opt/python/{version}. For a project of its own: python{version} -m venv ~/venv."
+    - text: "It's also python and pip (python2 and pip2, or python3 and pip3, by its version)."
+      when: {make_default: ["yes"]}
+  options:
+    - id: version
+      label: Version
+      type: choice
+      default: "3.14"
+      choices:
+        - {value: "2.7", label: "2.7 (end of life 2020; for old tools and exploits)"}
+        - {value: "3.8", label: "3.8 (end of life)"}
+        - {value: "3.9", label: "3.9 (end of life)"}
+        - {value: "3.10", label: "3.10"}
+        - {value: "3.11", label: "3.11"}
+        - {value: "3.12", label: "3.12"}
+        - {value: "3.13", label: "3.13"}
+        - {value: "3.14", label: "3.14"}
+        - {value: "3.15", label: "3.15 (newest)"}
+    - id: make_default
+      label: Make it the default
+      help: python and pip run this one too, ahead of the system's (python3 too, for a 3.x). The system's own tools keep theirs.
+      type: boolean
+      default: "no"
+  debian:
+    # Each version's files are in /opt/lab-deploy/python (prepare.sh's bake_python): 3.x as
+    # python-build-standalone builds them (what uv installs), 2.7 built for the template. These
+    # packages are what 2.7 was built with, and what pip needs to build C extensions.
+    packages: [build-essential, zlib1g-dev, libbz2-dev, libreadline-dev, libsqlite3-dev, libffi-dev, libncurses-dev]
+    script: |
+      file=/opt/lab-deploy/python/$version.tar.gz
+      [ -s "$file" ] || { echo "This template has no Python $version: rebuild it with today's prepare.sh."; exit 1; }
+      rm -rf "/opt/python/$version"
+      mkdir -p "/opt/python/$version"
+      tar -xzf "$file" -C "/opt/python/$version" --strip-components=1
+      major=${version%%.*}
+      link() { ln -sf "/opt/python/$version/bin/$1" "/usr/local/bin/$2"; }
+      link "python$version" "python$version"
+      link "pip$version" "pip$version"
+      if [ "$make_default" = yes ]; then
+        link "python$version" python
+        link "pip$version" pip
+        link "python$version" "python$major"
+        link "pip$version" "pip$major"
+      fi
+      "/usr/local/bin/python$version" -c 'import ssl, sqlite3, zlib, ctypes'
 - id: juice-shop
   name: OWASP Juice Shop
   category: Practice targets
@@ -699,6 +931,66 @@
       lab_wait_http http://127.0.0.1/
       docker exec -u git gitea gitea admin user create --admin --username "$username" --password "$password" \
         --email "$username@$hostname.lab.example" --must-change-password=false
+
+- id: minio
+  name: MinIO
+  category: Storage
+  description: MinIO, S3-compatible object storage, with its web console and its user as the administrator; and mc, its command-line client. The April 2025 release, the last with the full console.
+  ports: [9000, 9001]
+  password: true
+  links: ["http://{ip}:9001/"]
+  notes:
+    - "Sign in to the console as {username}, with the machine's password."
+    - "The S3 API is http://{ip}:9000: access key {username}, secret key the machine's password. On the machine, mc knows it as lab, e.g. mc ls lab."
+  options:
+    - id: bucket
+      label: Bucket
+      help: A bucket to make, e.g. backups. Leave it blank for none.
+      type: text
+      pattern: "[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]"
+  debian:
+    # Built from source into the template (prepare.sh's bake_minio; scripts/template/build-minio.sh).
+    packages: []
+    script: |
+      [ -x /usr/local/bin/minio ] || { echo "This template has no MinIO: rebuild it with today's prepare.sh."; exit 1; }
+      id minio-user >/dev/null 2>&1 || useradd -r -M -d /var/lib/minio -s /usr/sbin/nologin minio-user
+      install -d -o minio-user -g minio-user -m 750 /var/lib/minio
+      # Its administrator, for systemd: in double quotes, with \ and " escaped.
+      quote() { local v=${1//\\/\\\\}; printf '"%s"' "${v//\"/\\\"}"; }
+      install -m 600 /dev/null /etc/default/minio
+      cat >/etc/default/minio <<EOF
+      MINIO_VOLUMES=/var/lib/minio
+      MINIO_OPTS="--address :9000 --console-address :9001"
+      MINIO_ROOT_USER=$(quote "$username")
+      MINIO_ROOT_PASSWORD=$(quote "$password")
+      EOF
+      cat >/etc/systemd/system/minio.service <<'EOF'
+      # Written by the lab panel's minio extra.
+      [Unit]
+      Description=MinIO object storage
+      Wants=network-online.target
+      After=network-online.target
+
+      [Service]
+      User=minio-user
+      Group=minio-user
+      EnvironmentFile=/etc/default/minio
+      ExecStart=/usr/local/bin/minio server $MINIO_OPTS $MINIO_VOLUMES
+      Restart=always
+      LimitNOFILE=65536
+
+      [Install]
+      WantedBy=multi-user.target
+      EOF
+      systemctl daemon-reload
+      systemctl enable -q minio
+      systemctl restart minio
+      lab_wait_http http://127.0.0.1:9000/minio/health/live
+      lab_open 9000/tcp 9001/tcp
+      # mc, signed in as the administrator, for the user and root.
+      sudo -u "$username" -H /usr/local/bin/mc alias set lab http://127.0.0.1:9000 "$username" "$password" >/dev/null
+      /usr/local/bin/mc alias set lab http://127.0.0.1:9000 "$username" "$password" >/dev/null
+      if [ -n "$bucket" ]; then /usr/local/bin/mc mb --ignore-existing "lab/$bucket" >/dev/null; fi
 
 - id: iis
   name: IIS

@@ -55,6 +55,8 @@ declare -A EXTRA_PACKAGES_DEBIAN=(
 	[mysql]=""
 	[sqlite]="sqlite3"
 	[mail]="postfix dovecot-imapd dovecot-pop3d roundcube roundcube-sqlite3 apache2 libapache2-mod-php openssl"
+	# Its own packages aren't installed: bake_iredmail keeps them, as they'd clash with the mail extra's.
+	[iredmail]="dialog wget"
 	[ftp]="vsftpd openssl"
 	[desktop]="xfce4-session xfwm4 xfce4-panel xfdesktop4 xfce4-terminal thunar xfce4-settings xfce4-notifyd dbus-x11 xrdp xorgxrdp tigervnc-standalone-server tigervnc-tools ssl-cert fonts-dejavu-core adwaita-icon-theme"
 	[docker]="docker.io"
@@ -64,6 +66,12 @@ declare -A EXTRA_PACKAGES_DEBIAN=(
 	[grafana]="docker.io"
 	[vaultwarden]="docker.io"
 	[gitea]="docker.io"
+	# Not packages: built from source (bake_minio).
+	[minio]=""
+	# The Zimbra template's own (bake_zimbra), never baked in with the rest.
+	[zimbra]=""
+	# What Python 2.7 is built with (bake_python), and pip needs to build C extensions.
+	[python]="build-essential zlib1g-dev libbz2-dev libreadline-dev libsqlite3-dev libffi-dev libncurses-dev"
 )
 # shellcheck disable=SC2034 # used through EXTRA_PACKAGES, a reference to the family's list
 declare -A EXTRA_PACKAGES_RHEL=(
@@ -228,7 +236,136 @@ bake_desktop() {
 	# Its packages mustn't make the machine boot to a login screen.
 	systemctl set-default multi-user.target
 }
+
+# MinIO and mc: built from source by build-minio.sh, beside this script (MinIO publishes no binaries
+# any more). Offline: MINIO_FROM=<URL> of the media folder's linux/minio, which fetch-media.sh builds
+# with the same script.
+MINIO_FROM=${MINIO_FROM:-}
+bake_minio() {
+	local dir
+	dir=$(mktemp -d)
+	if [[ -n $MINIO_FROM ]]; then
+		for f in minio mc SHA256SUMS; do curl -fsSL -o "$dir/$f" "$MINIO_FROM/$f"; done
+		(cd "$dir" && sha256sum -c --quiet SHA256SUMS)
+	elif [[ -f $HERE/build-minio.sh ]]; then
+		bash "$HERE/build-minio.sh" "$dir"
+	else
+		echo "MinIO needs build-minio.sh beside prepare.sh (or MINIO_FROM)." >&2
+		return 1
+	fi
+	install -m 755 "$dir/minio" "$dir/mc" /usr/local/bin/
+	rm -rf "$dir"
+}
+
+# The Python extra's versions, kept in /opt/lab-deploy/python as <version>.tar.gz and unpacked on a
+# machine deployed with one. 3.x: python-build-standalone's builds (what uv installs), each the last
+# of its version as of October 2026: "<build> <sha256>". 2.7: built here from source, with OpenSSL
+# 1.1.1 inside it (2.7 can't use OpenSSL 3). Offline: PYTHON_FROM=<URL> of the media folder's
+# linux/python, which holds all these files.
+declare -A PYTHON_BUILDS=(
+	[3.8]="3.8.20+20241002 a3a75094545912d4e9413673441b3f0d2e58ce9b264477f910800148801ccf11"
+	[3.9]="3.9.25+20251031 fe04e8b27bd69ca2144fc542428f8b9b5287b6a2e45516a4acfe2c2bc3102773"
+	[3.10]="3.10.22+20261009 caa66b308e10f35b8114054df7d927903f971f631cfa3237b84c40d5d5f35549"
+	[3.11]="3.11.17+20261013 3b8e5a248bcc351265ffe68f5e457668a2e09c99a47f81f658988c7d3d107522"
+	[3.12]="3.12.15+20261013 178d3d83b6e8e99285a65d3fce9c16b87952cc5efdb4d1a0e3ff3be18ff0fc9c"
+	[3.13]="3.13.16+20261013 d0080766b6b74aeb81e1949ef0d9a20e6c17f7b160fb295a69b936ccb17660be"
+	[3.14]="3.14.8+20261013 d8faa1b588506b9e3e5a3f57807bb056d534a1641a6b10d15b6ea3f0b413b960"
+	[3.15]="3.15.0+20261013 69740dcd9b3480b3d53760f2d3b75582adb14fa54434628dea32480ddede542a"
+)
+PYTHON2_SHA256=da3080e3b488f648a3d7a4560ddee895284c3380b11d6de75edb986526b9a814       # Python-2.7.18.tgz
+OPENSSL111_SHA256=cf3098950cb4d853ad95c0841f1f9c6d3dc102dccfcacd521d93925208b76ac8    # openssl-1.1.1w.tar.gz
+PYTHON_FROM=${PYTHON_FROM:-}
+bake_python() {
+	local v build sum file url dir
+	mkdir -p /opt/lab-deploy/python
+	for v in "${!PYTHON_BUILDS[@]}"; do
+		read -r build sum <<<"${PYTHON_BUILDS[$v]}"
+		file=cpython-$build-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz
+		url=${PYTHON_FROM:-https://github.com/astral-sh/python-build-standalone/releases/download/${build#*+}}/${file/+/%2B}
+		curl -fsSL -o "/opt/lab-deploy/python/$v.tar.gz" "$url"
+		echo "$sum  /opt/lab-deploy/python/$v.tar.gz" | sha256sum -c --quiet
+	done
+
+	# 2.7, for /opt/python/2.7 (where the extra unpacks it), packed the way the others are (in python/).
+	dir=$(mktemp -d)
+	curl -fsSL -o "$dir/python.tgz" "${PYTHON_FROM:-https://www.python.org/ftp/python/2.7.18}/Python-2.7.18.tgz"
+	echo "$PYTHON2_SHA256  $dir/python.tgz" | sha256sum -c --quiet
+	curl -fsSL -o "$dir/openssl.tgz" "${PYTHON_FROM:-https://github.com/openssl/openssl/releases/download/OpenSSL_1_1_1w}/openssl-1.1.1w.tar.gz"
+	echo "$OPENSSL111_SHA256  $dir/openssl.tgz" | sha256sum -c --quiet
+	tar -xzf "$dir/python.tgz" -C "$dir"
+	tar -xzf "$dir/openssl.tgz" -C "$dir"
+	echo "    building OpenSSL 1.1.1 and Python 2.7 (a few minutes)"
+	(cd "$dir/openssl-1.1.1w" && ./config --prefix="$dir/ssl" --openssldir=/etc/ssl no-shared no-tests -fPIC >/dev/null &&
+		make -s -j"$(nproc)" >/dev/null 2>&1 && make -s install_sw >/dev/null)
+	# Today's compilers stop at what C did in 2010 (gnu11 is the language 2.7 was written in); setup.py
+	# finds OpenSSL by CPPFLAGS and LDFLAGS.
+	(cd "$dir/Python-2.7.18" && ./configure -q --prefix=/opt/python/2.7 --enable-unicode=ucs4 --with-ensurepip=install \
+		CFLAGS="-std=gnu11 -Wno-error=implicit-function-declaration -Wno-error=incompatible-pointer-types -Wno-error=int-conversion" \
+		CPPFLAGS="-I$dir/ssl/include" LDFLAGS="-L$dir/ssl/lib" &&
+		make -s -j"$(nproc)" >/dev/null 2>&1 && make -s install DESTDIR="$dir/root" >/dev/null 2>&1)
+	# Checked in place (it finds its library beside it), with what people use it for.
+	"$dir/root/opt/python/2.7/bin/python2.7" -c 'import ssl, hashlib, sqlite3, zlib, bz2, readline, ctypes, json; print("    " + ssl.OPENSSL_VERSION)'
+	"$dir/root/opt/python/2.7/bin/python2.7" -m pip --version >/dev/null
+	tar -czf /opt/lab-deploy/python/2.7.tar.gz -C "$dir/root/opt/python" --transform 's,^2\.7,python,' 2.7
+	rm -rf "$dir"
+}
+
+# iRedMail 1.8.8 (Ubuntu 24.04 and 26.04, Debian 12 and 13): its installer in /opt/lab-deploy/iredmail,
+# with the files it would fetch (Roundcube, iRedAdmin, iRedAPD, mlmmjadmin), and the packages it
+# installs on this system kept in debs/, not installed (they'd clash with the mail extra's). Offline:
+# IREDMAIL_FROM=<URL> of the media folder's linux/iredmail, holding iRedMail-1.8.8.tar.gz and those files.
+IREDMAIL_SHA256=3754794897d18ecdf2d277fa25682c048d479016a56b41bc979ab756a786de6e
+IREDMAIL_FROM=${IREDMAIL_FROM:-}
+bake_iredmail() {
+	local dir=/opt/lab-deploy/iredmail f sum pkgs
+	rm -rf "$dir"
+	mkdir -p "$dir/iRedMail" "$dir/debs/partial"
+	curl -fsSL -o "$dir/iredmail.tar.gz" "${IREDMAIL_FROM:-https://github.com/iredmail/iRedMail/archive/refs/tags}/${IREDMAIL_FROM:+iRedMail-}1.8.8.tar.gz"
+	echo "$IREDMAIL_SHA256  $dir/iredmail.tar.gz" | sha256sum -c --quiet
+	tar -xzf "$dir/iredmail.tar.gz" -C "$dir/iRedMail" --strip-components=1
+	rm "$dir/iredmail.tar.gz"
+	# What its own download step would fetch, checked against its list (not netdata, which isn't used).
+	mkdir -p "$dir/iRedMail/pkgs/misc"
+	while read -r sum f; do
+		[[ $f == *netdata* ]] && continue
+		curl -fsSL -o "$dir/iRedMail/pkgs/$f" "${IREDMAIL_FROM:-https://dl.iredmail.org/yum/misc}/${f#misc/}"
+		echo "$sum  $dir/iRedMail/pkgs/$f" | sha256sum -c --quiet
+	done <"$dir/iRedMail/pkgs/pkgs.sha256"
+	# The packages, as its installer works them out for the extra's settings: its install step, with
+	# the installing swapped for noting the list (and stopping there).
+	pkgs=$(cd "$dir/iRedMail" && bash -c '
+		export ROOTDIR=$PWD CONF_DIR=$PWD/conf FUNCTIONS_DIR=$PWD/functions PKG_DIR=$PWD/pkgs/pkgs
+		export PKG_MISC_DIR=$PWD/pkgs/misc SAMPLE_DIR=$PWD/samples RUNTIME_DIR=$(mktemp -d)
+		export BACKEND=MYSQL BACKEND_ORIG=MARIADB WEB_SERVER=NGINX USE_IREDADMIN=YES USE_ROUNDCUBE=YES
+		export USE_SOGO=NO USE_NETDATA=NO USE_FAIL2BAN=NO
+		. conf/global && . conf/core
+		for c in web_server openldap mysql postgresql dovecot postfix mlmmj amavisd iredapd memcached sogo \
+			clamav spamassassin roundcube netdata fail2ban iredadmin logwatch; do . "conf/$c"; done
+		. functions/packages.sh
+		lab_note() { echo "$*" >"$RUNTIME_DIR/packages"; touch "$RUNTIME_DIR/.pkg_install_failed"; }
+		install_pkg=lab_note
+		(install_all) >/dev/null 2>&1
+		cat "$RUNTIME_DIR/packages"; rm -rf "$RUNTIME_DIR"')
+	[[ -n $pkgs ]] || { echo "iRedMail's package list came out empty." >&2; return 1; }
+	# shellcheck disable=SC2086 # a list of package names
+	apt-get install -yq --download-only -o Dir::Cache::archives="$dir/debs" $pkgs >/dev/null
+	rm -rf "$dir/debs/partial" "$dir/debs/lock"
+	echo "    $(find "$dir/debs" -name '*.deb' | wc -l) packages kept for it"
+}
+# Zimbra 8.8.15, installed but not configured, for the Zimbra template (Ubuntu 20.04):
+# zimbra/prepare-zimbra.sh, beside this script. Offline: ZIMBRA_URL (the tarball's folder) and
+# ZIMBRA_MIRROR (its apt repository's), which that script reads.
+bake_zimbra() {
+	if [[ ! -f $HERE/zimbra/prepare-zimbra.sh ]]; then
+		echo "Zimbra needs zimbra/prepare-zimbra.sh beside prepare.sh." >&2
+		return 1
+	fi
+	bash "$HERE/zimbra/prepare-zimbra.sh"
+}
 # <<< extras
+
+# This script's folder, for build-minio.sh beside it (empty when it's run from standard input).
+HERE=$(dirname "${BASH_SOURCE[0]:-}")
 
 DRY_RUN=0
 WANT_EXTRAS=all
@@ -278,6 +415,10 @@ if ((RDP_DESKTOP)) && ! compgen -G '/usr/share/xsessions/*.desktop' >/dev/null; 
 	exit 1
 fi
 
+# Releases iRedMail 1.8.8 supports, the only ones its extra is for.
+IREDMAIL_HERE=0
+case $ID-${VERSION_ID:-} in ubuntu-24.04 | ubuntu-26.04 | debian-12 | debian-13) IREDMAIL_HERE=1 ;; esac
+
 # The extras to bake in, and their packages.
 declare -n EXTRA_PACKAGES="EXTRA_PACKAGES_${FAMILY^^}"
 if [[ $WANT_EXTRAS == all ]]; then
@@ -286,11 +427,17 @@ if [[ $WANT_EXTRAS == all ]]; then
 	if ((RDP_DESKTOP)); then mapfile -t CHOSEN < <(printf '%s\n' "${CHOSEN[@]}" | grep -vx desktop); fi
 	# MySQL's packages are Ubuntu's: Debian (and Kali, Parrot) only have MariaDB.
 	if [[ $ID != ubuntu ]]; then mapfile -t CHOSEN < <(printf '%s\n' "${CHOSEN[@]}" | grep -vx mysql); fi
+	if ! ((IREDMAIL_HERE)); then mapfile -t CHOSEN < <(printf '%s\n' "${CHOSEN[@]}" | grep -vx iredmail); fi
+	mapfile -t CHOSEN < <(printf '%s\n' "${CHOSEN[@]}" | grep -vx zimbra)
 else
 	IFS=, read -ra CHOSEN <<<"$WANT_EXTRAS"
 fi
 if [[ $ID != ubuntu && " ${CHOSEN[*]} " == *" mysql "* ]]; then
 	echo "The MySQL extra is for Ubuntu: $PRETTY_NAME has no MySQL packages (MariaDB stands in for it)." >&2
+	exit 1
+fi
+if ! ((IREDMAIL_HERE)) && [[ " ${CHOSEN[*]} " == *" iredmail "* ]]; then
+	echo "The iRedMail extra is for Ubuntu 24.04 and 26.04, and Debian 12 and 13 (what iRedMail 1.8.8 supports)." >&2
 	exit 1
 fi
 if ((RDP_DESKTOP)) && [[ " ${CHOSEN[*]} " == *" desktop "* ]]; then
