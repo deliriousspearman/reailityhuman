@@ -264,7 +264,8 @@
 # starts, for its name and mail domain. 8 GB: Zimbra's own minimum for a single server.
 - template: zimbra
   version: "8.8.15"
-  planned: true
+  # Built by Packer (packer/build.sh ubuntu -var zimbra=true -var version=20.04 …) on 2026-10-21.
+  vsphere: Labs/Templates/tpl-zimbra-8.8.15-20261021
   cpu: 4
   memoryGB: 8
   diskGB: 40
