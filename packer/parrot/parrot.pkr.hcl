@@ -62,6 +62,11 @@ variable "parrot_mirror" {
   type    = string
   default = ""
 }
+# Offline: a mirror of https://repo.zabbix.com, for the Zabbix extras' packages.
+variable "zabbix_mirror" {
+  type    = string
+  default = ""
+}
 variable "media_url" {
   type    = string
   default = ""
@@ -109,7 +114,9 @@ locals {
     "MINIO_FROM=${local.media}/linux/minio",
     "PYTHON_FROM=${local.media}/linux/python",
     "IREDMAIL_FROM=${local.media}/linux/iredmail",
+    "WAZUH_FROM=${local.media}/linux/wazuh",
   ])
+  zabbix_env = var.zabbix_mirror == "" ? "" : "ZABBIX_MIRROR=${trimsuffix(var.zabbix_mirror, "/")}"
 }
 
 source "vsphere-clone" "parrot" {
@@ -154,7 +161,7 @@ build {
       var.parrot_mirror == "" ? [] : [
         "sudo sed -i -E 's#https?://deb\\.parrot\\.sh/(direct/)?parrot/?#${trimsuffix(var.parrot_mirror, "/")}/#g' /etc/apt/sources.list /etc/apt/sources.list.d/*.list",
       ],
-      ["sudo env ${local.media_env} bash /tmp/prepare.sh ${local.extras_flag}"],
+      ["sudo env ${local.media_env} ${local.zabbix_env} bash /tmp/prepare.sh ${local.extras_flag}"],
     )
   }
 

@@ -70,6 +70,13 @@ declare -A EXTRA_PACKAGES_DEBIAN=(
 	[minio]=""
 	# The Zimbra template's own (bake_zimbra), never baked in with the rest.
 	[zimbra]=""
+	# What Wazuh's offline installation expects installed (its packages: bake_wazuh).
+	[wazuh]="apt-transport-https libcap2-bin gnupg debconf adduser procps curl tar gawk lsof openssl"
+	# Its package is kept (bake_wazuh_agent) and installed by the extra, for the server it names.
+	[wazuh-agent]=""
+	# Zabbix 7.0 LTS, from Zabbix's repository (preseed_zabbix adds it).
+	[zabbix]="zabbix-server-pgsql zabbix-frontend-php zabbix-apache-conf zabbix-sql-scripts zabbix-agent2 php-pgsql postgresql apache2 libapache2-mod-php"
+	[zabbix-agent]="zabbix-agent2"
 	# What Python 2.7 is built with (bake_python), and pip needs to build C extensions.
 	[python]="build-essential zlib1g-dev libbz2-dev libreadline-dev libsqlite3-dev libffi-dev libncurses-dev"
 )
@@ -104,6 +111,8 @@ declare -A EXTRA_SERVICES=(
 	[grafana]="docker containerd"
 	[vaultwarden]="docker containerd"
 	[gitea]="docker containerd"
+	[zabbix]="zabbix-server zabbix-agent2 apache2 postgresql"
+	[zabbix-agent]="zabbix-agent2"
 )
 # Where web apps come from, to bake into the template; point these at a mirror if you have one.
 WORDPRESS_URL=${WORDPRESS_URL:-https://wordpress.org/latest.tar.gz}
@@ -141,6 +150,30 @@ preseed_mail() {
 		roundcube-core roundcube/database-type select sqlite3
 	EOF
 }
+
+# Zabbix 7.0's apt repository, for the zabbix and zabbix-agent extras: Ubuntu's, or Debian 13's for Kali
+# and Parrot (built on it). Offline: ZABBIX_MIRROR=<URL> of a mirror of https://repo.zabbix.com. Its key
+# is checked against the fingerprint Zabbix publishes (Zabbix LLC, Apr 2024).
+ZABBIX_MIRROR=${ZABBIX_MIRROR:-https://repo.zabbix.com}
+ZABBIX_KEY_FPR=4C3D6F2CC75F5146754FC374D913219AB5333005
+preseed_zabbix() {
+	[[ -f /etc/apt/sources.list.d/zabbix.sources ]] && return 0
+	local key=/usr/share/keyrings/zabbix.gpg distro=$ID suite=${VERSION_CODENAME:-}
+	case $ID in kali | parrot) distro=debian suite=trixie ;; esac
+	command -v gpg >/dev/null || apt-get install -yq gnupg >/dev/null
+	curl -fsSL -o "$key.new" "$ZABBIX_MIRROR/zabbix-official-repo-apr2024.gpg"
+	if ! gpg --show-keys --with-colons "$key.new" 2>/dev/null | grep -q "^fpr:::::::::$ZABBIX_KEY_FPR:"; then
+		echo "Zabbix's repository key isn't the one expected ($ZABBIX_KEY_FPR)." >&2
+		return 1
+	fi
+	gpg --dearmor <"$key.new" >"$key" 2>/dev/null || mv "$key.new" "$key"
+	rm -f "$key.new"
+	printf '%s\n' "# Written by the lab panel's prepare.sh: Zabbix 7.0 LTS." "Types: deb" \
+		"URIs: $ZABBIX_MIRROR/zabbix/7.0/$distro" "Suites: $suite" "Components: main" "Signed-By: $key" \
+		>/etc/apt/sources.list.d/zabbix.sources
+	apt-get update -q
+}
+preseed_zabbix_agent() { preseed_zabbix; }
 
 # fetch <url> <file> <checksum url> <sha1|sha256|sha512>: downloads a file and checks it. The
 # checksum file is a bare hash, or "<hash>  <name>" lines, of which the one for this file counts.
@@ -352,6 +385,36 @@ bake_iredmail() {
 	rm -rf "$dir/debs/partial" "$dir/debs/lock"
 	echo "    $(find "$dir/debs" -name '*.deb' | wc -l) packages kept for it"
 }
+# Wazuh 4.14's server: its installer (wazuh-install.sh) and its offline bundle, every package
+# (wazuh-install.sh -dw deb -da amd64: about 1 GB), in /opt/lab-deploy/wazuh. Offline: WAZUH_FROM=<URL> of the
+# media folder's linux/wazuh, holding both and SHA256SUMS.
+WAZUH_FROM=${WAZUH_FROM:-}
+bake_wazuh() {
+	local dir=/opt/lab-deploy/wazuh f
+	rm -rf "$dir"
+	mkdir -p "$dir"
+	if [[ -n $WAZUH_FROM ]]; then
+		for f in wazuh-install.sh wazuh-offline.tar.gz SHA256SUMS; do curl -fsSL -o "$dir/$f" "$WAZUH_FROM/$f"; done
+		(cd "$dir" && sha256sum -c --quiet SHA256SUMS && rm SHA256SUMS)
+	else
+		curl -fsSL -o "$dir/wazuh-install.sh" https://packages.wazuh.com/4.14/wazuh-install.sh
+		(cd "$dir" && bash wazuh-install.sh --download-wazuh deb --download-arch amd64 >/dev/null)
+	fi
+	[[ -s $dir/wazuh-offline.tar.gz ]] || { echo "Wazuh's offline bundle didn't download." >&2; return 1; }
+	echo "    Wazuh $(grep -oP '^readonly wazuh_version="\K[^"]+' "$dir/wazuh-install.sh"), $(du -sh "$dir" | cut -f1)"
+}
+
+# Wazuh's agent, its package kept in /opt/lab-deploy/wazuh-agent (an agent may be older than its
+# server, not newer). Offline: from WAZUH_FROM too.
+WAZUH_AGENT=wazuh-agent_4.14.9-1_amd64.deb
+WAZUH_AGENT_SHA256=20178fe13fa8fa4742dd3db3a19efaeed15faa79749fc47f606ca61a7ccad1f4
+bake_wazuh_agent() {
+	mkdir -p /opt/lab-deploy/wazuh-agent
+	curl -fsSL -o "/opt/lab-deploy/wazuh-agent/$WAZUH_AGENT" \
+		"${WAZUH_FROM:-https://packages.wazuh.com/4.x/apt/pool/main/w/wazuh-agent}/$WAZUH_AGENT"
+	echo "$WAZUH_AGENT_SHA256  /opt/lab-deploy/wazuh-agent/$WAZUH_AGENT" | sha256sum -c --quiet
+}
+
 # Zimbra 8.8.15, installed but not configured, for the Zimbra template (Ubuntu 20.04):
 # zimbra/prepare-zimbra.sh, beside this script. Offline: ZIMBRA_URL (the tarball's folder) and
 # ZIMBRA_MIRROR (its apt repository's), which that script reads.
@@ -419,6 +482,10 @@ fi
 IREDMAIL_HERE=0
 case $ID-${VERSION_ID:-} in ubuntu-24.04 | ubuntu-26.04 | debian-12 | debian-13) IREDMAIL_HERE=1 ;; esac
 
+# Releases Wazuh 4.14's server supports (its bundle is 1 GB: only baked in there).
+WAZUH_HERE=0
+case $ID-${VERSION_ID:-} in ubuntu-22.04 | ubuntu-24.04 | debian-12) WAZUH_HERE=1 ;; esac
+
 # The extras to bake in, and their packages.
 declare -n EXTRA_PACKAGES="EXTRA_PACKAGES_${FAMILY^^}"
 if [[ $WANT_EXTRAS == all ]]; then
@@ -429,6 +496,7 @@ if [[ $WANT_EXTRAS == all ]]; then
 	if [[ $ID != ubuntu ]]; then mapfile -t CHOSEN < <(printf '%s\n' "${CHOSEN[@]}" | grep -vx mysql); fi
 	if ! ((IREDMAIL_HERE)); then mapfile -t CHOSEN < <(printf '%s\n' "${CHOSEN[@]}" | grep -vx iredmail); fi
 	mapfile -t CHOSEN < <(printf '%s\n' "${CHOSEN[@]}" | grep -vx zimbra)
+	if ! ((WAZUH_HERE)); then mapfile -t CHOSEN < <(printf '%s\n' "${CHOSEN[@]}" | grep -vx wazuh); fi
 else
 	IFS=, read -ra CHOSEN <<<"$WANT_EXTRAS"
 fi

@@ -75,6 +75,11 @@ variable "zimbra_mirror" {
   type    = string
   default = ""
 }
+# Offline: a mirror of https://repo.zabbix.com, for the Zabbix extras' packages.
+variable "zabbix_mirror" {
+  type    = string
+  default = ""
+}
 variable "media_url" {
   type    = string
   default = ""
@@ -108,8 +113,10 @@ locals {
     "MINIO_FROM=${local.media}/linux/minio",
     "PYTHON_FROM=${local.media}/linux/python",
     "IREDMAIL_FROM=${local.media}/linux/iredmail",
+    "WAZUH_FROM=${local.media}/linux/wazuh",
     "ZIMBRA_URL=${local.media}/linux/zimbra",
   ])
+  zabbix_env = var.zabbix_mirror == "" ? "" : "ZABBIX_MIRROR=${trimsuffix(var.zabbix_mirror, "/")}"
   zimbra_env = var.zimbra_mirror == "" ? "" : "ZIMBRA_MIRROR=${trimsuffix(var.zimbra_mirror, "/")}"
 }
 
@@ -184,7 +191,7 @@ build {
   }
 
   provisioner "shell" {
-    inline = ["sudo env ${local.media_env} ${local.zimbra_env} bash /tmp/prepare.sh ${local.extras_flag}"]
+    inline = ["sudo env ${local.media_env} ${local.zabbix_env} ${local.zimbra_env} bash /tmp/prepare.sh ${local.extras_flag}"]
   }
 
   post-processor "manifest" {

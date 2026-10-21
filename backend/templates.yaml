@@ -38,7 +38,7 @@
   username: ubuntu
   family: debian
   extras: [nginx, apache, apache-https, wordpress, nextcloud, nextcloud-snap, postgresql, mariadb, mysql, sqlite, mail, ftp, desktop, docker, juice-shop, dvwa, uptime-kuma, grafana, vaultwarden, gitea]
-  plannedExtras: [iredmail, minio, python]
+  plannedExtras: [iredmail, minio, python, wazuh-agent, zabbix, zabbix-agent]
 
 - template: ubuntu
   version: "24.04"
@@ -51,7 +51,7 @@
   username: ubuntu
   family: debian
   extras: [nginx, apache, apache-https, wordpress, nextcloud, nextcloud-snap, postgresql, mariadb, mysql, sqlite, mail, ftp, desktop, docker, juice-shop, dvwa, uptime-kuma, grafana, vaultwarden, gitea]
-  plannedExtras: [iredmail, minio, python]
+  plannedExtras: [iredmail, minio, python, wazuh, wazuh-agent, zabbix, zabbix-agent]
 - template: ubuntu
   version: "22.04"
   # Built by Packer (packer/build.sh ubuntu -var version=22.04 -var iso=ubuntu-22.04.5-live-server-amd64.iso) on 2026-10-18, with every
@@ -64,7 +64,7 @@
   family: debian
   # Not Nextcloud: it needs PHP 8.3, and 22.04 has 8.1 (the snap brings its own).
   extras: [nginx, apache, apache-https, wordpress, nextcloud-snap, postgresql, mariadb, mysql, sqlite, mail, ftp, desktop, docker, juice-shop, dvwa, uptime-kuma, grafana, vaultwarden, gitea]
-  plannedExtras: [minio, python]
+  plannedExtras: [minio, python, wazuh, wazuh-agent, zabbix, zabbix-agent]
 
 # Debian (packer/debian, from the netinst ISO): a plain server with every extra baked in, except MySQL
 # (Debian has no mysql-server package).
@@ -78,7 +78,7 @@
   username: labuser
   family: debian
   extras: [nginx, apache, apache-https, wordpress, nextcloud, nextcloud-snap, postgresql, mariadb, sqlite, mail, ftp, desktop, docker, juice-shop, dvwa, uptime-kuma, grafana, vaultwarden, gitea]
-  plannedExtras: [iredmail, minio, python]
+  plannedExtras: [iredmail, minio, python, wazuh-agent, zabbix, zabbix-agent]
 - template: debian
   version: "12"
   # Built by Packer (packer/build.sh debian -var version=12 -var iso=debian-12.15.0-amd64-netinst.iso) on 2026-10-18.
@@ -90,7 +90,7 @@
   family: debian
   # Not Nextcloud: it needs PHP 8.3, and 12 has 8.2 (the snap brings its own).
   extras: [nginx, apache, apache-https, wordpress, nextcloud-snap, postgresql, mariadb, sqlite, mail, ftp, desktop, docker, juice-shop, dvwa, uptime-kuma, grafana, vaultwarden, gitea]
-  plannedExtras: [iredmail, minio, python]
+  plannedExtras: [iredmail, minio, python, wazuh, wazuh-agent, zabbix, zabbix-agent]
 
 # Debian 11 and 10 (and 9, 8): legacy practice targets, out of support. Their cloud-init can't read the
 # panel's data, so they get lab-firstboot (family legacy) and no extras; 10 and older install from
@@ -413,7 +413,7 @@
   family: debian
   access: [ssh, rdp, console]
   extras: [nginx, apache, apache-https, wordpress, nextcloud, nextcloud-snap, postgresql, mariadb, sqlite, mail, ftp]
-  plannedExtras: [docker, juice-shop, dvwa, uptime-kuma, grafana, vaultwarden, gitea, minio, python]
+  plannedExtras: [docker, juice-shop, dvwa, uptime-kuma, grafana, vaultwarden, gitea, minio, python, wazuh-agent, zabbix-agent]
 - template: parrot
   version: "7"
   # Built by Packer (packer/parrot) on 2026-10-17, from Parrot Security 7.4's own image.
@@ -425,7 +425,7 @@
   family: debian
   access: [ssh, rdp, console]
   extras: [nginx, apache, apache-https, wordpress, nextcloud, nextcloud-snap, postgresql, mariadb, sqlite, mail, ftp]
-  plannedExtras: [docker, juice-shop, dvwa, uptime-kuma, grafana, vaultwarden, gitea, minio, python]
+  plannedExtras: [docker, juice-shop, dvwa, uptime-kuma, grafana, vaultwarden, gitea, minio, python, wazuh-agent, zabbix-agent]
 
 # The RHEL family: CentOS Stream, Rocky Linux, AlmaLinux (packer/rhel, kickstart from the boot ISO).
 # Its extras so far are the web servers. Planned until each template is built.

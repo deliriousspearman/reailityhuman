@@ -992,6 +992,216 @@
       /usr/local/bin/mc alias set lab http://127.0.0.1:9000 "$username" "$password" >/dev/null
       if [ -n "$bucket" ]; then /usr/local/bin/mc mb --ignore-existing "lab/$bucket" >/dev/null; fi
 
+# Wazuh: the server (manager, indexer and dashboard on one machine), and its agent on other machines,
+# which picks a Wazuh server machine and enrols with it. Both from files kept in the template
+# (prepare.sh's bake_wazuh and bake_wazuh_agent), so they work offline.
+
+- id: wazuh
+  name: Wazuh server
+  category: Security
+  description: "Wazuh 4.14, the open-source SIEM and XDR: its manager, indexer and dashboard on this machine. Machines with the Wazuh agent extra report to it. Installed as the machine starts: about 15 minutes."
+  ports: [443, 1514, 1515, 9200, 55000]
+  password: true
+  minMemoryGB: 4
+  setupMinutes: 30
+  links: ["https://{ip}/"]
+  notes:
+    - "Sign in to the dashboard as {username}, with the machine's password (an administrator). The certificate is self-signed."
+    - "Agents report to {ip} on ports 1514 and 1515: deploy machines with the Wazuh agent extra and choose this one."
+    - "Wazuh's own accounts (admin, the API's) have generated passwords: sudo tar -xOf /root/wazuh/wazuh-install-files.tar wazuh-install-files/wazuh-passwords.txt"
+  debian:
+    # Its installer and its offline bundle (every package) are in /opt/lab-deploy/wazuh; these are what
+    # its offline installation expects to find installed.
+    packages: [apt-transport-https, libcap2-bin, gnupg, debconf, adduser, procps, curl, tar, gawk, lsof, openssl]
+    script: |
+      src=/opt/lab-deploy/wazuh
+      [ -s "$src/wazuh-offline.tar.gz" ] || { echo "This template has no Wazuh server: rebuild it with today's prepare.sh."; exit 1; }
+      rm -rf /root/wazuh
+      mkdir -p /root/wazuh
+      cp "$src/wazuh-install.sh" "$src/wazuh-offline.tar.gz" /root/wazuh/
+      cd /root/wazuh
+      bash wazuh-install.sh --offline-installation --all-in-one </dev/null
+      rm -rf wazuh-offline wazuh-offline.tar.gz
+      # The machine's user as a dashboard administrator, through the indexer's API. (Wazuh's own
+      # password tool only takes passwords with one of .*+?- in them, which the machine's may not have.)
+      admin=$(tar -xOf wazuh-install-files.tar wazuh-install-files/wazuh-passwords.txt |
+        awk '/indexer_username: .admin./ { found = 1; next } found && /indexer_password:/ { gsub(/[\x27"]/, "", $2); print $2; exit }')
+      body=$(python3 -c 'import json, sys; print(json.dumps({"password": sys.argv[1], "backend_roles": ["admin"]}))' "$password")
+      curl -ksSf -u "admin:$admin" -X PUT -H 'Content-Type: application/json' \
+        "https://127.0.0.1:9200/_plugins/_security/api/internalusers/$username" -d "$body" >/dev/null
+      lab_wait_http https://127.0.0.1/ 300
+
+- id: wazuh-agent
+  name: Wazuh agent
+  category: Security
+  description: The Wazuh agent, reporting to a Wazuh server you've deployed (a machine with the Wazuh server extra). It enrols itself as this machine's name.
+  setupMinutes: 5
+  notes:
+    - "It reports to the Wazuh server chosen: this machine shows in its dashboard under Agents as {hostname}."
+  options:
+    - id: wazuh
+      label: Wazuh server
+      type: machine
+      extra: wazuh
+      help: A running machine with the Wazuh server extra.
+  debian:
+    # The agent's package is in /opt/lab-deploy/wazuh-agent (prepare.sh's bake_wazuh_agent).
+    packages: []
+    script: |
+      deb=$(ls /opt/lab-deploy/wazuh-agent/wazuh-agent_*.deb 2>/dev/null | head -1)
+      [ -n "$deb" ] || { echo "This template has no Wazuh agent: rebuild it with today's prepare.sh."; exit 1; }
+      WAZUH_MANAGER=$wazuh_ip WAZUH_AGENT_NAME=$hostname DEBIAN_FRONTEND=noninteractive dpkg -i "$deb" >/dev/null
+      systemctl daemon-reload
+      systemctl enable -q wazuh-agent
+      systemctl restart wazuh-agent
+      # Enrolled once it has its key from the server.
+      for _ in $(seq 60); do [ -s /var/ossec/etc/client.keys ] && exit 0; sleep 5; done
+      echo "It didn't enrol with $wazuh_name ($wazuh_ip): is the Wazuh server running, and port 1515 open?"
+      exit 1
+
+# Zabbix 7.0 LTS: the server (PostgreSQL, the web interface in Apache), and its agent (Zabbix agent 2) on
+# other machines, which picks a Zabbix server machine and registers itself there. Their packages are in
+# the template (from Zabbix's own repository), switched off.
+
+- id: zabbix
+  name: Zabbix server
+  category: Monitoring
+  description: Zabbix 7.0 LTS monitoring, with PostgreSQL and its web interface; its user is the administrator. Machines with the Zabbix agent extra add themselves to it, with the Linux template.
+  ports: [80, 10051]
+  password: true
+  setupMinutes: 5
+  links: ["http://{ip}/zabbix/"]
+  notes:
+    - "Sign in as {username}, with the machine's password (Zabbix's Admin is renamed to it)."
+    - "Agents send to {ip} on port 10051: deploy machines with the Zabbix agent extra and choose this one; they show under Monitoring → Hosts within a few minutes."
+  debian:
+    packages: [zabbix-server-pgsql, zabbix-frontend-php, zabbix-apache-conf, zabbix-sql-scripts, zabbix-agent2, php-pgsql, postgresql, apache2, libapache2-mod-php]
+    script: |
+      systemctl enable -q --now postgresql
+      db_pass=$(openssl rand -hex 16)
+      if ! sudo -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname = 'zabbix'" | grep -q 1; then
+        sudo -u postgres psql -qc "CREATE USER zabbix PASSWORD '$db_pass'"
+        sudo -u postgres createdb -O zabbix zabbix
+        # Where 7.0's package puts its schema (6.x: /usr/share/zabbix-sql-scripts).
+        schema=$(ls /usr/share/zabbix/sql-scripts/postgresql/server.sql.gz /usr/share/zabbix-sql-scripts/postgresql/server.sql.gz 2>/dev/null | head -1)
+        zcat "$schema" | sudo -u zabbix psql -q zabbix >/dev/null
+      else
+        sudo -u postgres psql -qc "ALTER USER zabbix PASSWORD '$db_pass'"
+      fi
+      sed -i -E "s/^#? ?DBPassword=.*/DBPassword=$db_pass/" /etc/zabbix/zabbix_server.conf
+      # The web interface, set up (its first-visit wizard writes this file).
+      cat >/etc/zabbix/web/zabbix.conf.php <<EOF
+      <?php
+      // Written by the lab panel's zabbix extra.
+      \$DB['TYPE'] = 'POSTGRESQL';
+      \$DB['SERVER'] = 'localhost';
+      \$DB['PORT'] = '0';
+      \$DB['DATABASE'] = 'zabbix';
+      \$DB['USER'] = 'zabbix';
+      \$DB['PASSWORD'] = '$db_pass';
+      \$DB['SCHEMA'] = '';
+      \$DB['ENCRYPTION'] = false;
+      \$DB['KEY_FILE'] = '';
+      \$DB['CERT_FILE'] = '';
+      \$DB['CA_FILE'] = '';
+      \$DB['VERIFY_HOST'] = false;
+      \$DB['CIPHER_LIST'] = '';
+      \$DB['VAULT'] = '';
+      \$DB['VAULT_URL'] = '';
+      \$DB['VAULT_DB_PATH'] = '';
+      \$DB['VAULT_TOKEN'] = '';
+      \$DB['DOUBLE_IEEE754'] = true;
+      \$ZBX_SERVER_NAME = '$hostname';
+      \$IMAGE_FORMAT_DEFAULT = IMAGE_FORMAT_PNG;
+      EOF
+      chown www-data:www-data /etc/zabbix/web/zabbix.conf.php
+      chmod 640 /etc/zabbix/web/zabbix.conf.php
+      # The machine's user in Admin's place, with its password.
+      hash=$(php -r 'echo password_hash($argv[1], PASSWORD_BCRYPT);' "$password")
+      sudo -u postgres psql -q zabbix -v u="$username" -v h="$hash" <<'SQL'
+      UPDATE users SET username = :'u', passwd = :'h' WHERE username = 'Admin' OR username = :'u';
+      SQL
+      systemctl enable -q zabbix-server zabbix-agent2 apache2
+      systemctl restart zabbix-server zabbix-agent2 apache2
+      lab_wait_http http://127.0.0.1/zabbix/
+      # Agents that say they're the lab's (their HostMetadata) are added with the Linux template.
+      python3 - "$username" "$password" <<'PY'
+      import json, sys, urllib.request
+      def api(method, params, auth=None):
+          headers = {"Content-Type": "application/json-rpc"}
+          if auth:
+              headers["Authorization"] = "Bearer " + auth
+          req = urllib.request.Request("http://127.0.0.1/zabbix/api_jsonrpc.php", headers=headers,
+                                       data=json.dumps({"jsonrpc": "2.0", "method": method, "params": params, "id": 1}).encode())
+          out = json.load(urllib.request.urlopen(req, timeout=60))
+          if "error" in out:
+              raise SystemExit(f"Zabbix API {method}: {out['error']}")
+          return out["result"]
+      token = api("user.login", {"username": sys.argv[1], "password": sys.argv[2]})
+      if api("action.get", {"filter": {"name": "Lab panel agents"}}, token):
+          sys.exit(0)
+      template = api("template.get", {"filter": {"host": "Linux by Zabbix agent"}}, token)[0]["templateid"]
+      group = api("hostgroup.get", {"filter": {"name": "Linux servers"}}, token)[0]["groupid"]
+      api("action.create", {
+          "name": "Lab panel agents", "eventsource": 2,
+          "filter": {"evaltype": 0, "conditions": [{"conditiontype": 24, "operator": 2, "value": "lab-panel"}]},
+          "operations": [
+              {"operationtype": 2},
+              {"operationtype": 4, "opgroup": [{"groupid": group}]},
+              {"operationtype": 6, "optemplate": [{"templateid": template}]},
+          ],
+      }, token)
+      PY
+
+- id: zabbix-agent
+  name: Zabbix agent
+  category: Monitoring
+  description: Zabbix agent 2, reporting to a Zabbix server you've deployed (a machine with the Zabbix server extra), which adds this machine with the Linux template.
+  ports: [10050]
+  setupMinutes: 5
+  notes:
+    - "It reports to the Zabbix server chosen: this machine shows there under Monitoring → Hosts as {hostname}."
+  options:
+    - id: zabbix
+      label: Zabbix server
+      type: machine
+      extra: zabbix
+      help: A running machine with the Zabbix server extra.
+  debian:
+    packages: [zabbix-agent2]
+    script: |
+      config=/etc/zabbix/zabbix_agent2.conf
+      sed -i -E -e "s/^Server=.*/Server=$zabbix_ip/" -e "s/^ServerActive=.*/ServerActive=$zabbix_ip/" \
+        -e "s/^Hostname=.*/Hostname=$hostname/" -e '/^HostMetadata=/d' "$config"
+      echo "HostMetadata=lab-panel" >>"$config"
+      systemctl enable -q zabbix-agent2
+      systemctl restart zabbix-agent2
+      lab_open 10050/tcp
+      # Registered once the server has it as a host (its auto-registration runs every minute or so).
+      for _ in $(seq 40); do
+        found=$(python3 - "$zabbix_ip" "$zabbix_username" "$zabbix_password" "$hostname" <<'PY'
+      import json, sys, urllib.request
+      ip, user, password, name = sys.argv[1:]
+      def api(method, params, auth=None):
+          headers = {"Content-Type": "application/json-rpc"}
+          if auth:
+              headers["Authorization"] = "Bearer " + auth
+          req = urllib.request.Request(f"http://{ip}/zabbix/api_jsonrpc.php", headers=headers,
+                                       data=json.dumps({"jsonrpc": "2.0", "method": method, "params": params, "id": 1}).encode())
+          return json.load(urllib.request.urlopen(req, timeout=30)).get("result")
+      try:
+          token = api("user.login", {"username": user, "password": password})
+          print("yes" if api("host.get", {"filter": {"host": name}}, token) else "no")
+      except Exception:
+          print("no")
+      PY
+      )
+        [ "$found" = yes ] && exit 0
+        sleep 15
+      done
+      echo "$zabbix_name ($zabbix_ip) didn't add this machine: is the Zabbix server running, and port 10051 open?"
+      exit 1
+
 - id: iis
   name: IIS
   category: Web servers

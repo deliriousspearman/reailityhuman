@@ -29,7 +29,7 @@
 id = "ubuntu-26.04"
 catalogue = "ubuntu 26.04"
 build = "packer/build.sh ubuntu"
-vars = ["apt_mirror={mirror.ubuntu}", "media_url={media}"]
+vars = ["apt_mirror={mirror.ubuntu}", "media_url={media}", "zabbix_mirror={mirror.zabbix}"]
 isos = ["ubuntu-26.04"]
 mirrors = ["ubuntu:dists/resolute/Release"]
 extras = true
@@ -38,7 +38,7 @@ extras = true
 id = "ubuntu-24.04"
 catalogue = "ubuntu 24.04"
 build = "packer/build.sh ubuntu"
-vars = ["version=24.04", "iso=ubuntu-24.04.5-live-server-amd64.iso", "apt_mirror={mirror.ubuntu}", "media_url={media}"]
+vars = ["version=24.04", "iso=ubuntu-24.04.5-live-server-amd64.iso", "apt_mirror={mirror.ubuntu}", "media_url={media}", "zabbix_mirror={mirror.zabbix}"]
 isos = ["ubuntu-24.04"]
 mirrors = ["ubuntu:dists/noble/Release"]
 extras = true
@@ -47,7 +47,7 @@ extras = true
 id = "ubuntu-22.04"
 catalogue = "ubuntu 22.04"
 build = "packer/build.sh ubuntu"
-vars = ["version=22.04", "iso=ubuntu-22.04.5-live-server-amd64.iso", "apt_mirror={mirror.ubuntu}", "media_url={media}"]
+vars = ["version=22.04", "iso=ubuntu-22.04.5-live-server-amd64.iso", "apt_mirror={mirror.ubuntu}", "media_url={media}", "zabbix_mirror={mirror.zabbix}"]
 isos = ["ubuntu-22.04"]
 mirrors = ["ubuntu:dists/jammy/Release"]
 extras = true
@@ -56,7 +56,7 @@ extras = true
 id = "ubuntu-20.04"
 catalogue = "ubuntu 20.04"
 build = "packer/build.sh ubuntu"
-vars = ["version=20.04", "iso=ubuntu-20.04.6-live-server-amd64.iso", "apt_mirror={mirror.ubuntu}", "media_url={media}"]
+vars = ["version=20.04", "iso=ubuntu-20.04.6-live-server-amd64.iso", "apt_mirror={mirror.ubuntu}", "media_url={media}", "zabbix_mirror={mirror.zabbix}"]
 isos = ["ubuntu-20.04"]
 mirrors = ["ubuntu:dists/focal/Release"]
 extras = true
@@ -76,7 +76,7 @@ media = ["linux/zimbra/zcs-8.8.15_GA_4179.UBUNTU20_64.20211118033954.tgz"]
 id = "ubuntu-18.04"
 catalogue = "ubuntu 18.04"
 build = "packer/build.sh ubuntu-di"
-vars = ["ubuntu_mirror_host={mirror.ubuntu.host}", "ubuntu_mirror_dir={mirror.ubuntu.path}", "media_url={media}", "http_ip={http_ip}"]
+vars = ["ubuntu_mirror_host={mirror.ubuntu.host}", "ubuntu_mirror_dir={mirror.ubuntu.path}", "media_url={media}", "zabbix_mirror={mirror.zabbix}", "http_ip={http_ip}"]
 isos = ["ubuntu-18.04"]
 mirrors = ["ubuntu:dists/bionic/Release"]
 extras = true
@@ -94,7 +94,7 @@ mirrors = ["ubuntu:dists/xenial/Release"]
 id = "debian-13"
 catalogue = "debian 13"
 build = "packer/build.sh debian"
-vars = ["debian_mirror_host={mirror.debian.host}", "debian_mirror_dir={mirror.debian.path}", "media_url={media}", "http_ip={http_ip}"]
+vars = ["debian_mirror_host={mirror.debian.host}", "debian_mirror_dir={mirror.debian.path}", "media_url={media}", "zabbix_mirror={mirror.zabbix}", "http_ip={http_ip}"]
 isos = ["debian-13"]
 mirrors = ["debian:dists/trixie/Release"]
 extras = true
@@ -103,7 +103,7 @@ extras = true
 id = "debian-12"
 catalogue = "debian 12"
 build = "packer/build.sh debian"
-vars = ["version=12", "iso=debian-12.15.0-amd64-netinst.iso", "debian_mirror_host={mirror.debian.host}", "debian_mirror_dir={mirror.debian.path}", "media_url={media}", "http_ip={http_ip}"]
+vars = ["version=12", "iso=debian-12.15.0-amd64-netinst.iso", "debian_mirror_host={mirror.debian.host}", "debian_mirror_dir={mirror.debian.path}", "media_url={media}", "zabbix_mirror={mirror.zabbix}", "http_ip={http_ip}"]
 isos = ["debian-12"]
 mirrors = ["debian:dists/bookworm/Release"]
 extras = true
@@ -370,7 +370,7 @@ isos = ["truenas-core-13.3"]
 id = "kali"
 catalogue = "kali 2026.2"
 build = "packer/build.sh kali"
-vars = ["kali_mirror_host={mirror.kali.host}", "kali_mirror_dir={mirror.kali.path}", "media_url={media}", "http_ip={http_ip}"]
+vars = ["kali_mirror_host={mirror.kali.host}", "kali_mirror_dir={mirror.kali.path}", "media_url={media}", "zabbix_mirror={mirror.zabbix}", "http_ip={http_ip}"]
 isos = ["kali-2026.2"]
 mirrors = ["kali:dists/kali-rolling/Release"]
 extras = true
@@ -385,7 +385,7 @@ base = true
 id = "parrot"
 catalogue = "parrot 7"
 build = "packer/build.sh parrot"
-vars = ["parrot_mirror={mirror.parrot}", "media_url={media}"]
+vars = ["parrot_mirror={mirror.parrot}", "media_url={media}", "zabbix_mirror={mirror.zabbix}"]
 needs = ["parrot-base"]
 mirrors = ["parrot:dists/echo/Release"]
 extras = true
@@ -431,6 +431,8 @@ minio = ["linux/minio/minio", "linux/minio/mc"]
 python = ["linux/python/Python-2.7.18.tgz", "linux/python/openssl-1.1.1w.tar.gz"]
 iredmail = ["linux/iredmail/iRedMail-1.8.8.tar.gz"]
 zimbra = ["linux/zimbra/zcs-8.8.15_GA_4179.UBUNTU20_64.20211118033954.tgz"]
+wazuh = ["linux/wazuh/wazuh-offline.tar.gz", "linux/wazuh/wazuh-install.sh"]
+wazuh-agent = ["linux/wazuh/wazuh-agent_4.14.9-1_amd64.deb"]
 outlook = ["windows/office/setup.exe"]
 mssql = ["iso:sql-server-2025", "windows/chinook/Chinook_SqlServer.sql"]
 

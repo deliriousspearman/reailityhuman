@@ -6,7 +6,8 @@
 #
 # It fills <folder> with, each checked against its published or pinned checksum:
 #   linux/     WordPress, WP-CLI, Nextcloud, Chinook, the container apps' Docker images (if this
-#              machine has Docker), the Pythons (2.7-3.15), iRedMail, Zimbra 8.8.15's tarball (its
+#              machine has Docker), the Pythons (2.7-3.15), iRedMail, Wazuh's server bundle and agent
+#              (Wazuh's needs Docker too), Zimbra 8.8.15's tarball (its
 #              template's other packages come from a mirror of repo.zimbra.com), and MinIO and mc
 #              (built here from source: 5-15 minutes, 3 GB free), for prepare.sh. Serve this folder's
 #              parent on a LAN web server and pass the address to the Linux builds: -var media_url=http://…
@@ -29,7 +30,7 @@ images=0
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 prepare=$here/../template/prepare.sh
 packer_dir=$here/../../packer
-mkdir -p "$out"/{linux/{wordpress,wp-cli,nextcloud,chinook,docker,python,iredmail,minio,zimbra},windows/{cloudbase-init,chinook,office,exchange},packer}
+mkdir -p "$out"/{linux/{wordpress,wp-cli,nextcloud,chinook,docker,python,iredmail,minio,zimbra,wazuh},windows/{cloudbase-init,chinook,office,exchange},packer}
 out=$(cd "$out" && pwd)
 
 # What prepare.sh and the Windows build use: keep in step with them.
@@ -106,6 +107,25 @@ tar -xzOf "$out/linux/iredmail/iRedMail-1.8.8.tar.gz" --wildcards '*/pkgs/pkgs.s
 	get "https://dl.iredmail.org/yum/misc/${file#misc/}" "$out/linux/iredmail/${file#misc/}"
 	check "$out/linux/iredmail/${file#misc/}" "$sum" sha256
 done
+
+step "Linux: Wazuh 4.14's server (its installer's offline bundle) and agent"
+if [[ -s $out/linux/wazuh/wazuh-offline.tar.gz ]]; then
+	echo "  fetched already"
+elif command -v docker >/dev/null; then
+	# Its installer only runs as root: in a throwaway container, writing here.
+	docker run --rm -v "$out/linux/wazuh:/w" -w /w ubuntu:24.04 bash -c \
+		'apt-get update -qq >/dev/null && apt-get install -yqq curl ca-certificates >/dev/null 2>&1 &&
+		curl -fsSL -o wazuh-install.sh https://packages.wazuh.com/4.14/wazuh-install.sh &&
+		bash wazuh-install.sh --download-wazuh deb --download-arch amd64 >/dev/null && chmod 644 wazuh-*'
+else
+	echo "  skipped: no Docker here (the Wazuh server extra needs this to build offline)" >&2
+fi
+agent=$(grep -oE '^WAZUH_AGENT=[^ ]+' "$prepare" | cut -d= -f2)
+get "https://packages.wazuh.com/4.x/apt/pool/main/w/wazuh-agent/$agent" "$out/linux/wazuh/$agent"
+check "$out/linux/wazuh/$agent" "$(pinned WAZUH_AGENT_SHA256)" sha256
+if [[ -s $out/linux/wazuh/wazuh-offline.tar.gz ]]; then
+	(cd "$out/linux/wazuh" && sha256sum wazuh-install.sh wazuh-offline.tar.gz >SHA256SUMS)
+fi
 
 step "Linux: Zimbra 8.8.15 GA, for the Zimbra template (scripts/template/zimbra/prepare-zimbra.sh)"
 zimbra=$here/../template/zimbra/prepare-zimbra.sh

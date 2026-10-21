@@ -68,6 +68,11 @@ variable "iso" {
 # Nextcloud, Chinook, the container images, MinIO, the Pythons and iRedMail from there. Empty: from
 # their own sites (MinIO: built from source). (The Nextcloud snap needs the Snap
 # Store: leave it out of offline builds with -var extras=… .)
+# Offline: a mirror of https://repo.zabbix.com, for the Zabbix extras' packages.
+variable "zabbix_mirror" {
+  type    = string
+  default = ""
+}
 variable "media_url" {
   type    = string
   default = ""
@@ -102,7 +107,9 @@ locals {
     "MINIO_FROM=${local.media}/linux/minio",
     "PYTHON_FROM=${local.media}/linux/python",
     "IREDMAIL_FROM=${local.media}/linux/iredmail",
+    "WAZUH_FROM=${local.media}/linux/wazuh",
   ])
+  zabbix_env = var.zabbix_mirror == "" ? "" : "ZABBIX_MIRROR=${trimsuffix(var.zabbix_mirror, "/")}"
 }
 
 source "vsphere-iso" "kali" {
@@ -175,7 +182,7 @@ build {
   }
 
   provisioner "shell" {
-    inline = ["sudo env ${local.media_env} bash /tmp/prepare.sh ${local.extras_flag}"]
+    inline = ["sudo env ${local.media_env} ${local.zabbix_env} bash /tmp/prepare.sh ${local.extras_flag}"]
   }
 
   post-processor "manifest" {

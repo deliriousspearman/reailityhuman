@@ -90,6 +90,32 @@ CASES: dict[str, list[dict]] = {
             ],
         }
     ],
+    # The servers on their own (their agents are checked by deploying a pair: they need the server's machine).
+    "wazuh": [
+        {
+            "options": {},
+            "checks": [
+                ("tcp", 1514), ("tcp", 1515),
+                ("http", "https", 443, "/app/login", None),
+                ("ssh", "curl -sk -u {username}:{password} https://127.0.0.1:9200/_plugins/_security/authinfo", '"backend_roles":["admin"]'),
+            ],
+        }
+    ],
+    "zabbix": [
+        {
+            "options": {},
+            "checks": [
+                ("tcp", 10051),
+                ("http", "http", 80, "/zabbix/", "Zabbix"),
+                (
+                    "ssh",
+                    "curl -s -H 'Content-Type: application/json-rpc' http://127.0.0.1/zabbix/api_jsonrpc.php"
+                    " -d '{\"jsonrpc\":\"2.0\",\"method\":\"user.login\",\"params\":{\"username\":\"{username}\",\"password\":\"{password}\"},\"id\":1}'",
+                    '"result":"',
+                ),
+            ],
+        }
+    ],
     "python": [
         {"options": {"version": "3.15"}, "checks": [("ssh", "python3.15 -c 'import ssl, sys; print(sys.version)'", "3.15.0")]},
         {"options": {"version": "3.8"}, "checks": [("ssh", "pip3.8 --version", "python 3.8")]},

@@ -152,6 +152,12 @@ template: 3.x as python-build-standalone's builds, 2.7 built there from source w
 **iRedMail** (an extra on Ubuntu 24.04 and 26.04, Debian 12 and 13) keeps its installer and the packages
 it installs in the template, and installs at first boot from those alone.
 
+**Wazuh** (server and agent extras) and **Zabbix** (the same): Wazuh 4.14's server bundle (its installer's
+`--download-wazuh`, about 1 GB) goes only into Ubuntu 22.04 and 24.04 and Debian 12, which Wazuh supports;
+the server installs from it at first boot (about 15 minutes, 4 GB at least). Zabbix 7.0 LTS's packages come
+from Zabbix's repository (its key checked by fingerprint; offline, `-var zabbix_mirror=`). Each agent
+extra picks its server's machine; Zabbix's server adds agents itself (an auto-registration action).
+
 **VyOS** builds from our own ISO (part 2), whose cloud-init takes the panel's settings from vCenter
 (the `vyos` family): the user through cloud-config `users` (with none there, VyOS adds `vyos` /
 `vyos`), the rest as configuration commands. The template uses BIOS, not EFI: on EFI the installed
