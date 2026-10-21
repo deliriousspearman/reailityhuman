@@ -31,15 +31,24 @@ after)
 	mkdir -p /tmp/target
 	mount /dev/gpt/rootfs /tmp/target
 	cp "$here/config.xml" /tmp/target/conf/config.xml
+	# Offline builds: where the hook gets VMware Tools (the media folder's copy).
+	if [ -s "$here/pkg-url" ]; then cp "$here/pkg-url" /tmp/target/usr/local/etc/lab-build-pkg-url; fi
 	hook=/tmp/target/usr/local/etc/rc.syshook.d/start/00-lab-build-vmware
 	mkdir -p "$(dirname "$hook")"
 	cat >"$hook" <<'EOF'
 #!/bin/sh
-# The template build only (packer/opnsense/live.sh): VMware Tools, once, then this hook goes.
+# The template build only (packer/opnsense/live.sh): VMware Tools, once, then this hook goes. From
+# OPNsense's repository, or offline from the media folder (its install.sh takes the dependencies too).
+url=$(cat /usr/local/etc/lab-build-pkg-url 2>/dev/null || true)
 for _ in 1 2 3 4 5 6 7 8 9 10; do
-	pkg install -y os-vmware && break
+	if [ -n "$url" ]; then
+		fetch -qo /tmp/lab-install.sh "$url/install.sh" && sh /tmp/lab-install.sh "$url" && break
+	else
+		pkg install -y os-vmware && break
+	fi
 	sleep 15
 done
+rm -f /usr/local/etc/lab-build-pkg-url
 /usr/local/etc/rc.d/vmware-guestd onestart 2>/dev/null || service vmware-guestd onestart 2>/dev/null || true
 rm -f "$0"
 EOF

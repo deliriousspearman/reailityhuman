@@ -57,7 +57,7 @@
 		<ssh>
 			<enable>enabled</enable>
 		</ssh>
-		<shellcmd>/usr/sbin/daemon -f /bin/sh -c '(for i in 1 2 3 4 5 6 7 8 9 10; do pkg-static install -y pfSense-pkg-Open-VM-Tools &amp;&amp; break; sleep 15; done; service vmware-guestd onestart) &gt;/var/log/lab-build-vmware.log 2&gt;&amp;1'</shellcmd>
+		<shellcmd>/usr/sbin/daemon -f /bin/sh -c '(for i in 1 2 3 4 5 6 7 8 9 10; do ${vmware_install} &amp;&amp; break; sleep 15; done; service vmware-guestd onestart) &gt;/var/log/lab-build-vmware.log 2&gt;&amp;1'</shellcmd>
 		<disablenatreflection>yes</disablenatreflection>
 		<disablesegmentationoffloading></disablesegmentationoffloading>
 		<disablelargereceiveoffloading></disablelargereceiveoffloading>

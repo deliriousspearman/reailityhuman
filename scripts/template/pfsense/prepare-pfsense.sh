@@ -19,7 +19,16 @@ version=$(cat /etc/version)
 echo "==> pfSense $version"
 
 echo "==> VMware Tools"
-pkg info -e pfSense-pkg-Open-VM-Tools || pkg-static install -y pfSense-pkg-Open-VM-Tools
+# Offline (LAB_PKG_URL: the media folder's copy, fetch-media.sh), with its install.sh, which also takes
+# the dependencies from there.
+if pkg info -e pfSense-pkg-Open-VM-Tools; then
+	:
+elif [ -n "${LAB_PKG_URL:-}" ]; then
+	fetch -qo /tmp/lab-install.sh "${LAB_PKG_URL%/}/install.sh"
+	sh /tmp/lab-install.sh "$LAB_PKG_URL"
+else
+	pkg-static install -y pfSense-pkg-Open-VM-Tools
+fi
 [ -x /usr/local/bin/vmware-rpctool ] || { echo "Open-VM-Tools has no vmware-rpctool." >&2; exit 1; }
 
 echo "==> lab-firstboot"

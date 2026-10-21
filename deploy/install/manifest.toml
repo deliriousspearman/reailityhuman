@@ -283,15 +283,17 @@ eval_days = 180
 id = "opnsense"
 catalogue = "opnsense 26.7"
 build = "packer/build.sh opnsense"
+vars = ["media_url={media}"]
 isos = ["opnsense-26.7"]
-internet = "prepare-opnsense.sh installs VMware Tools (os-vmware) from OPNsense's package repository"
+media = ["freebsd/opnsense-26.7/install.sh"]
 
 [[template]]
 id = "pfsense"
 catalogue = "pfsense 2.7.2"
 build = "packer/build.sh pfsense"
+vars = ["media_url={media}"]
 isos = ["pfsense-2.7.2"]
-internet = "prepare-pfsense.sh installs VMware Tools from pfSense's package repository"
+media = ["freebsd/pfsense-2.7.2/install.sh"]
 
 [[template]]
 id = "vyos"

@@ -52,6 +52,12 @@ variable "apt_mirror" {
   default = ""
 }
 
+# Offline: the media folder's address (scripts/isos/fetch-media.sh); VMware Tools are installed from its
+# freebsd/pfsense-<version> folder instead of the vendor's package repository.
+variable "media_url" {
+  type    = string
+  default = ""
+}
 variable "version" {
   type    = string
   default = "2.7.2"
@@ -74,6 +80,10 @@ variable "build_password" {
 
 locals {
   vm_name = var.vm_name != "" ? var.vm_name : "tpl-pfsense-${var.version}-${formatdate("YYYYMMDD", timestamp())}"
+  # The first boot's VMware Tools (config.pkrtpl.xml): from pfSense's repository, or offline from the
+  # media folder (its install.sh, from fetch-pkgs.py, with the dependencies).
+  pkg_url        = var.media_url == "" ? "" : "${trimsuffix(var.media_url, "/")}/freebsd/pfsense-${var.version}"
+  vmware_install = local.pkg_url == "" ? "pkg-static install -y pfSense-pkg-Open-VM-Tools" : "fetch -qo /tmp/lab-install.sh ${local.pkg_url}/install.sh &amp;&amp; sh /tmp/lab-install.sh ${local.pkg_url}"
 }
 
 source "vsphere-iso" "pfsense" {
@@ -114,6 +124,7 @@ source "vsphere-iso" "pfsense" {
     "config.xml" = templatefile("${path.root}/config.pkrtpl.xml", {
       admin_hash      = bcrypt(var.build_password)
       authorized_keys = base64encode(var.ssh_public_key)
+      vmware_install  = local.vmware_install
     })
   }
   remove_cdrom = true
@@ -159,7 +170,8 @@ build {
   }
 
   provisioner "shell" {
-    inline = ["sh /tmp/pfsense/prepare-pfsense.sh"]
+    inline           = ["sh /tmp/pfsense/prepare-pfsense.sh"]
+    environment_vars = local.pkg_url == "" ? [] : ["LAB_PKG_URL=${local.pkg_url}"]
     # admin's shell is pfSense's console menu, which runs what it's given with -c through /bin/sh.
     execute_command = "chmod +x {{ .Path }}; env {{ .Vars }} {{ .Path }}"
   }

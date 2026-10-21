@@ -52,6 +52,12 @@ variable "apt_mirror" {
   default = ""
 }
 
+# Offline: the media folder's address (scripts/isos/fetch-media.sh); VMware Tools are installed from its
+# freebsd/opnsense-<version> folder instead of the vendor's package repository.
+variable "media_url" {
+  type    = string
+  default = ""
+}
 variable "version" {
   type    = string
   default = "26.7"
@@ -74,6 +80,8 @@ variable "build_password" {
 
 locals {
   vm_name = var.vm_name != "" ? var.vm_name : "tpl-opnsense-${var.version}-${formatdate("YYYYMMDD", timestamp())}"
+  # Offline: where the first boot's hook (live.sh) and prepare-opnsense.sh get VMware Tools.
+  pkg_url = var.media_url == "" ? "" : "${trimsuffix(var.media_url, "/")}/freebsd/opnsense-${var.version}"
 }
 
 source "vsphere-iso" "opnsense" {
@@ -115,6 +123,8 @@ source "vsphere-iso" "opnsense" {
       root_hash       = bcrypt(var.build_password)
       authorized_keys = base64encode(var.ssh_public_key)
     })
+    # live.sh hands this to the first boot's VMware Tools hook (empty: OPNsense's repository).
+    "pkg-url" = local.pkg_url
   }
   remove_cdrom = true
 
@@ -167,7 +177,8 @@ build {
   }
 
   provisioner "shell" {
-    inline = ["sh /tmp/opnsense/prepare-opnsense.sh"]
+    inline           = ["sh /tmp/opnsense/prepare-opnsense.sh"]
+    environment_vars = local.pkg_url == "" ? [] : ["LAB_PKG_URL=${local.pkg_url}"]
     # root's shell is csh, which doesn't take Packer's usual NAME=value prefix: env does.
     execute_command = "chmod +x {{ .Path }}; env {{ .Vars }} {{ .Path }}"
   }

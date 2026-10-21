@@ -11,6 +11,8 @@
 #   windows/   Cloudbase-Init, Chinook's SQL Server script and Exchange's prerequisites (Visual C++
 #              2012 and 2013, URL Rewrite). Pass the folder to the Windows build:
 #              -var media_dir=<folder>. Office's files go in windows/office (see its README.txt).
+#   freebsd/   VMware Tools for OPNsense 26.7 and pfSense 2.7.2, with their dependencies (fetch-pkgs.py),
+#              which their builds install from here offline (media_url).
 #   images/    with --images: what the templates imported whole start from (about 20 GB): MikroTik
 #              CHR, Metasploitable 2 and 3 (both), Parrot's OVA. The import scripts read them with
 #              MEDIA=<folder>/images.
@@ -78,6 +80,12 @@ if command -v docker >/dev/null; then
 else
 	echo "  skipped: no Docker here (the container apps' extras need these to build offline)" >&2
 fi
+
+step "FreeBSD: VMware Tools for OPNsense and pfSense, with their dependencies"
+python3 "$here/fetch-pkgs.py" https://pkg.opnsense.org/FreeBSD:15:amd64/26.7/latest os-vmware "$out/freebsd/opnsense-26.7"
+# pfSense's repository is found through DNS (SRV records of pkg.pfsense.org): one of its servers.
+python3 "$here/fetch-pkgs.py" https://pkg00-atx.netgate.com/pfSense_v2_7_2_amd64-pfSense_v2_7_2 \
+	pfSense-pkg-Open-VM-Tools "$out/freebsd/pfsense-2.7.2"
 
 step "Windows: Cloudbase-Init 1.1.9, Chinook for SQL Server"
 get "$CLOUDBASE_URL" "$out/windows/cloudbase-init/CloudbaseInitSetup_x64.msi"
