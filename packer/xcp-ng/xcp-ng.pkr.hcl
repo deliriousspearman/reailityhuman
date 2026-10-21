@@ -69,6 +69,11 @@ variable "build_password" {
 # The address the build VM reaches this machine's web server on: the answer file names its post-install
 # script by URL, which Packer can only fill into the boot command, not into the files it serves.
 variable "http_ip" { type = string }
+# CentOS 7's vault, for VMware Tools (post-install.pkrtpl.sh); offline, a LAN mirror of its 7.9.2009 folder.
+variable "vault" {
+  type    = string
+  default = "http://vault.centos.org/7.9.2009"
+}
 
 locals {
   vm_name   = var.vm_name != "" ? var.vm_name : "tpl-xcp-ng-${var.version}-${formatdate("YYYYMMDD", timestamp())}"
@@ -114,6 +119,7 @@ source "vsphere-iso" "xcpng" {
       post_install_url = "http://${var.http_ip}:${local.http_port}/post-install.sh"
     })
     "/post-install.sh" = templatefile("${path.root}/post-install.pkrtpl.sh", {
+      vault          = trimsuffix(var.vault, "/")
       ssh_public_key = var.ssh_public_key
     })
   }
