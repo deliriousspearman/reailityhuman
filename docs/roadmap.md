@@ -61,7 +61,6 @@ and mouse in the browser.
 | Workstation snapshot | Delete the snapshot of the ESXi VM taken before the datastore was extended | — |
 | `parrot-base-7.4` | Choose: convert it to a vSphere template (recommended; it stays, for Parrot rebuilds) or delete it (frees 12.7 GB; rebuilding then means re-importing the OVA) | One line in `packer/parrot/import-base.sh` so new bases are templates |
 | Off-host backups | Somewhere to copy the daily database dump: a network share or another machine | A copy job in `deploy/compose.yaml` |
-| GitLab pushes | Since 2026-10-20 the GitLab server rejects pushes ("unable to create temporary object directory": usually its disk is full, or git-data permissions). Its API answers | Push the commits waiting locally; CI deploys again. Meanwhile the panel is deployed with `deploy/deploy.sh` from the build machine |
 
 ## Next, in order
 
