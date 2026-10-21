@@ -132,10 +132,22 @@ def run(argv: list[str], env: dict, cwd: Path, log: Path, verbose: bool) -> bool
         for line in p.stdout:
             line = ANSI.sub("", line)
             out.write(line)
-            # Packer's steps ("==> vsphere-iso.x: …") and the import scripts' "==> " lines.
-            if verbose or line.startswith("==> "):
+            if verbose or headline(line):
                 print("    " + line.rstrip(), flush=True)
         return p.wait() == 0
+
+
+def headline(line: str) -> bool:
+    """A line worth showing on the console: Packer's own steps ("==> vsphere-iso.x: Creating…") and the
+    scripts' headings ("==> vsphere-iso.x: ==> Packages", or an import script's "==> …"), not the
+    commands' output, which Packer prefixes the same way (it's all in the log)."""
+    if not line.startswith("==> "):
+        return False
+    _, sep, text = line[4:].partition(": ")
+    if not sep or not line[4:].startswith("vsphere-"):
+        return True  # an import script's own heading
+    text = text.strip()
+    return text.startswith("==> ") or text.endswith("...") or text.startswith("Build ")
 
 
 def tail(log: Path, lines: int = 25) -> str:
