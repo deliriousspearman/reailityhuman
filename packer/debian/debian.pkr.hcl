@@ -142,7 +142,7 @@ source "vsphere-iso" "debian" {
   RAM                  = 2048
   disk_controller_type = ["pvscsi"]
   storage {
-    disk_size             = 25600
+    disk_size             = 40960
     disk_thin_provisioned = true
   }
   network_adapters {

@@ -1028,8 +1028,14 @@
       [ -s "$src/wazuh-offline.tar.gz" ] || { echo "This template has no Wazuh server: rebuild it with today's prepare.sh."; exit 1; }
       rm -rf /root/wazuh
       mkdir -p /root/wazuh
-      cp "$src/wazuh-install.sh" "$src/wazuh-offline.tar.gz" /root/wazuh/
+      cp "$src/wazuh-install.sh" /root/wazuh/
       cd /root/wazuh
+      # Its bundle, unpacked where its installer looks, and this machine's copy of it removed: there's no
+      # room for it twice over (1.6 GB) and Wazuh. The installer wants the archive there too, but doesn't
+      # unpack it when the folder is: an empty one stands in.
+      tar -xzf "$src/wazuh-offline.tar.gz"
+      rm -f "$src/wazuh-offline.tar.gz"
+      tar -czf wazuh-offline.tar.gz -T /dev/null
       # Its manager's unit allows 45 seconds to start; with the indexer already running on a lab's 2 vCPU,
       # it takes longer, and the installer then removes everything. Ten minutes.
       mkdir -p /etc/systemd/system/wazuh-manager.service.d

@@ -138,7 +138,7 @@ source "vsphere-iso" "ubuntu" {
   RAM                  = var.zimbra ? 4096 : 2048
   disk_controller_type = ["pvscsi"]
   storage {
-    disk_size             = var.zimbra ? 40960 : 25600
+    disk_size             = 40960
     disk_thin_provisioned = true
   }
   network_adapters {
