@@ -602,7 +602,7 @@
 - id: zimbra
   name: Zimbra
   category: Mail
-  description: "Zimbra Collaboration 8.8.15, open source: mail, calendar and contacts, with its web client and admin console. The GA build (4179), without the patches after it. Set up as the machine starts: about 20 minutes."
+  description: "Zimbra Collaboration 8.8.15, open source: mail, calendar and contacts, with its web client and admin console. The GA build (4179) with its last patch, P47 (2024). Set up as the machine starts: about 25 minutes."
   ports: [25, 80, 110, 143, 443, 465, 587, 993, 995, 7071]
   password: true
   setupMinutes: 40
@@ -658,8 +658,14 @@
       zimbraIPMode=ipv4
       STARTSERVERS=yes
       EOF
-      /opt/zimbra/libexec/zmsetup.pl -c "$config" </dev/null
+      # Configuring starts everything but its web application (mailboxd), which the GA build can't run on
+      # today's Java: the patch kept in the template (P47) can. Then everything restarts on it.
+      /opt/zimbra/libexec/zmsetup.pl -c "$config" </dev/null || true
       rm -f "$config"
+      su - zimbra -c 'zmprov -l gs "$(zmhostname)" zimbraServiceEnabled' | grep -q mailbox || { echo "Zimbra's configuring didn't finish: /opt/zimbra/log/zmsetup.*.log"; exit 1; }
+      # shellcheck disable=SC2046 # a list of package names
+      DEBIAN_FRONTEND=noninteractive apt-get install -yq --no-download -o Dir::Cache::archives=/opt/lab-deploy/zimbra-patch \
+        $(cat /opt/lab-deploy/zimbra-patch/PACKAGES) >/var/log/lab-deploy/zimbra-patch.log 2>&1
       zm() { su - zimbra -c "$(printf '%q ' "$@")"; }
       # Mail for this server's own mailboxes goes by /etc/hosts, not DNS (the lab has none for it).
       zm zmprov mcf zimbraMtaLmtpHostLookup native
@@ -669,7 +675,7 @@
         [ -n "$user" ] || continue
         zm zmprov ca "$user@$domain" "$password"
       done
-      zm zmmtactl restart
+      zm zmcontrol restart
       systemctl enable -q zimbra 2>/dev/null || true
       lab_wait_http https://127.0.0.1/ 600
 

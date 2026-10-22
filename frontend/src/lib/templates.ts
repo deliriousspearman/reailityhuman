@@ -190,7 +190,7 @@ export const templates: MachineTemplate[] = [
 		category: 'Mail',
 		os: 'Linux',
 		description:
-			'Zimbra Collaboration 8.8.15 open source on Ubuntu 20.04: mail, calendar and contacts, with webmail and an admin console. The 2021 GA build, without later patches. Set up as it starts: about 20 minutes.',
+			'Zimbra Collaboration 8.8.15 open source on Ubuntu 20.04: mail, calendar and contacts, with webmail and an admin console. Its last patch, P47 (2024). Set up as it starts: about 25 minutes.',
 		versions: [{ version: '8.8.15', eol: true }],
 		resources: { cpu: 4, memoryGB: 8, diskGB: 40 },
 		access: ['web', 'ssh', 'console'],

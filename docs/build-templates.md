@@ -140,10 +140,12 @@ as that controller's user, who's in Schema Admins and Enterprise Admins. Without
 
 **Zimbra 8.8.15** has a template of its own too: Ubuntu 20.04 built with `-var zimbra=true`, which runs
 `prepare.sh --extras=zimbra` and so `scripts/template/zimbra/prepare-zimbra.sh`: Zimbra's GA tarball
-(build 4179, none of the later patches), installed but not configured, with its third-party packages
-from Zimbra's apt repository (repo.zimbra.com, still up; offline, `-var zimbra_mirror=` a mirror of
-it). Its Zimbra extra configures it at each machine's first boot (`zmsetup.pl -c`, about 20 minutes)
-for the machine's name and mail domain, its user the administrator. No other extras go in it.
+(build 4179), installed but not configured, with its third-party packages from Zimbra's apt repository
+(repo.zimbra.com, still up; offline, `-var zimbra_mirror=` a mirror of it). Its Zimbra extra
+configures it at each machine's first boot (`zmsetup.pl -c`, about 25 minutes) for the machine's name
+and mail domain, its user the administrator, then installs Zimbra's last 8.8.15 patch, P47 (kept in the
+template). The GA build alone doesn't run any more: the repository only has today's Java 17, Jetty
+9.4.46 and OpenSSL 3, which its web application can't start on; P47 can. No other extras go in it.
 
 **MinIO** (an extra) has no published binaries any more: `scripts/template/build-minio.sh` builds the
 April 2025 release and `mc` from source with Go, during the template's build (about 12 minutes; it fits

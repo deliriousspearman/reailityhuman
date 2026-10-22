@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Puts Zimbra Collaboration 8.8.15 (open source; the GA build, 4179, without the patches that came
-# after it) into an Ubuntu 20.04 template, installed but not configured: the zimbra extra
+# Puts Zimbra Collaboration 8.8.15 (open source: the GA build, 4179, with its last patch, P47, from
+# November 2024) into an Ubuntu 20.04 template, installed but not configured: the zimbra extra
 # (backend/extras.yaml) configures it on each machine's first boot, for that machine's name and mail
 # domain. prepare.sh runs it, from beside it, when the template is built with --extras=zimbra
 # (packer/build.sh ubuntu -var zimbra=true …; the template's entry in deploy/install/manifest.toml has
@@ -58,6 +58,22 @@ printf 'INSTALL_PACKAGES="%s"\nUSE_ZIMBRA_PACKAGE_SERVER="no"\n' "$PACKAGES" >"$
 (cd "$dir/$TARBALL" && ./install.sh -s -x "$dir/answers" </dev/null)
 cp "$dir/hosts" /etc/hosts
 rm -rf "$dir"
+
+# The GA build no longer runs as it is: the repository has only today's third-party packages (OpenSSL 3,
+# Java 17, Jetty 9.4.46), which its web application (mailboxd) can't start on. Zimbra's last patch for
+# 8.8.15, P47, can: kept here (not installed: a patch goes onto a configured server), and installed by
+# the extra after configuring. Until then, OpenSSL 3 here only offers FIPS algorithms by default, and
+# configuring makes a PKCS#12 keystore with a non-FIPS one: allow the rest.
+echo "==> Zimbra 8.8.15's patch (P47), kept for the extra"
+PATCHES="zimbra-patch zimbra-mta-patch zimbra-proxy-patch zimbra-ldap-patch"
+mkdir -p /opt/lab-deploy/zimbra-patch/partial
+# shellcheck disable=SC2086 # a list of package names
+apt-get install -yq --download-only -o Dir::Cache::archives=/opt/lab-deploy/zimbra-patch $PATCHES >/dev/null
+rm -rf /opt/lab-deploy/zimbra-patch/partial /opt/lab-deploy/zimbra-patch/lock
+echo "$PATCHES" >/opt/lab-deploy/zimbra-patch/PACKAGES
+find /opt/lab-deploy/zimbra-patch -name 'zimbra-patch_*.deb' -printf '  %f\n'
+sed -i 's/^default_properties = fips=yes/# The lab panel: not only FIPS algorithms (configuring needs a PKCS#12 one).\n# default_properties = fips=yes/' \
+	/opt/zimbra/common/etc/ssl/openssl.cnf
 
 # What a configured server would start, off until then.
 systemctl disable -q zimbra 2>/dev/null || true

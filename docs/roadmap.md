@@ -165,8 +165,9 @@ two need a way to read them: an agent or a check on the PC, and the DHCP server'
 - **MinIO, iRedMail, Zimbra and Python versions** (2026-10-21): extras `minio` (RELEASE.2025-04-22,
   the last with the full console, and `mc`, built from source), `iredmail` (1.8.8, on Ubuntu 24.04 and
   26.04, Debian 12 and 13; installed at first boot from what the template keeps, so offline too) and
-  `python` (one of 2.7 and 3.8–3.15 per machine, beside the system's); and a Zimbra 8.8.15 GA template
-  (Ubuntu 20.04, unpatched on purpose, configured at first boot). See build-templates.md.
+  `python` (one of 2.7 and 3.8–3.15 per machine, beside the system's); and a Zimbra 8.8.15 template
+  (Ubuntu 20.04, configured at first boot; with its last patch, P47: the GA build no longer runs on the
+  repository's current Java and Jetty). See build-templates.md.
 - **Wazuh, then Zabbix** (asked 2026-10-21): for each, a server extra and an agent extra that picks
   its server machine (as Join a domain picks a domain controller) and registers itself; works offline.
   Then a deployed pair of each: the server, and an Ubuntu server with the agent connected.
