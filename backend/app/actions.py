@@ -74,7 +74,7 @@ def deploy(vc: VCenter, m: Machine) -> None:
         extra = cloudinit.guestinfo(
             m.id, m.name, m.username, m.password, m.ssh_key, tpl.admin_group, extras.cloud_config(chosen, tpl.family, m.name, m.username, m.password)
         )
-    vm = vc.clone(tpl.vsphere, m.vm_name, tpl.cpu, tpl.memory_gb, extra)
+    vm = vc.clone(tpl.vsphere, m.vm_name, tpl.cpu, extras.memory_gb(tpl.memory_gb, chosen), extra)
     add_log(m.id, f"Cloned from {m.template}/{m.version}")
     vc.power_on(vm)
     add_log(m.id, "Powered on. Waiting for it to get an address…", "muted")

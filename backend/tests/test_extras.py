@@ -151,9 +151,9 @@ def test_databases_can_be_filled_with_dummy_data():
         assert x.category == "Databases"
         [option] = x.options
         assert (option.id, option.type, option.default) == ("sample_data", "boolean", "no")
-        [c] = extras.resolve((i,), [{"id": i}], "db01", memory_gb=4)
+        [c] = extras.resolve((i,), [{"id": i}], "db01")
         assert c["options"] == {"sample_data": "no"}
-        [c] = extras.resolve((i,), [{"id": i, "options": {"sample_data": "true"}}], "db01", memory_gb=4)
+        [c] = extras.resolve((i,), [{"id": i, "options": {"sample_data": "true"}}], "db01")
         assert c["options"] == {"sample_data": "yes"}
         assert any("chinook" in text.lower() for text, when in x.notes if when == {"sample_data": ("yes",)}), i
     assert extras.details({"id": "postgresql", "options": {"sample_data": "no"}}, "192.0.2.5", "ubuntu", "db01")["notes"] == [
@@ -452,14 +452,15 @@ def test_web_apps_are_the_whole_site():
         assert "Alias /" not in script, i
 
 
-def test_extras_too_big_for_the_machine_are_refused(monkeypatch):
+def test_extras_needing_more_memory_get_it(monkeypatch):
+    """A machine gets its template's memory, or an extra's minimum where that's more."""
     from app.extras import Extra
 
     desktop = Extra("desktop", "Desktop", "", min_memory_gb=4)
     monkeypatch.setattr(extras, "extras", lambda: {"desktop": desktop})
-    with pytest.raises(extras.ExtraError, match="needs at least 4 GB of memory, and this machine has 2 GB"):
-        extras.resolve(("desktop",), [{"id": "desktop"}], "web01", memory_gb=2)
-    assert extras.resolve(("desktop",), [{"id": "desktop"}], "web01", memory_gb=4)
+    assert extras.memory_gb(2, [{"id": "desktop"}]) == 4
+    assert extras.memory_gb(8, [{"id": "desktop"}]) == 8
+    assert extras.memory_gb(2, []) == 2
 
 
 def test_config_sends_category_memory_and_ports(offered):

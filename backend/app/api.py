@@ -291,7 +291,7 @@ def deploy_machine(req: DeployRequest, db: Db) -> dict:
     # A complete image's own password, whatever its length: the rules are for passwords people choose.
     password = tpl.fixed_password or password
     try:
-        chosen = extras.resolve(tpl.extras, [c.model_dump() for c in req.extras], req.name, tpl.memory_gb)
+        chosen = extras.resolve(tpl.extras, [c.model_dump() for c in req.extras], req.name)
         for x, o, other_id in extras.machine_options(chosen):
             extras.check_machine(x, o, db.get(Machine, other_id))
     except extras.ExtraError as e:
@@ -307,7 +307,7 @@ def deploy_machine(req: DeployRequest, db: Db) -> dict:
             raise HTTPException(409, f"{cfg.max_permanent} machines can be kept permanently. Set an expiry on another one first.")
     if not cfg.vcenter_configured:
         raise HTTPException(503, "vCenter isn't configured yet, so nothing can be deployed.")
-    blocker = capacity_blocker(db, tpl.memory_gb, tpl.disk_gb)
+    blocker = capacity_blocker(db, extras.memory_gb(tpl.memory_gb, chosen), tpl.disk_gb)
     if blocker:
         raise HTTPException(409, blocker)
     forget_capacity()
@@ -363,7 +363,9 @@ def capacity_blocker(db: Session, memory_gb: int, disk_gb: int) -> str | None:
     c = vcenter_capacity()
     starting = db.scalars(select(Machine).where(Machine.state == "deploying")).all()
     pending = sum(
-        tpl.memory_gb for m in starting if m.vm_name not in c.powered_on and (tpl := catalogue.find(m.template, m.version))
+        extras.memory_gb(tpl.memory_gb, m.extras or [])
+        for m in starting
+        if m.vm_name not in c.powered_on and (tpl := catalogue.find(m.template, m.version))
     )
     free_mem = int(c.memory_gb * settings().memory_overcommit) - c.used_memory_gb - pending
     free_disk = c.disk_gb - c.used_disk_gb
@@ -379,7 +381,7 @@ def require_room(db: Session, m: Machine) -> None:
     tpl = catalogue.find(m.template, m.version)
     if tpl is None or m.vm_name in vcenter_capacity(fresh=True).powered_on:
         return
-    if blocker := capacity_blocker(db, tpl.memory_gb, 0):
+    if blocker := capacity_blocker(db, extras.memory_gb(tpl.memory_gb, m.extras or []), 0):
         raise HTTPException(409, blocker)
     forget_capacity()
 

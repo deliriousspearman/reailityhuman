@@ -133,10 +133,13 @@
 	/** Ports the chosen extras use, for the summary. */
 	const chosenPorts = $derived([...new Set(chosen.flatMap((x) => x.ports))].sort((a, b) => a - b));
 
-	/** Why this machine is too small for an extra, or null. */
-	function tooSmall(x: Extra): string | null {
+	/** The machine's memory: the template's, or more where an extra chosen needs more (as the panel gives it). */
+	const memoryGB = $derived(Math.max(deployed?.resources.memoryGB ?? 0, ...chosen.map((x) => x.minMemoryGB)));
+
+	/** A note when an extra needs more memory than the template has, or null. */
+	function moreMemory(x: Extra): string | null {
 		const memory = deployed?.resources.memoryGB ?? 0;
-		return x.minMemoryGB > memory ? `Needs ${x.minMemoryGB} GB of memory; this machine has ${memory} GB.` : null;
+		return x.minMemoryGB > memory ? `Gives the machine ${x.minMemoryGB} GB of memory.` : null;
 	}
 
 	// Grouped under their categories, in the catalogue's order. Past FOLD_OVER extras, groups start
@@ -280,14 +283,14 @@
 								{#each group.items as x (x.id)}
 									{@const clash = replacing(x)}
 									{@const on = x.id in picked}
-									{@const small = tooSmall(x)}
-									<li class="extra" class:on class:disabled={!!small && !on}>
+									{@const more = moreMemory(x)}
+									<li class="extra" class:on>
 										<label class="extra-head">
-											<input type="checkbox" checked={on} disabled={!!small && !on} onchange={(e) => toggle(x, e.currentTarget.checked)} />
+											<input type="checkbox" checked={on} onchange={(e) => toggle(x, e.currentTarget.checked)} />
 											<span class="extra-name">{x.name}</span>
 										</label>
 										<p class="extra-desc">
-											{x.description}{#if small && !on}{' '}<span class="replaces">{small}</span>{:else if clash && !on}{' '}<span class="replaces">Replaces {clash}: they'd use the same port.</span>{/if}
+											{x.description}{#if more}{' '}<span class="replaces">{more}</span>{/if}{#if clash && !on}{' '}<span class="replaces">Replaces {clash}: they'd use the same port.</span>{/if}
 										</p>
 										{#if on}
 											{#each x.options.filter((o) => shown(o, picked[x.id])) as o (o.id)}
@@ -460,7 +463,7 @@
 			<dl>
 				<div><dt>Machine</dt><dd>{template.name} {version}</dd></div>
 				<div><dt>Owner</dt><dd>{owner.trim().toLowerCase() || '–'}</dd></div>
-				<div><dt>Uses</dt><dd>{deployed?.resources.cpu} vCPU, {deployed?.resources.memoryGB} GB memory, {deployed?.resources.diskGB} GB disk</dd></div>
+				<div><dt>Uses</dt><dd>{deployed?.resources.cpu} vCPU, {memoryGB} GB memory, {deployed?.resources.diskGB} GB disk</dd></div>
 				<div><dt>Network</dt><dd>The LAN, with an address from DHCP</dd></div>
 				<div><dt>Sign in with</dt><dd>{signInWays.join(', ')}</dd></div>
 				{#if chosen.length}
@@ -642,12 +645,6 @@
 		border: var(--lms-border-width) solid var(--lms-gray-5);
 		border-radius: var(--lms-radius-sm);
 		background: var(--lms-panel);
-	}
-	.extra.disabled {
-		opacity: 0.55;
-	}
-	.extra.disabled .extra-head {
-		cursor: not-allowed;
 	}
 	.extra-group + .extra-group {
 		margin-top: 0.75rem;

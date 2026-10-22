@@ -6,7 +6,8 @@
 #
 #   category   the heading it's listed under on the deploy form, e.g. Web servers; extras of a
 #              category are listed in this file's order, and categories in order of first use
-#   minMemoryGB  optional: the least memory a machine needs for it (e.g. a desktop)
+#   minMemoryGB  optional: the least memory a machine needs for it (e.g. a desktop); a machine with
+#              it gets at least this much, more than its template's if need be
 #   ports      the ports it listens on. Extras that would share one can't be chosen together: each
 #              web service (80/443) gets a machine of its own, while FTP or a desktop go with any.
 #   links      addresses shown on the machine's page, once it has an address; and

@@ -204,7 +204,7 @@ class Extra:
     description: str
     # Heading it's listed under on the deploy form, e.g. "Web servers".
     category: str = "Other"
-    # Least memory (GB) a machine needs for it, if more than any template's.
+    # Least memory (GB) a machine needs for it: a machine with it gets at least this much.
     min_memory_gb: int = 0
     # Ports it listens on, e.g. (80,) for a web server. Extras sharing a port can't be chosen together.
     ports: tuple[int, ...] = ()
@@ -330,7 +330,13 @@ def _check_value(x: Extra, o: Option, value: str) -> str:
     return value
 
 
-def resolve(offered: tuple[str, ...], chosen: list[dict], hostname: str, memory_gb: int | None = None) -> list[dict]:
+def memory_gb(template_memory_gb: int, chosen: list[dict]) -> int:
+    """A machine's memory: its template's, or more where an extra chosen needs more (e.g. a Wazuh
+    server's 4 GB on a 2 GB template)."""
+    return max([template_memory_gb, *(x.min_memory_gb for c in chosen if (x := find(c["id"])))])
+
+
+def resolve(offered: tuple[str, ...], chosen: list[dict], hostname: str) -> list[dict]:
     """Checks what was chosen against what this template offers, and fills in each option's default.
 
     `chosen` is [{"id": ..., "options": {...}}]. Returns the same shape with every option set, which
@@ -348,8 +354,6 @@ def resolve(offered: tuple[str, ...], chosen: list[dict], hostname: str, memory_
         x = find(c["id"])
         if x is None or x.id not in offered:
             raise ExtraError(f"'{c['id']}' isn't an extra this template offers.")
-        if memory_gb is not None and x.min_memory_gb > memory_gb:
-            raise ExtraError(f"{x.name} needs at least {x.min_memory_gb} GB of memory, and this machine has {memory_gb} GB.")
         # A machine joining another's (say, a domain) can't be one itself.
         if mine := [find(o.extra).name for o in x.options if o.type == "machine" and o.extra in ids]:
             raise ExtraError(f"{x.name} can't be combined with {', '.join(mine)}: it joins another machine's.")

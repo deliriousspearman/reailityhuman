@@ -133,10 +133,10 @@ def _template_script(name: str) -> str:
 
 
 def test_outlook_goes_with_iis_and_installs_from_the_templates_copy():
-    chosen = extras.resolve(("iis", "outlook"), [{"id": "outlook"}, {"id": "iis"}], "win01", memory_gb=4)
+    chosen = extras.resolve(("iis", "outlook"), [{"id": "outlook"}, {"id": "iis"}], "win01")
     assert [c["id"] for c in chosen] == ["iis", "outlook"]
-    with pytest.raises(extras.ExtraError, match="at least 4 GB"):
-        extras.resolve(("outlook",), [{"id": "outlook"}], "win01", memory_gb=2)
+    # Outlook needs 4 GB: a 2 GB machine gets that much.
+    assert extras.memory_gb(2, chosen) == 4
     script = extras.script(extras.find("outlook"), "windows", "win01", {})
     source = re.search(r"\$src = '([^']+)'", script).group(1)
     # Where prepare.ps1 -Office copies the files, and not in the folder clean.ps1 empties.
