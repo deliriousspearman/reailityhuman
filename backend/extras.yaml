@@ -557,6 +557,8 @@
         SOGO_SIEVE_MASTER_PASSWD IREDAPD_DB_PASSWD FAIL2BAN_DB_PASSWD; do
         echo "export $setting='$(rand)'" >>config
       done
+      # Its marker that the file is complete: without it, the installer asks everything instead.
+      echo '#EOF' >>config
       chmod 400 config
       IREDMAIL_HOSTNAME=$fqdn APTGET="apt-get --no-download -o Dir::Cache::archives=$src/debs" \
         AUTO_USE_EXISTING_CONFIG_FILE=y AUTO_INSTALL_WITHOUT_CONFIRM=y AUTO_CLEANUP_REMOVE_SENDMAIL=y \
