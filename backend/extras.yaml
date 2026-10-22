@@ -1019,6 +1019,7 @@
     - "Sign in to the dashboard as {username}, with the machine's password (an administrator). The certificate is self-signed."
     - "Agents report to {ip} on ports 1514 and 1515: deploy machines with the Wazuh agent extra and choose this one."
     - "Wazuh's own accounts (admin, the API's) have generated passwords: sudo tar -xOf /root/wazuh/wazuh-install-files.tar wazuh-install-files/wazuh-passwords.txt"
+    - "Vulnerability detection is off: its feed comes from the internet (cti.wazuh.com) and takes over 16 GB. With internet and the disk to spare, set it to yes under <vulnerability-detection> in /var/ossec/etc/ossec.conf and restart wazuh-manager."
   debian:
     # Its installer and its offline bundle (every package) are in /opt/lab-deploy/wazuh; these are what
     # its offline installation expects to find installed.
@@ -1040,8 +1041,16 @@
       # it takes longer, and the installer then removes everything. Ten minutes.
       mkdir -p /etc/systemd/system/wazuh-manager.service.d
       printf '[Service]\nTimeoutStartSec=600\n' >/etc/systemd/system/wazuh-manager.service.d/lab-timeout.conf
+      # No vulnerability detection: its feed (from cti.wazuh.com, which an offline lab hasn't got) takes over
+      # 16 GB as it's processed, filling the disk past what the indexer allows, which fails the install.
+      # Unreachable while installing; then switched off.
+      echo "127.0.0.1 cti.wazuh.com # lab panel: no vulnerability feed" >>/etc/hosts
       bash wazuh-install.sh --offline-installation --all-in-one </dev/null
       rm -rf wazuh-offline wazuh-offline.tar.gz
+      sed -i '/<vulnerability-detection>/,/<\/vulnerability-detection>/ s#<enabled>yes</enabled>#<enabled>no</enabled>#' /var/ossec/etc/ossec.conf
+      sed -i '/cti\.wazuh\.com # lab panel/d' /etc/hosts
+      rm -rf /var/ossec/queue/vd /var/ossec/tmp/*
+      systemctl restart wazuh-manager
       # The machine's user as a dashboard administrator, through the indexer's API. (Wazuh's own
       # password tool only takes passwords with one of .*+?- in them, which the machine's may not have.)
       admin=$(tar -xOf wazuh-install-files.tar wazuh-install-files/wazuh-passwords.txt |
