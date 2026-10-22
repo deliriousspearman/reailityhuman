@@ -57,8 +57,12 @@ if [[ ! -f lab-deploy.env ]]; then
 fi
 echo "  Building the backend image"
 docker compose build --quiet api
-# --wait: fail the deploy if the API doesn't come up healthy (e.g. a migration fails).
-docker compose up -d --remove-orphans --quiet-pull --wait --wait-timeout 180
+# Everything but the worker first, so the panel is back within seconds. --wait: fail the deploy if the
+# API doesn't come up healthy (e.g. a migration fails).
+docker compose up -d --remove-orphans --quiet-pull --wait --wait-timeout 180 $(docker compose config --services | grep -vx worker)
+# Then the worker, which first finishes the jobs it's running (a machine deploying: up to its 15-minute
+# stop_grace_period). Together, the API waited for it, down (the site answering 502) all that time.
+docker compose up -d --quiet-pull --wait --wait-timeout 1200 worker
 # Pick up Caddyfile changes without a restart. A bad config fails the deploy here.
 if ! out=$(docker compose exec -T caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile 2>&1); then
 	echo "$out" >&2
