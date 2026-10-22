@@ -42,16 +42,15 @@
 
 - template: ubuntu
   version: "24.04"
-  # Built by Packer (packer/build.sh ubuntu -var version=24.04 -var iso=ubuntu-24.04.5-live-server-amd64.iso) on 2026-10-18, with every
+  # Built by Packer (packer/build.sh ubuntu -var version=24.04 -var iso=ubuntu-24.04.5-live-server-amd64.iso) on 2026-10-22, with every
   # extra baked in.
-  vsphere: Labs/Templates/tpl-ubuntu-24.04-20261018
+  vsphere: Labs/Templates/tpl-ubuntu-24.04-20261022
   cpu: 2
   memoryGB: 2
   diskGB: 25
   username: ubuntu
   family: debian
-  extras: [nginx, apache, apache-https, wordpress, nextcloud, nextcloud-snap, postgresql, mariadb, mysql, sqlite, mail, ftp, desktop, docker, juice-shop, dvwa, uptime-kuma, grafana, vaultwarden, gitea]
-  plannedExtras: [iredmail, minio, python, wazuh, wazuh-agent, zabbix, zabbix-agent]
+  extras: [nginx, apache, apache-https, wordpress, nextcloud, nextcloud-snap, postgresql, mariadb, mysql, sqlite, mail, ftp, desktop, docker, juice-shop, dvwa, uptime-kuma, grafana, vaultwarden, gitea, iredmail, minio, python, wazuh, wazuh-agent, zabbix, zabbix-agent]
 - template: ubuntu
   version: "22.04"
   # Built by Packer (packer/build.sh ubuntu -var version=22.04 -var iso=ubuntu-22.04.5-live-server-amd64.iso) on 2026-10-18, with every
