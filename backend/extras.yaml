@@ -667,13 +667,14 @@
       DEBIAN_FRONTEND=noninteractive apt-get install -yq --no-download -o Dir::Cache::archives=/opt/lab-deploy/zimbra-patch \
         $(cat /opt/lab-deploy/zimbra-patch/PACKAGES) >/var/log/lab-deploy/zimbra-patch.log 2>&1
       zm() { su - zimbra -c "$(printf '%q ' "$@")"; }
+      # Straight to LDAP (-l): its web application only runs once restarted on the patch, below.
       # Mail for this server's own mailboxes goes by /etc/hosts, not DNS (the lab has none for it).
-      zm zmprov mcf zimbraMtaLmtpHostLookup native
-      zm zmprov sp "$username@$domain" "$password"
+      zm zmprov -l mcf zimbraMtaLmtpHostLookup native
+      zm zmprov -l sp "$username@$domain" "$password"
       IFS=', ' read -ra more <<<"$users"
       for user in "${more[@]}"; do
         [ -n "$user" ] || continue
-        zm zmprov ca "$user@$domain" "$password"
+        zm zmprov -l ca "$user@$domain" "$password"
       done
       zm zmcontrol restart
       systemctl enable -q zimbra 2>/dev/null || true
