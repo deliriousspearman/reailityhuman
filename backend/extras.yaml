@@ -1049,8 +1049,10 @@
       rm -rf wazuh-offline wazuh-offline.tar.gz
       sed -i '/<vulnerability-detection>/,/<\/vulnerability-detection>/ s#<enabled>yes</enabled>#<enabled>no</enabled>#' /var/ossec/etc/ossec.conf
       sed -i '/cti\.wazuh\.com # lab panel/d' /etc/hosts
+      # What it fetched of it: removed with the manager stopped (it's still writing there while it runs).
+      systemctl stop wazuh-manager
       rm -rf /var/ossec/queue/vd /var/ossec/tmp/*
-      systemctl restart wazuh-manager
+      systemctl start wazuh-manager
       # The machine's user as a dashboard administrator, through the indexer's API. (Wazuh's own
       # password tool only takes passwords with one of .*+?- in them, which the machine's may not have.)
       admin=$(tar -xOf wazuh-install-files.tar wazuh-install-files/wazuh-passwords.txt |
