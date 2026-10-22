@@ -1030,6 +1030,10 @@
       mkdir -p /root/wazuh
       cp "$src/wazuh-install.sh" "$src/wazuh-offline.tar.gz" /root/wazuh/
       cd /root/wazuh
+      # Its manager's unit allows 45 seconds to start; with the indexer already running on a lab's 2 vCPU,
+      # it takes longer, and the installer then removes everything. Ten minutes.
+      mkdir -p /etc/systemd/system/wazuh-manager.service.d
+      printf '[Service]\nTimeoutStartSec=600\n' >/etc/systemd/system/wazuh-manager.service.d/lab-timeout.conf
       bash wazuh-install.sh --offline-installation --all-in-one </dev/null
       rm -rf wazuh-offline wazuh-offline.tar.gz
       # The machine's user as a dashboard administrator, through the indexer's API. (Wazuh's own

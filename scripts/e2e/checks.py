@@ -61,7 +61,7 @@ CASES: dict[str, list[dict]] = {
             "checks": [
                 ("tcp", 25), ("tcp", 587), ("tcp", 993),
                 ("http", "https", 443, "/mail/", "Roundcube"),
-                ("http", "https", 443, "/iredadmin/", "iRedAdmin"),
+                ("http", "https", 443, "/iredadmin/", "Manage Your Mail Domains"),
                 ("ssh", "curl -sk imaps://127.0.0.1/ -u {username}@lab.example:{password}", "INBOX"),
                 ("ssh", "curl -sk imaps://127.0.0.1/ -u alice@lab.example:{password}", "INBOX"),
             ],
