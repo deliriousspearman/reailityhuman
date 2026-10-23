@@ -172,10 +172,13 @@ two need a way to read them: an agent or a check on the PC, and the DHCP server'
   that picks its server machine (as Join a domain picks a domain controller) and registers itself; works
   offline. A pair of each deployed and checked (agent active in Wazuh; host available, with data, in
   Zabbix). Wazuh's vulnerability detection is off (its feed is online only, and over 16 GB).
-- **Still to do from that work** (2026-10-23): rebuild Ubuntu 26.04 and 22.04, Debian 13 and 12, Kali and
-  Parrot with the new extras and 40 GB disks; e2e tests for the agent extras (they need their server
-  deployed first); a run of fetch-media.sh with the new pieces. Later, maybe: Wazuh and Zabbix agents
-  on Windows; vulnerability detection as an option where there's internet.
+- **Done 2026-10-23:** Ubuntu 26.04, 24.04 and 22.04, Debian 13 and 12, Kali and Parrot rebuilt with the
+  new extras (and 40 GB disks for Ubuntu and Debian), each tested end to end with them; e2e tests for the
+  agent extras (their server deployed first); fetch-media.sh run with the new pieces, and the builds
+  taking them from it. Along the way: extras can give a machine more memory and vCPUs (the Wazuh server
+  gets 4 and 4 GB); Wazuh's bundled vulnerability database is left out (it unpacked to about 17 GB);
+  Kali and Parrot have no Zabbix server (their own agent). Later, maybe: Wazuh and Zabbix agents on
+  Windows; vulnerability detection as an option where there's internet and disk.
 - **Mail, suggested:** Mailpit (a mail catcher for apps) and GoPhish (phishing exercises), both small
   Docker extras; Mailcow for a realistic organisation mail server.
 
