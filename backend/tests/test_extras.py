@@ -508,3 +508,15 @@ def test_domain_shows_only_with_https():
         domain = next(o for o in extras.find(i).options if o.id == "domain")
         assert domain.when == {"https": ("yes",)}, i
     assert next(o for o in extras.find("mail").options if o.id == "domain").when == {}  # mail uses it anyway
+
+
+def test_machines_show_the_memory_their_extras_gave_them():
+    """A machine's record has its real memory: a Wazuh server on 2 GB Ubuntu got 4 GB."""
+    from app.api import machine_out
+    from app.models import Machine
+
+    m = Machine(id="m-0001", name="siem", template="ubuntu", version="24.04", owner="e2e", state="running",
+                vm_name="e2e-siem-0001", username="ubuntu", password="x", extras=[{"id": "wazuh", "options": {}}])
+    assert machine_out(m, log=False)["memoryGB"] == 4
+    m.extras = []
+    assert machine_out(m, log=False)["memoryGB"] == 2

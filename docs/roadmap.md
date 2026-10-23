@@ -168,9 +168,14 @@ two need a way to read them: an agent or a check on the PC, and the DHCP server'
   `python` (one of 2.7 and 3.8–3.15 per machine, beside the system's); and a Zimbra 8.8.15 template
   (Ubuntu 20.04, configured at first boot; with its last patch, P47: the GA build no longer runs on the
   repository's current Java and Jetty). See build-templates.md.
-- **Wazuh, then Zabbix** (asked 2026-10-21): for each, a server extra and an agent extra that picks
-  its server machine (as Join a domain picks a domain controller) and registers itself; works offline.
-  Then a deployed pair of each: the server, and an Ubuntu server with the agent connected.
+- **Wazuh and Zabbix** (asked 2026-10-21, done 2026-10-22): for each, a server extra and an agent extra
+  that picks its server machine (as Join a domain picks a domain controller) and registers itself; works
+  offline. A pair of each deployed and checked (agent active in Wazuh; host available, with data, in
+  Zabbix). Wazuh's vulnerability detection is off (its feed is online only, and over 16 GB).
+- **Still to do from that work** (2026-10-23): rebuild Ubuntu 26.04 and 22.04, Debian 13 and 12, Kali and
+  Parrot with the new extras and 40 GB disks; e2e tests for the agent extras (they need their server
+  deployed first); a run of fetch-media.sh with the new pieces. Later, maybe: Wazuh and Zabbix agents
+  on Windows; vulnerability detection as an option where there's internet.
 - **Mail, suggested:** Mailpit (a mail catcher for apps) and GoPhish (phishing exercises), both small
   Docker extras; Mailcow for a realistic organisation mail server.
 

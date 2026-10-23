@@ -179,6 +179,8 @@ export interface SingleMachine {
 	/** Account made on first boot, and its generated password. */
 	username: string;
 	password: string;
+	/** Its memory: the template's, or more where an extra needed it (e.g. a Wazuh server's 4 GB). */
+	memoryGB?: number | null;
 	/**
 	 * Extras chosen at deploy, with every option as applied (defaults filled in), and the addresses
 	 * they serve and notes on them (e.g. how to sign in); those are empty until it has an address.

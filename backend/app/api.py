@@ -50,6 +50,8 @@ def machine_out(m: Machine, log: bool = True) -> dict:
         "vmName": m.vm_name,
         "username": m.username,
         "password": m.password,
+        # Its memory: the template's, or more where an extra needed it (None: the template's gone).
+        "memoryGB": extras.memory_gb(tpl.memory_gb, m.extras or []) if (tpl := catalogue.find(m.template, m.version)) else None,
         "extras": [
             {
                 "id": c["id"],
