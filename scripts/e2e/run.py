@@ -432,8 +432,9 @@ def main() -> int:
         templates = [t for t in templates if t.template in wanted or f"{t.template}:{t.version}" in wanted]
     wanted_extras = set(args.extras.split(",")) if args.extras else None
 
+    # Only its own (owned by e2e and named e2e-…): never other machines kept under that owner.
     for m in panel.get("/machines"):
-        if m["owner"] == OWNER:
+        if m["owner"] == OWNER and m["name"].startswith("e2e-"):
             say("destroying", m["name"], "left from an earlier run")
             panel.destroy(m["id"])
 
