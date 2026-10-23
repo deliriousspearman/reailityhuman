@@ -544,6 +544,12 @@ fi
 
 # --- 1. Packages -----------------------------------------------------------------------------------
 
+# A desktop distribution's VM shouldn't suspend when nobody's using it: switched off first, as its
+# desktop would otherwise suspend it about 30 minutes into this (Parrot's did, dropping the build).
+if ((RDP_DESKTOP)); then
+	systemctl mask sleep.target suspend.target hibernate.target hybrid-sleep.target >/dev/null 2>&1
+fi
+
 echo "==> Packages"
 case $FAMILY in
 debian)
@@ -748,9 +754,7 @@ RULES
 	systemctl daemon-reload
 	systemctl enable lab-rdp-keys.service xrdp >/dev/null 2>&1
 	echo "  xrdp: $(systemctl is-enabled xrdp)"
-	# A VM shouldn't suspend when nobody's using it.
-	systemctl mask sleep.target suspend.target hibernate.target hybrid-sleep.target >/dev/null 2>&1
-	echo "  sleep: off"
+	echo "  sleep: off (since the start)"
 fi
 
 # --- 7. Label --------------------------------------------------------------------------------------
