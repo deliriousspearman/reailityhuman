@@ -398,7 +398,10 @@ bake_wazuh() {
 		(cd "$dir" && sha256sum -c --quiet SHA256SUMS && rm SHA256SUMS)
 	else
 		curl -fsSL -o "$dir/wazuh-install.sh" https://packages.wazuh.com/4.14/wazuh-install.sh
-		(cd "$dir" && bash wazuh-install.sh --download-wazuh deb --download-arch amd64 >/dev/null)
+		if ! (cd "$dir" && bash wazuh-install.sh --download-wazuh deb --download-arch amd64 >/dev/null); then
+			tail -15 /var/log/wazuh-install.log >&2
+			return 1
+		fi
 	fi
 	[[ -s $dir/wazuh-offline.tar.gz ]] || { echo "Wazuh's offline bundle didn't download." >&2; return 1; }
 	echo "    Wazuh $(grep -oP '^readonly wazuh_version="\K[^"]+' "$dir/wazuh-install.sh"), $(du -sh "$dir" | cut -f1)"
