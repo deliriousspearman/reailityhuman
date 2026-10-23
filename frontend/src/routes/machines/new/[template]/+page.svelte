@@ -133,13 +133,17 @@
 	/** Ports the chosen extras use, for the summary. */
 	const chosenPorts = $derived([...new Set(chosen.flatMap((x) => x.ports))].sort((a, b) => a - b));
 
-	/** The machine's memory: the template's, or more where an extra chosen needs more (as the panel gives it). */
+	/** The machine's memory and vCPUs: the template's, or more where an extra chosen needs more (as the panel gives it). */
 	const memoryGB = $derived(Math.max(deployed?.resources.memoryGB ?? 0, ...chosen.map((x) => x.minMemoryGB)));
+	const cpu = $derived(Math.max(deployed?.resources.cpu ?? 0, ...chosen.map((x) => x.minCPU ?? 0)));
 
-	/** A note when an extra needs more memory than the template has, or null. */
+	/** A note when an extra needs more memory or vCPUs than the template has, or null. */
 	function moreMemory(x: Extra): string | null {
-		const memory = deployed?.resources.memoryGB ?? 0;
-		return x.minMemoryGB > memory ? `Gives the machine ${x.minMemoryGB} GB of memory.` : null;
+		const more = [
+			(x.minCPU ?? 0) > (deployed?.resources.cpu ?? 0) ? `${x.minCPU} vCPUs` : '',
+			x.minMemoryGB > (deployed?.resources.memoryGB ?? 0) ? `${x.minMemoryGB} GB of memory` : '',
+		].filter(Boolean);
+		return more.length ? `Gives the machine ${more.join(' and ')}.` : null;
 	}
 
 	// Grouped under their categories, in the catalogue's order. Past FOLD_OVER extras, groups start
@@ -463,7 +467,7 @@
 			<dl>
 				<div><dt>Machine</dt><dd>{template.name} {version}</dd></div>
 				<div><dt>Owner</dt><dd>{owner.trim().toLowerCase() || '–'}</dd></div>
-				<div><dt>Uses</dt><dd>{deployed?.resources.cpu} vCPU, {memoryGB} GB memory, {deployed?.resources.diskGB} GB disk</dd></div>
+				<div><dt>Uses</dt><dd>{cpu} vCPU, {memoryGB} GB memory, {deployed?.resources.diskGB} GB disk</dd></div>
 				<div><dt>Network</dt><dd>The LAN, with an address from DHCP</dd></div>
 				<div><dt>Sign in with</dt><dd>{signInWays.join(', ')}</dd></div>
 				{#if chosen.length}

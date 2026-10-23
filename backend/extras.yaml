@@ -8,6 +8,7 @@
 #              category are listed in this file's order, and categories in order of first use
 #   minMemoryGB  optional: the least memory a machine needs for it (e.g. a desktop); a machine with
 #              it gets at least this much, more than its template's if need be
+#   minCPU     optional: the least vCPUs it needs; likewise, a machine with it gets at least as many
 #   ports      the ports it listens on. Extras that would share one can't be chosen together: each
 #              web service (80/443) gets a machine of its own, while FTP or a desktop go with any.
 #   links      addresses shown on the machine's page, once it has an address; and
@@ -1012,7 +1013,10 @@
   description: "Wazuh 4.14, the open-source SIEM and XDR: its manager, indexer and dashboard on this machine. Machines with the Wazuh agent extra report to it. Installed as the machine starts: about 15 minutes."
   ports: [443, 1514, 1515, 9200, 55000]
   password: true
+  # Wazuh's own minimum for all in one: on 2 vCPU its installer's steps run past their waits (and it then
+  # removes everything).
   minMemoryGB: 4
+  minCPU: 4
   setupMinutes: 30
   links: ["https://{ip}/"]
   notes:

@@ -52,6 +52,7 @@ def machine_out(m: Machine, log: bool = True) -> dict:
         "password": m.password,
         # Its memory: the template's, or more where an extra needed it (None: the template's gone).
         "memoryGB": extras.memory_gb(tpl.memory_gb, m.extras or []) if (tpl := catalogue.find(m.template, m.version)) else None,
+        "cpu": extras.cpu(tpl.cpu, m.extras or []) if tpl else None,
         "extras": [
             {
                 "id": c["id"],
@@ -117,6 +118,7 @@ def extra_out(x: extras.Extra) -> dict:
         "conflicts": list(x.conflicts),
         "category": x.category,
         "minMemoryGB": x.min_memory_gb,
+        "minCPU": x.min_cpu,
         "ports": sorted(x.ports),
         "options": [
             {

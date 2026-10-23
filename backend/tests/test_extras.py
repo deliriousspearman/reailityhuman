@@ -518,5 +518,7 @@ def test_machines_show_the_memory_their_extras_gave_them():
     m = Machine(id="m-0001", name="siem", template="ubuntu", version="24.04", owner="e2e", state="running",
                 vm_name="e2e-siem-0001", username="ubuntu", password="x", extras=[{"id": "wazuh", "options": {}}])
     assert machine_out(m, log=False)["memoryGB"] == 4
+    assert machine_out(m, log=False)["cpu"] == 4
     m.extras = []
     assert machine_out(m, log=False)["memoryGB"] == 2
+    assert machine_out(m, log=False)["cpu"] == 2

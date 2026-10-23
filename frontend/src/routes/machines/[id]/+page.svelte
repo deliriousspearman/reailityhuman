@@ -202,7 +202,7 @@
 		{#if t.resources.cpu}
 			<div>
 				<dt>Uses</dt>
-				<dd>{t.resources.cpu} vCPU, {m.memoryGB ?? t.resources.memoryGB} GB<span class="stat-note">{t.resources.diskGB} GB disk</span></dd>
+				<dd>{m.cpu ?? t.resources.cpu} vCPU, {m.memoryGB ?? t.resources.memoryGB} GB<span class="stat-note">{t.resources.diskGB} GB disk</span></dd>
 			</div>
 		{/if}
 		<div>
