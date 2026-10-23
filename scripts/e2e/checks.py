@@ -90,7 +90,7 @@ CASES: dict[str, list[dict]] = {
             ],
         }
     ],
-    # The servers on their own (their agents are checked by deploying a pair: they need the server's machine).
+    # The servers on their own.
     "wazuh": [
         {
             "options": {},
@@ -99,6 +99,22 @@ CASES: dict[str, list[dict]] = {
                 ("http", "https", 443, "/app/login", None),
                 ("ssh", "curl -sk -u {username}:{password} https://127.0.0.1:9200/_plugins/_security/authinfo", '"backend_roles":["admin"]'),
             ],
+        }
+    ],
+    # Agents: their server is deployed first ("server": its extra, and the agent's option naming it). The
+    # agent extra itself waits until it's enrolled (Wazuh) or the server has added it (Zabbix).
+    "wazuh-agent": [
+        {
+            "options": {},
+            "server": {"extra": "wazuh", "option": "wazuh"},
+            "checks": [("ssh", "systemctl is-active wazuh-agent", "active")],
+        }
+    ],
+    "zabbix-agent": [
+        {
+            "options": {},
+            "server": {"extra": "zabbix", "option": "zabbix"},
+            "checks": [("ssh", "systemctl is-active zabbix-agent2", "active"), ("tcp", 10050)],
         }
     ],
     "zabbix": [

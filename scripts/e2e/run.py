@@ -7,7 +7,8 @@
 For each template the panel can deploy (/api/config):
   - lifecycle: deploy, check it, stop, start, reboot, reset (a file written before is gone and the
     password still works), redeploy, destroy;
-  - each extra it offers, in each case in checks.py: deploy with it, run its checks, destroy.
+  - each extra it offers, in each case in checks.py: deploy with it, run its checks, destroy. (An extra
+    joining another machine's, an agent: that machine is deployed first, and destroyed after.)
 
 Machines are named e2e-<random> and owned by "e2e"; ones left from an earlier run are destroyed
 first. Run it from a machine that reaches the panel and the machines' addresses, with ssh installed.
@@ -283,9 +284,11 @@ def new_name() -> str:
 
 
 class Runner:
-    def __init__(self, panel: Panel, wait_room: float):
+    def __init__(self, panel: Panel, wait_room: float, templates: list[Template] | None = None):
         self.panel = panel
         self.wait_room = wait_room
+        # Every template the panel deploys: where a case's server can go (see extra_case).
+        self.templates = templates or []
 
     def _deploy(self, t: Template, extras: list[dict], r: Result) -> dict:
         m = self.panel.deploy(t.template, t.version, new_name(), extras, self.wait_room)
@@ -321,14 +324,25 @@ class Runner:
         label = f"{t.label} + {extra}" + (f" ({', '.join(f'{k}={v}' for k, v in opts.items())})" if opts else "")
 
         def body(r: Result) -> None:
-            m = None
+            m = server = None
+            chosen = dict(opts)
             try:
-                m = self._deploy(t, [{"id": extra, "options": opts}], r)
+                # An extra that joins another machine's (an agent and its server): that machine first, on this
+                # template if it offers it, else on the first that does; the extra's option names it.
+                if need := case.get("server"):
+                    host = next((x for x in [t, *self.templates] if need["extra"] in x.extras), None)
+                    if host is None:
+                        raise Failed(f"no template offers {need['extra']}, which it needs")
+                    server = self._deploy(host, [{"id": need["extra"], "options": need.get("options", {})}], r)
+                    chosen[need["option"]] = server["id"]
+                m = self._deploy(t, [{"id": extra, "options": chosen}], r)
                 run_checks(base_checks(t.family, t.access, m["name"], t.template) + case["checks"], m, t.windows)
                 r.steps.append("checks passed")
             finally:
                 if m:
                     self.panel.destroy(m["id"])
+                if server:
+                    self.panel.destroy(server["id"])
 
         return self.test(label, body)
 
@@ -423,7 +437,7 @@ def main() -> int:
             say("destroying", m["name"], "left from an earlier run")
             panel.destroy(m["id"])
 
-    runner = Runner(panel, args.wait_room * 60)
+    runner = Runner(panel, args.wait_room * 60, templates)
     jobs = []
     for t in templates:
         if not args.no_lifecycle:
