@@ -210,6 +210,8 @@ class Extra:
     min_cpu: int = 0
     # Disk (GB) it writes on the machine beyond a plain clone, e.g. a Wazuh server's indexes.
     disk_gb: int = 0
+    # Set up by templates on every machine (templates.yaml `always`), never chosen: not listed.
+    hidden: bool = False
     # Ports it listens on, e.g. (80,) for a web server. Extras sharing a port can't be chosen together.
     ports: tuple[int, ...] = ()
     # Worked out from the ports at load: the extras it can't be chosen with.
@@ -278,6 +280,7 @@ def extras() -> dict[str, Extra]:
             min_memory_gb=int(e.get("minMemoryGB", 0)),
             min_cpu=int(e.get("minCPU", 0)),
             disk_gb=int(e.get("diskGB", 0)),
+            hidden=bool(e.get("hidden", False)),
             ports=tuple(int(p) for p in e.get("ports", [])),
             links=tuple(_conditional(link) for link in e.get("links", [])),
             notes=tuple(_conditional(n) for n in e.get("notes", [])),

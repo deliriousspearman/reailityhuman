@@ -39,6 +39,7 @@ export const osLogos: Record<string, OsLogo> = {
 	pfsense: { title: 'pfSense', color: '#212121', path: path['pfsense'] },
 	opnsense: { title: 'OPNsense', color: '#E44A20', path: path['opnsense'] },
 	ubuntu: { title: 'Ubuntu', color: '#E95420', path: path['ubuntu'] },
+	'ubuntu-desktop': { title: 'Ubuntu', color: '#E95420', path: path['ubuntu'] },
 	debian: { title: 'Debian', color: '#A81D33', path: path['debian'] },
 	centos: { title: 'CentOS', color: '#262577', path: path['centos'] },
 	proxmox: { title: 'Proxmox', color: '#E57000', path: path['proxmox'] },

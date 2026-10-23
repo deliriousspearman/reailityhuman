@@ -21,6 +21,8 @@
 #               else https://{ip}/
 #   planned     optional: true while its template isn't built yet. It can't be deployed, but shows
 #               under each service it will offer ("Soon"). Once built, take this out.
+#   always      optional: hidden extras (extras.yaml) every machine of it gets, not chosen; e.g.
+#               Ubuntu Desktop 26.04's Remote Login
 #   plannedExtras  optional: extras prepped in prepare.sh but not in this template yet, as it was built
 #               before them; shown as "Soon" under those services. Once rebuilt, move them to extras.
 #
@@ -393,6 +395,41 @@
   adminGroup: root
   access: [web, ssh, console]
   webUrl: "https://{ip}:8006/"
+
+# Ubuntu Desktop: Ubuntu with its own desktop (GNOME), reached over Remote Desktop (packer/build.sh
+# ubuntu -var desktop=true), with the extras that suit a workstation. 22.04 and 24.04: xrdp, as Kali;
+# 26.04's GNOME has no Xorg session, so GNOME's own Remote Login, set up on each machine (always).
+- template: ubuntu-desktop
+  version: "26.04"
+  planned: true
+  cpu: 2
+  memoryGB: 4
+  diskGB: 40
+  username: ubuntu
+  family: debian
+  access: [ssh, rdp, console]
+  always: [gnome-remote-login]
+  extras: [python, docker, juice-shop, dvwa, uptime-kuma, grafana, vaultwarden, gitea, wazuh-agent, zabbix-agent]
+- template: ubuntu-desktop
+  version: "24.04"
+  planned: true
+  cpu: 2
+  memoryGB: 4
+  diskGB: 40
+  username: ubuntu
+  family: debian
+  access: [ssh, rdp, console]
+  extras: [python, docker, juice-shop, dvwa, uptime-kuma, grafana, vaultwarden, gitea, wazuh-agent, zabbix-agent]
+- template: ubuntu-desktop
+  version: "22.04"
+  planned: true
+  cpu: 2
+  memoryGB: 4
+  diskGB: 40
+  username: ubuntu
+  family: debian
+  access: [ssh, rdp, console]
+  extras: [python, docker, juice-shop, dvwa, uptime-kuma, grafana, vaultwarden, gitea, wazuh-agent, zabbix-agent]
 
 # Kali Linux and Parrot Security: attack boxes, reached over Remote Desktop to their own desktop
 # (packer/kali, or by hand: docs/setup-vsphere.md, "Kali Linux and Parrot Security templates"). Not

@@ -67,6 +67,17 @@ export const templates: MachineTemplate[] = [
 		credentials: 'ubuntu / a password made for each machine',
 	},
 	{
+		id: 'ubuntu-desktop',
+		name: 'Ubuntu Desktop',
+		category: 'Linux',
+		os: 'Linux',
+		description: "Ubuntu LTS with Ubuntu's own desktop (GNOME), reached over Remote Desktop.",
+		versions: [{ version: '26.04' }, { version: '24.04' }, { version: '22.04' }],
+		resources: { cpu: 2, memoryGB: 4, diskGB: 40 },
+		access: ['ssh', 'rdp', 'console'],
+		credentials: 'ubuntu / a password made for each machine',
+	},
+	{
 		id: 'debian',
 		name: 'Debian',
 		category: 'Linux',

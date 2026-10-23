@@ -43,6 +43,9 @@ class LiveTemplate:
     planned_extras: tuple[str, ...] = ()
     # Family "image" only: its own, well-known password, which every machine from it has.
     fixed_password: str = ""
+    # Extras every machine from it gets, not chosen (e.g. Ubuntu Desktop 26.04's Remote Login): hidden
+    # ones, in extras.yaml.
+    always: tuple[str, ...] = ()
 
 
 ACCESS = ("ssh", "rdp", "web", "console")
@@ -75,6 +78,7 @@ def _load() -> list[LiveTemplate]:
             planned=planned,
             planned_extras=tuple(e.get("plannedExtras", [])),
             fixed_password=str(e.get("password", "")),
+            always=tuple(e.get("always", [])),
         )
         if (family == "image") != bool(t.fixed_password):
             raise ValueError(f"templates.yaml: {t.template} {t.version}: give a password for family image (its own sign-in), and only then")
@@ -82,10 +86,12 @@ def _load() -> list[LiveTemplate]:
             raise ValueError(f"templates.yaml: {t.template} {t.version}: unknown access {', '.join(unknown)}")
         if both := set(t.extras) & set(t.planned_extras):
             raise ValueError(f"templates.yaml: {t.template} {t.version}: {', '.join(sorted(both))} in both extras and plannedExtras")
-        for extra_id in t.extras + t.planned_extras:
+        for extra_id in t.extras + t.planned_extras + t.always:
             x = extras.find(extra_id)
             if x is None or family not in x.families:
                 raise ValueError(f"templates.yaml: {t.template} {t.version} lists extra '{extra_id}', which extras.yaml has no {family} steps for")
+            if x.hidden != (extra_id in t.always):
+                raise ValueError(f"templates.yaml: {t.template} {t.version}: '{extra_id}' goes under always if and only if it's hidden")
         out.append(t)
     return out
 

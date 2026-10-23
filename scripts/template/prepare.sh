@@ -4,7 +4,7 @@
 # scripts/template/README.md). Run it on the VM, as the user you created during install, either
 # copied over:
 #
-#   sudo bash prepare.sh [--dry-run] [--extras=<id>,<id>... | --no-extras]
+#   sudo bash prepare.sh [--dry-run] [--desktop] [--extras=<id>,<id>... | --no-extras]
 #
 # or straight from this repo:
 #
@@ -25,6 +25,10 @@
 #      those, --no-extras none. List the same under the template's extras: in templates.yaml.
 #   6. Kali and Parrot: turns on Remote Desktop (xrdp) to their own desktop, with its keys made on
 #      each clone's first boot, and stops them sleeping. (The desktop extra is for servers.)
+#      Ubuntu with --desktop: installs Ubuntu's own desktop (GNOME) first, for the Ubuntu Desktop
+#      templates. Where GNOME still has an Xorg session (22.04, 24.04), Remote Desktop is xrdp, as on
+#      Kali; where it's Wayland only (26.04), it's GNOME's own Remote Login, which the
+#      gnome-remote-login extra sets up on each machine's first boot (it needs the password).
 #   7. Labels the template in /etc/lab-template (OS, version, date, extras).
 #
 # The VM keeps its network and your user, so you can still install more afterwards. When you're
@@ -58,6 +62,8 @@ declare -A EXTRA_PACKAGES_DEBIAN=(
 	# Its own packages aren't installed: bake_iredmail keeps them, as they'd clash with the mail extra's.
 	[iredmail]="dialog wget"
 	[ftp]="vsftpd openssl"
+	# Ubuntu Desktop templates on Wayland only (--desktop): GNOME's Remote Login, set up at first boot.
+	[gnome-remote-login]="gnome-remote-desktop openssl"
 	[desktop]="xfce4-session xfwm4 xfce4-panel xfdesktop4 xfce4-terminal thunar xfce4-settings xfce4-notifyd dbus-x11 xrdp xorgxrdp tigervnc-standalone-server tigervnc-tools ssl-cert fonts-dejavu-core adwaita-icon-theme"
 	[docker]="docker.io"
 	[juice-shop]="docker.io"
@@ -435,13 +441,15 @@ HERE=$(dirname "${BASH_SOURCE[0]:-}")
 
 DRY_RUN=0
 WANT_EXTRAS=all
+UBUNTU_DESKTOP=0
 for arg in "$@"; do
 	case $arg in
 	--dry-run) DRY_RUN=1 ;;
+	--desktop) UBUNTU_DESKTOP=1 ;;
 	--no-extras) WANT_EXTRAS= ;;
 	--extras=*) WANT_EXTRAS=${arg#--extras=} ;;
 	*)
-		echo "Usage: sudo bash prepare.sh [--dry-run] [--extras=<id>,<id>... | --no-extras]" >&2
+		echo "Usage: sudo bash prepare.sh [--dry-run] [--desktop] [--extras=<id>,<id>... | --no-extras]" >&2
 		exit 1
 		;;
 	esac
@@ -474,8 +482,15 @@ if ! version_ge "${VERSION_ID:-0}" "${MIN_VERSION[$ID]}"; then
 	echo "$PRETTY_NAME is too old: the oldest $ID supported is ${MIN_VERSION[$ID]} (it needs cloud-init $MIN_CLOUD_INIT+)." >&2
 	exit 1
 fi
-echo "==> $PRETTY_NAME ($FAMILY family)"
-if ((RDP_DESKTOP)) && ! compgen -G '/usr/share/xsessions/*.desktop' >/dev/null; then
+if ((UBUNTU_DESKTOP)); then
+	if [[ $ID != ubuntu ]]; then
+		echo "--desktop is for Ubuntu (the Ubuntu Desktop templates)." >&2
+		exit 1
+	fi
+	RDP_DESKTOP=1
+fi
+echo "==> $PRETTY_NAME ($FAMILY family)$( ((UBUNTU_DESKTOP)) && echo ", with Ubuntu's desktop")"
+if ((RDP_DESKTOP && !UBUNTU_DESKTOP)) && ! compgen -G '/usr/share/xsessions/*.desktop' >/dev/null; then
 	echo "$PRETTY_NAME has no desktop installed, and its machines are reached over Remote Desktop." >&2
 	echo "Reinstall with a desktop, or install one, e.g. apt install kali-desktop-xfce (or parrot-desktop-kde)." >&2
 	exit 1
@@ -499,6 +514,7 @@ if [[ $WANT_EXTRAS == all ]]; then
 	if [[ $ID != ubuntu ]]; then mapfile -t CHOSEN < <(printf '%s\n' "${CHOSEN[@]}" | grep -vx mysql); fi
 	if ! ((IREDMAIL_HERE)); then mapfile -t CHOSEN < <(printf '%s\n' "${CHOSEN[@]}" | grep -vx iredmail); fi
 	mapfile -t CHOSEN < <(printf '%s\n' "${CHOSEN[@]}" | grep -vx zimbra)
+	if ! ((UBUNTU_DESKTOP)); then mapfile -t CHOSEN < <(printf '%s\n' "${CHOSEN[@]}" | grep -vx gnome-remote-login); fi
 	if ! ((WAZUH_HERE)); then mapfile -t CHOSEN < <(printf '%s\n' "${CHOSEN[@]}" | grep -vx wazuh); fi
 	# Zabbix's server: not on Kali or Parrot (see preseed_zabbix).
 	if [[ $ID == kali || $ID == parrot ]]; then mapfile -t CHOSEN < <(printf '%s\n' "${CHOSEN[@]}" | grep -vx zabbix); fi
@@ -533,7 +549,8 @@ fi
 if ((DRY_RUN)); then
 	echo "Would: update all packages; install open-vm-tools and cloud-init; check cloud-init is $MIN_CLOUD_INIT+;"
 	echo "grow the root filesystem; turn cloud-init on with the VMware datasource; write /etc/lab-template."
-	if ((RDP_DESKTOP)); then echo "Remote Desktop (xrdp) to its desktop, and never sleep."; fi
+	if ((UBUNTU_DESKTOP)); then echo "Install Ubuntu's desktop (GNOME)."; fi
+	if ((RDP_DESKTOP)); then echo "Remote Desktop (xrdp, or GNOME's Remote Login) to its desktop, and never sleep."; fi
 	if ((${#CHOSEN[@]})); then
 		echo "Extras, switched off: ${CHOSEN[*]} (packages: ${PACKAGES[*]:-none})"
 	else
@@ -558,6 +575,19 @@ debian)
 	apt-get full-upgrade -yq -o Dpkg::Options::=--force-confold
 	# curl: the extras' downloads (a minimal Debian install has none).
 	apt-get install -yq open-vm-tools cloud-init curl ca-certificates
+	if ((UBUNTU_DESKTOP)); then
+		echo "==> Ubuntu's desktop (GNOME)"
+		# Ubuntu's Firefox is a snap: without the Snap Store (an offline build), it's left out rather
+		# than failing the install.
+		if ! curl -fsS -m 15 -o /dev/null -H 'Snap-Device-Series: 16' https://api.snapcraft.io/v2/snaps/info/firefox; then
+			echo "  No Snap Store: Firefox left out"
+			printf 'Package: firefox\nPin: release *\nPin-Priority: -1\n' >/etc/apt/preferences.d/lab-no-firefox
+		fi
+		apt-get install -yq ubuntu-desktop-minimal
+		# Its first-sign-in wizard: each machine's user is made by the panel.
+		apt-get purge -yq gnome-initial-setup >/dev/null 2>&1 || true
+		systemctl set-default graphical.target >/dev/null
+	fi
 	# Debian's network is ifupdown, whose format can't say the panel's "DHCP on any e* adapter": cloud-init
 	# wrote an interface called "nics" and the real one stayed down. With netplan (and systemd-networkd),
 	# and cloud-init told to prefer it (Debian's own list puts ifupdown first), it renders that as on Ubuntu.
@@ -717,9 +747,21 @@ if ((${#CHOSEN[@]})); then
 	done
 fi
 
-# --- 6. Remote Desktop (Kali, Parrot) --------------------------------------------------------------
+# --- 6. Remote Desktop (Kali, Parrot, Ubuntu Desktop) ----------------------------------------------
 
-if ((RDP_DESKTOP)); then
+# GNOME without an Xorg session (Ubuntu 26.04) can't be reached over xrdp: its own Remote Login
+# instead, set up on each machine's first boot by the gnome-remote-login extra.
+RDP_GNOME=0
+if ((UBUNTU_DESKTOP)) && ! compgen -G '/usr/share/xsessions/*.desktop' >/dev/null; then
+	RDP_GNOME=1
+	echo "==> Remote Desktop: GNOME's Remote Login (no Xorg session for xrdp)"
+	if [[ " ${CHOSEN[*]} " != *" gnome-remote-login "* ]]; then
+		echo "Without an Xorg session, Remote Desktop needs the gnome-remote-login extra: add it to --extras." >&2
+		exit 1
+	fi
+fi
+
+if ((RDP_DESKTOP && !RDP_GNOME)); then
 	echo "==> Remote Desktop"
 	apt-get install -yq xrdp xorgxrdp ssl-cert
 	# xrdp reads its TLS key from ssl-cert's snakeoil one.
@@ -744,13 +786,19 @@ UNIT
 	# device" (colord).
 	mkdir -p /etc/polkit-1/rules.d
 	cat >/etc/polkit-1/rules.d/45-lab-rdp.rules <<'RULES'
-// Lab panel template: no password prompts for colour profiles in Remote Desktop sessions.
+// Lab panel template: no password prompts for colour profiles, or refreshing the package lists, in
+// Remote Desktop sessions.
 polkit.addRule(function (action, subject) {
-	if (action.id.indexOf("org.freedesktop.color-manager.") === 0 && subject.local !== true) {
+	if ((action.id.indexOf("org.freedesktop.color-manager.") === 0 ||
+	     action.id == "org.freedesktop.packagekit.system-sources-refresh") && subject.local !== true) {
 		return polkit.Result.YES;
 	}
 });
 RULES
+	if ((UBUNTU_DESKTOP)) && ! grep -q lab-panel /etc/xrdp/startwm.sh; then
+		# Ubuntu's own GNOME session (its dock and settings), not plain GNOME.
+		sed -i '1a # lab-panel: Ubuntu'"'"'s GNOME session\nexport GNOME_SHELL_SESSION_MODE=ubuntu XDG_CURRENT_DESKTOP=ubuntu:GNOME XDG_SESSION_DESKTOP=ubuntu XDG_CONFIG_DIRS=/etc/xdg/xdg-ubuntu:/etc/xdg' /etc/xrdp/startwm.sh
+	fi
 	systemctl daemon-reload
 	systemctl enable lab-rdp-keys.service xrdp >/dev/null 2>&1
 	echo "  xrdp: $(systemctl is-enabled xrdp)"
@@ -759,6 +807,9 @@ fi
 
 # --- 7. Label --------------------------------------------------------------------------------------
 
+RDP_LABEL=no
+((RDP_DESKTOP)) && RDP_LABEL=yes
+((RDP_GNOME)) && RDP_LABEL=gnome
 cat >/etc/lab-template <<EOF
 # Panel template, built with scripts/template/prepare.sh and clean.sh.
 os=$ID
@@ -767,7 +818,7 @@ name=$PRETTY_NAME
 cloud_init=$CI_VERSION
 extras=${CHOSEN[*]}
 extras_packages=${PACKAGES[*]}
-rdp=$( ((RDP_DESKTOP)) && echo yes || echo no)
+rdp=$RDP_LABEL
 prepared=$(date -u +%Y-%m-%dT%H:%MZ)
 EOF
 echo "==> Labelled in /etc/lab-template"

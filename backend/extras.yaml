@@ -25,6 +25,8 @@
 #                when      optional: {<option id>: [values]}, to show it only then
 #                default   used when it's left blank. {hostname} is the machine's name, {fqdn} the
 #                          name plus MACHINE_DOMAIN (just the name when that's empty)
+#   hidden     optional: true for an extra a template sets up on every machine (its `always` in
+#              templates.yaml): not listed as a service or on the deploy form
 #   password   true if the script needs the machine's password as it is ($password), e.g. for a web
 #              app's admin; then the panel clears it from vCenter once the machine is set up.
 #              $username (the machine's user) is always set.
@@ -786,6 +788,36 @@
         systemctl restart tigervncserver@:1
         lab_open 5901/tcp
       fi
+
+# Set up by the Ubuntu Desktop 26.04 template on every machine (templates.yaml, `always`), never chosen:
+# GNOME there has no Xorg session for xrdp, so Remote Desktop is GNOME's own Remote Login, whose
+# credentials are the machine's user and password.
+- id: gnome-remote-login
+  name: Remote Login (GNOME)
+  category: Remote desktop
+  description: Remote Desktop to Ubuntu's login screen, through GNOME's own Remote Login.
+  hidden: true
+  ports: [3389]
+  password: true
+  notes:
+    - "Remote Desktop: connect to {ip} as {username}, with the machine's password; then sign in again on Ubuntu's login screen."
+  debian:
+    packages: [gnome-remote-desktop, openssl]
+    script: |
+      # Its own certificate, made here so no two machines share one.
+      home=$(getent passwd gnome-remote-desktop | cut -d: -f6)
+      install -d -o gnome-remote-desktop -g gnome-remote-desktop -m 700 "$home"
+      openssl req -x509 -newkey rsa:3072 -nodes -days 3650 -subj "/CN=$hostname" \
+        -keyout "$home/rdp-tls.key" -out "$home/rdp-tls.crt" 2>/dev/null
+      chown gnome-remote-desktop:gnome-remote-desktop "$home/rdp-tls.key" "$home/rdp-tls.crt"
+      chmod 600 "$home/rdp-tls.key"
+      grdctl --system rdp set-tls-key "$home/rdp-tls.key"
+      grdctl --system rdp set-tls-cert "$home/rdp-tls.crt"
+      grdctl --system rdp set-credentials "$username" "$password"
+      grdctl --system rdp enable
+      systemctl enable -q gnome-remote-desktop.service
+      systemctl restart gnome-remote-desktop.service
+      lab_open 3389/tcp
 
 # Container apps: Docker images already in the template (prepare.sh's DOCKER_IMAGES, pinned), each run
 # by lab_docker as the machine's whole website, so they work offline. Debian family.

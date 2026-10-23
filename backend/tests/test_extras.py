@@ -138,7 +138,10 @@ def test_catalogue_conflicts_are_worked_out():
         assert found[i] == expected - {i}, i
     for i in ("vaultwarden", "wazuh"):
         assert found[i] == https - {i}, i
-    for i in ("ftp", "desktop", "outlook", "postgresql", "sqlite", "mssql", "docker", "python", "minio", "wazuh-agent", "zabbix-agent"):
+    # Remote Desktop's port: the desktop extra, and Ubuntu Desktop 26.04's own Remote Login (never both
+    # on one template).
+    assert found["desktop"] == {"gnome-remote-login"} and found["gnome-remote-login"] == {"desktop"}
+    for i in ("ftp", "outlook", "postgresql", "sqlite", "mssql", "docker", "python", "minio", "wazuh-agent", "zabbix-agent"):
         assert found[i] == set(), i
 
 
@@ -297,9 +300,30 @@ def test_config_lists_extras_for_templates_that_have_them(offered):
     assert https["options"][0]["id"] == "domain" and https["options"][0]["default"] == "{fqdn}"
 
 
+def test_a_template_sets_up_its_always_extras_on_every_machine(queued, monkeypatch):
+    """Ubuntu Desktop 26.04's Remote Login: added to every machine, never chosen, and its password
+    cleared from vCenter afterwards like any extra that gets it."""
+    from dataclasses import replace
+
+    tpl = catalogue.catalogue()[("ubuntu", "26.04")]
+    monkeypatch.setitem(catalogue.catalogue(), ("ubuntu", "26.04"), replace(tpl, always=("gnome-remote-login",)))
+    r = deploy("desk01", [{"id": "python", "options": {}}])
+    assert r.status_code == 201, r.text
+    assert [x["id"] for x in r.json()["extras"]] == ["gnome-remote-login", "python"]
+    from app.db import session
+    from app.models import Machine
+
+    with session() as s:
+        assert extras.needs_password(s.query(Machine).filter(Machine.name == "desk01").one().extras)
+    r = deploy("desk02", [{"id": "gnome-remote-login", "options": {}}])
+    assert r.status_code == 422 and "isn't an extra this template offers" in r.json()["detail"]
+    queued.clear()
+
+
 def test_config_lists_every_service_and_where_it_runs(offered):
     services = {s["id"]: s for s in client.get("/api/config").json()["services"]}
-    assert set(services) == set(extras.extras())
+    # Not those templates set up themselves (hidden).
+    assert set(services) == {i for i, x in extras.extras().items() if not x.hidden} and "gnome-remote-login" in extras.extras()
     assert services["nginx"]["category"] == "Web servers" and services["nginx"]["ports"] == [80]
     assert {"template": "ubuntu", "version": "26.04", "ready": True} in services["nginx"]["offeredBy"]
     iis = services["iis"]["offeredBy"]

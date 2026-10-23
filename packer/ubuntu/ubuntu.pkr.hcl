@@ -1,6 +1,7 @@
 # Ubuntu Server template for the panel, built unattended (docs/build-templates.md).
 #
 #   packer/build.sh ubuntu
+#   packer/build.sh ubuntu -var desktop=true      (Ubuntu Desktop: GNOME, over Remote Desktop)
 #
 # Installs from the ISO on the datastore with autoinstall (user-data.pkrtpl.hcl, on a small CD),
 # runs scripts/template/prepare.sh, then clean.sh as the shutdown, and leaves a template in
@@ -71,6 +72,16 @@ variable "zimbra" {
   type    = bool
   default = false
 }
+# The Ubuntu Desktop template instead: Ubuntu's own desktop (GNOME) over Remote Desktop
+# (prepare.sh --desktop), with only the extras that suit a workstation (desktop_extras).
+variable "desktop" {
+  type    = bool
+  default = false
+}
+variable "desktop_extras" {
+  type    = string
+  default = "python,docker,juice-shop,dvwa,uptime-kuma,grafana,vaultwarden,gitea,wazuh-agent,zabbix-agent"
+}
 variable "zimbra_mirror" {
   type    = string
   default = ""
@@ -99,10 +110,13 @@ variable "ssh_private_key_file" { type = string }
 variable "ssh_public_key" { type = string }
 
 locals {
-  name        = var.zimbra ? "zimbra-8.8.15" : "ubuntu-${var.version}"
-  vm_name     = var.vm_name != "" ? var.vm_name : "tpl-${local.name}-${formatdate("YYYYMMDD", timestamp())}"
-  extras_flag = var.zimbra ? "--extras=zimbra" : (var.extras == "" ? "" : (var.extras == "none" ? "--no-extras" : "--extras=${var.extras}"))
-  media       = trimsuffix(var.media_url, "/")
+  name    = var.zimbra ? "zimbra-8.8.15" : (var.desktop ? "ubuntu-desktop-${var.version}" : "ubuntu-${var.version}")
+  vm_name = var.vm_name != "" ? var.vm_name : "tpl-${local.name}-${formatdate("YYYYMMDD", timestamp())}"
+  # Ubuntu Desktop on GNOME without Xorg (26.04 on): its Remote Login is set up at first boot, by
+  # the gnome-remote-login extra.
+  desktop_flag = "--desktop --extras=${var.desktop_extras}${tonumber(split(".", var.version)[0]) >= 26 ? ",gnome-remote-login" : ""}"
+  extras_flag  = var.zimbra ? "--extras=zimbra" : (var.desktop ? local.desktop_flag : (var.extras == "" ? "" : (var.extras == "none" ? "--no-extras" : "--extras=${var.extras}")))
+  media        = trimsuffix(var.media_url, "/")
   # prepare.sh reads these from its environment (sudo would drop Packer's, hence env).
   media_env = local.media == "" ? "" : join(" ", [
     "WORDPRESS_URL=${local.media}/linux/wordpress/latest.tar.gz",
@@ -130,12 +144,12 @@ source "vsphere-iso" "ubuntu" {
   datastore           = var.datastore
   folder              = var.template_folder
   vm_name             = local.vm_name
-  notes               = "${var.zimbra ? "Zimbra 8.8.15 on Ubuntu 20.04" : "Ubuntu ${var.version}"} template for lab-deploy, built by Packer on ${formatdate("YYYY-MM-DD", timestamp())}."
+  notes               = "${var.zimbra ? "Zimbra 8.8.15 on Ubuntu 20.04" : (var.desktop ? "Ubuntu Desktop ${var.version}" : "Ubuntu ${var.version}")} template for lab-deploy, built by Packer on ${formatdate("YYYY-MM-DD", timestamp())}."
 
   guest_os_type        = "ubuntu64Guest"
   firmware             = "efi"
   CPUs                 = 2
-  RAM                  = var.zimbra ? 4096 : 2048
+  RAM                  = var.zimbra || var.desktop ? 4096 : 2048
   disk_controller_type = ["pvscsi"]
   storage {
     disk_size             = 40960

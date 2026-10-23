@@ -167,7 +167,7 @@ def config() -> dict:
         ],
         # Every extra, with the templates that offer it (ready) or will (once built or rebuilt), for
         # choosing a service first and then where to run it.
-        "services": [{**extra_out(x), "offeredBy": catalogue.offered_by(x.id)} for x in extras.extras().values()],
+        "services": [{**extra_out(x), "offeredBy": catalogue.offered_by(x.id)} for x in extras.extras().values() if not x.hidden],
         # Fills {fqdn} in option defaults: "<name>.<machineDomain>", or just the name when empty.
         "machineDomain": cfg.machine_domain.strip("."),
         "graceMs": cfg.grace_minutes * 60_000,
@@ -308,6 +308,9 @@ def deploy_machine(req: DeployRequest, db: Db) -> dict:
     password = tpl.fixed_password or password
     try:
         chosen = extras.resolve(tpl.extras, [c.model_dump() for c in req.extras], req.name)
+        if tpl.always:
+            # What the template sets up on every machine, first; checked against the rest for clashes.
+            chosen = extras.resolve(tpl.extras + tpl.always, [{"id": i, "options": {}} for i in tpl.always] + chosen, req.name)
         for x, o, other_id in extras.machine_options(chosen):
             extras.check_machine(x, o, db.get(Machine, other_id))
     except extras.ExtraError as e:
