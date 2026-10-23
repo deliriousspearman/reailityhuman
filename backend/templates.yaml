@@ -52,17 +52,16 @@
   extras: [nginx, apache, apache-https, wordpress, nextcloud, nextcloud-snap, postgresql, mariadb, mysql, sqlite, mail, ftp, desktop, docker, juice-shop, dvwa, uptime-kuma, grafana, vaultwarden, gitea, iredmail, minio, python, wazuh, wazuh-agent, zabbix, zabbix-agent]
 - template: ubuntu
   version: "22.04"
-  # Built by Packer (packer/build.sh ubuntu -var version=22.04 -var iso=ubuntu-22.04.5-live-server-amd64.iso) on 2026-10-18, with every
+  # Built by Packer (packer/build.sh ubuntu -var version=22.04 -var iso=ubuntu-22.04.5-live-server-amd64.iso) on 2026-10-23, with every
   # extra baked in.
-  vsphere: Labs/Templates/tpl-ubuntu-22.04-20261018
+  vsphere: Labs/Templates/tpl-ubuntu-22.04-20261023
   cpu: 2
   memoryGB: 2
-  diskGB: 25
+  diskGB: 40
   username: ubuntu
   family: debian
   # Not Nextcloud: it needs PHP 8.3, and 22.04 has 8.1 (the snap brings its own).
-  extras: [nginx, apache, apache-https, wordpress, nextcloud-snap, postgresql, mariadb, mysql, sqlite, mail, ftp, desktop, docker, juice-shop, dvwa, uptime-kuma, grafana, vaultwarden, gitea]
-  plannedExtras: [minio, python, wazuh, wazuh-agent, zabbix, zabbix-agent]
+  extras: [nginx, apache, apache-https, wordpress, nextcloud-snap, postgresql, mariadb, mysql, sqlite, mail, ftp, desktop, docker, juice-shop, dvwa, uptime-kuma, grafana, vaultwarden, gitea, minio, python, wazuh, wazuh-agent, zabbix, zabbix-agent]
 
 # Debian (packer/debian, from the netinst ISO): a plain server with every extra baked in, except MySQL
 # (Debian has no mysql-server package).
