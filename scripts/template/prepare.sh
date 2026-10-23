@@ -584,8 +584,12 @@ debian)
 			printf 'Package: firefox\nPin: release *\nPin-Priority: -1\n' >/etc/apt/preferences.d/lab-no-firefox
 		fi
 		apt-get install -yq ubuntu-desktop-minimal
-		# Its first-sign-in wizard: each machine's user is made by the panel.
-		apt-get purge -yq gnome-initial-setup >/dev/null 2>&1 || true
+		# Its first-sign-in wizard (each machine's user is made by the panel), and the pop-ups offering
+		# updates and the next Ubuntu release: a lab machine is replaced, not upgraded.
+		apt-get purge -yq gnome-initial-setup update-notifier >/dev/null 2>&1 || true
+		if [[ -f /etc/update-manager/release-upgrades ]]; then
+			sed -i 's/^Prompt=.*/Prompt=never/' /etc/update-manager/release-upgrades
+		fi
 		systemctl set-default graphical.target >/dev/null
 	fi
 	# Debian's network is ifupdown, whose format can't say the panel's "DHCP on any e* adapter": cloud-init
@@ -800,6 +804,18 @@ RULES
 	if ((UBUNTU_DESKTOP)) && ! grep -q lab-panel /etc/xrdp/startwm.sh; then
 		# Ubuntu's own GNOME session (its dock and settings), not plain GNOME.
 		sed -i '1a # lab-panel: Ubuntu'"'"'s GNOME session\nexport GNOME_SHELL_SESSION_MODE=ubuntu XDG_CURRENT_DESKTOP=ubuntu:GNOME XDG_SESSION_DESKTOP=ubuntu XDG_CONFIG_DIRS=/etc/xdg/xdg-ubuntu:/etc/xdg' /etc/xrdp/startwm.sh
+	fi
+	# The same for polkit before 0.106 (Ubuntu 22.04's), which ignores rules.d and reads these.
+	if [[ -d /etc/polkit-1/localauthority ]]; then
+		mkdir -p /etc/polkit-1/localauthority/50-local.d
+		cat >/etc/polkit-1/localauthority/50-local.d/45-lab-rdp.pkla <<'PKLA'
+[Lab panel template: no password prompts for colour profiles or refreshing the package lists]
+Identity=unix-user:*
+Action=org.freedesktop.color-manager.*;org.freedesktop.packagekit.system-sources-refresh
+ResultAny=yes
+ResultInactive=yes
+ResultActive=yes
+PKLA
 	fi
 	systemctl daemon-reload
 	systemctl enable lab-rdp-keys.service xrdp >/dev/null 2>&1
