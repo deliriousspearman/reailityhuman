@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
-# Imports MikroTik's Cloud Hosted Router (RouterOS 7 for VMs) as a panel template, as the complete
+# Imports MikroTik's Cloud Hosted Router (RouterOS 7, or 6, for VMs) as a panel template, as the complete
 # image it is (templates.yaml: family image): RouterOS can't take the panel's settings, so every
 # machine has the same sign-in, admin with PASSWORD below. Run it on a Linux machine with Docker (or
 # govc, unzip and qemu-img) that reaches vCenter and the internet:
 #
 #   packer/mikrotik/import-chr.sh [--credentials FILE]
+#   VERSION=6 packer/mikrotik/import-chr.sh [--credentials FILE]     (RouterOS 6, VERSION_6 below)
 #
 # It downloads the CHR disk image (checked against MikroTik's SHA-256), converts it for vSphere, and
 # builds a VM around it: BIOS, LSI Logic, two vmxnet3 adapters on the lab network (each takes an
@@ -17,7 +18,8 @@
 #
 # Settings: GOVC_URL (vCenter), GOVC_INSECURE=1 for its self-signed certificate, GOVC_DATACENTER,
 # GOVC_DATASTORE, NETWORK (default VM Network), FOLDER (default Labs/Templates), VERSION (default
-# below), NAME (default tpl-mikrotik-<version>-<date>). The account: FILE with its user then password
+# below), NAME (default tpl-mikrotik-<version>-<date>), STAGE=vm to stop before its console (for
+# trying a new release's first sign-in by hand). The account: FILE with its user then password
 # (/dev/stdin works), or GOVC_USERNAME and GOVC_PASSWORD. Offline: put the zip and its .sha256 in
 # MEDIA=<folder> first.
 set -euo pipefail
@@ -29,6 +31,10 @@ export GOVC_DATACENTER=${GOVC_DATACENTER:-Datacenter} GOVC_DATASTORE=${GOVC_DATA
 NETWORK=${NETWORK:-VM Network}
 FOLDER=/$GOVC_DATACENTER/vm/${FOLDER:-Labs/Templates}
 VERSION=${VERSION:-7.24.5}
+# RouterOS 6's last long-term release, for the mikrotik 6 template (VERSION=6; its first sign-in is
+# the same as 7's).
+VERSION_6=6.49.23
+[[ $VERSION == 6 ]] && VERSION=$VERSION_6
 NAME=${NAME:-tpl-mikrotik-$VERSION-$(date +%Y%m%d)}
 IMAGE_URL=https://download.mikrotik.com/routeros/$VERSION/chr-$VERSION.vmdk.zip
 # Every machine's sign-in (templates.yaml shows it on the panel).
@@ -63,7 +69,8 @@ convert="unzip -q chr.zip && qemu-img convert -O vmdk -o subformat=streamOptimiz
 if type -P unzip >/dev/null && type -P qemu-img >/dev/null; then
 	(cd "$work" && sh -c "$convert")
 else
-	docker run --rm -v "$work:/w" -w /w alpine:3 sh -c "apk add -q unzip qemu-img >/dev/null && $convert"
+	# Its files handed back to this user, as the container makes them root's.
+	docker run --rm -v "$work:/w" -w /w alpine:3 sh -c "apk add -q unzip qemu-img >/dev/null && $convert && chown -R $(id -u):$(id -g) /w"
 fi
 chmod -R a+rX "$work"
 
@@ -75,6 +82,8 @@ govc vm.create -on=false -folder "$FOLDER" -ds "$GOVC_DATASTORE" -g otherLinux64
 	-net "$NETWORK" -net.adapter vmxnet3 -disk.controller lsilogic -disk "$NAME-disk/chr.vmdk" -link=false "$NAME"
 govc vm.network.add -vm "$FOLDER/$NAME" -net "$NETWORK" -net.adapter vmxnet3 >/dev/null
 govc vm.change -vm "$FOLDER/$NAME" -annotation "MikroTik CHR $VERSION (MikroTik's image; admin's password set), a lab panel template. Free licence: 1 Mbit/s per interface."
+
+[[ ${STAGE:-} == vm ]] && { echo "STAGE=vm: stopping before its console."; trap - EXIT; rm -rf "$work"; exit 0; }
 
 echo "==> At its console: admin's password, then it shuts down"
 govc vm.power -on "$FOLDER/$NAME" >/dev/null

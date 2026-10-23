@@ -239,6 +239,20 @@
   access: [web, ssh, console]
   webUrl: http://{ip}/
 
+- template: mikrotik
+  version: "6"
+  # Imported on 2026-10-23 from chr-6.49.23.vmdk.zip (VERSION=6 packer/mikrotik/import-chr.sh),
+  # RouterOS 6's last long-term release.
+  vsphere: Labs/Templates/tpl-mikrotik-6.49.23-20261023
+  cpu: 1
+  memoryGB: 1
+  diskGB: 1
+  username: admin
+  password: mikrotik-lab
+  family: image
+  access: [web, ssh, console]
+  webUrl: http://{ip}/
+
 # Microsoft Exchange: Windows Server 2025 with Exchange Server SE's files and prerequisites baked in
 # (packer/windows-server -var exchange=true). Its one extra, Exchange, joins a domain controller's
 # domain and installs the Mailbox role. Exchange wants memory: 10 GB here, the least that runs well.

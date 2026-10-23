@@ -24,6 +24,9 @@ as building by hand ([setup-vsphere.md](setup-vsphere.md), parts 2, 5 and 6), wh
 | Proxmox VE 7 | `packer/build.sh proxmox7` | ~30 min |
 | XCP-ng 8.3 | `packer/build.sh xcp-ng -var http_ip=<this machine's address>` | ~8 min |
 | MikroTik CHR 7 | `packer/mikrotik/import-chr.sh` | ~5 min |
+| MikroTik CHR 6 | `VERSION=6 packer/mikrotik/import-chr.sh` | ~5 min |
+| Ubuntu Desktop 26.04 | `packer/build.sh ubuntu -var desktop=true` | ~45 min |
+| Ubuntu Desktop 24.04, 22.04 | `packer/build.sh ubuntu -var desktop=true -var version=24.04 -var iso=ubuntu-24.04.5-live-server-amd64.iso` (22.04: likewise) | ~45 min |
 | Exchange Server SE | `packer/build.sh windows-server -var exchange=true -var office=false -var sql_server=false` | ~40 min |
 | Zimbra 8.8.15 (Ubuntu 20.04) | `packer/build.sh ubuntu -var zimbra=true -var version=20.04 -var iso=ubuntu-20.04.6-live-server-amd64.iso` | ~30 min |
 | TrueNAS SCALE 25.10 | `packer/build.sh truenas-scale` | ~25 min |

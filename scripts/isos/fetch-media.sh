@@ -180,10 +180,11 @@ if ((images)); then
 	pin() { sed -n "s/^$2=\${$2:-\(.*\)}$/\1/p; s/^$2=\([^$]*\)$/\1/p" "$1" | head -1; }
 	mkdir -p "$out/images"
 	step "Images: MikroTik CHR"
-	chr=$(pin "$packer_dir/mikrotik/import-chr.sh" VERSION)
-	get "https://download.mikrotik.com/routeros/$chr/chr-$chr.vmdk.zip" "$out/images/chr-$chr.vmdk.zip"
-	get "https://download.mikrotik.com/routeros/$chr/chr-$chr.vmdk.zip.sha256" "$out/images/chr-$chr.vmdk.zip.sha256"
-	check "$out/images/chr-$chr.vmdk.zip" "$(grep -oE '[0-9a-f]{64}' "$out/images/chr-$chr.vmdk.zip.sha256" | head -1)" sha256
+	for chr in "$(pin "$packer_dir/mikrotik/import-chr.sh" VERSION)" "$(pin "$packer_dir/mikrotik/import-chr.sh" VERSION_6)"; do
+		get "https://download.mikrotik.com/routeros/$chr/chr-$chr.vmdk.zip" "$out/images/chr-$chr.vmdk.zip"
+		get "https://download.mikrotik.com/routeros/$chr/chr-$chr.vmdk.zip.sha256" "$out/images/chr-$chr.vmdk.zip.sha256"
+		check "$out/images/chr-$chr.vmdk.zip" "$(grep -oE '[0-9a-f]{64}' "$out/images/chr-$chr.vmdk.zip.sha256" | head -1)" sha256
+	done
 	step "Images: Metasploitable 2, and VMware's frozen Tools for it"
 	ms2=$packer_dir/metasploitable/import-ms2.sh
 	get "$(pin "$ms2" IMAGE_URL)" "$out/images/metasploitable-linux-2.0.0.zip"

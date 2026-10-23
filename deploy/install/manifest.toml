@@ -319,6 +319,13 @@ build = "packer/mikrotik/import-chr.sh"
 env = ["MEDIA={media_dir}/images"]
 media = ["images/chr-7.24.5.vmdk.zip"]
 
+[[template]]
+id = "mikrotik-6"
+catalogue = "mikrotik 6"
+build = "packer/mikrotik/import-chr.sh"
+env = ["MEDIA={media_dir}/images", "VERSION=6"]
+media = ["images/chr-6.49.23.vmdk.zip"]
+
 # Hypervisors (nested)
 [[template]]
 id = "proxmox-9"
