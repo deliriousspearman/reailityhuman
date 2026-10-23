@@ -427,6 +427,8 @@ def main() -> int:
         )
         for t in config["templates"]
     ]
+    # Every template, where an agent's server can go, whichever are being tested.
+    every = list(templates)
     if args.only:
         wanted = [w.strip() for w in args.only.split(",")]
         templates = [t for t in templates if t.template in wanted or f"{t.template}:{t.version}" in wanted]
@@ -438,7 +440,7 @@ def main() -> int:
             say("destroying", m["name"], "left from an earlier run")
             panel.destroy(m["id"])
 
-    runner = Runner(panel, args.wait_room * 60, templates)
+    runner = Runner(panel, args.wait_room * 60, every)
     jobs = []
     for t in templates:
         if not args.no_lifecycle:
