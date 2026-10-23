@@ -82,3 +82,5 @@ class Job(Base):
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     detail: Mapped[str | None] = mapped_column(Text)
+    # Who asked to cancel it, while it waits or runs: the worker stops it at its next check.
+    cancelled_by: Mapped[str | None] = mapped_column(String(64))

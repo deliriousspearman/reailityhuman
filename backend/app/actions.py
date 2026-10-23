@@ -17,7 +17,7 @@ from .db import session
 from .models import STABLE_STATES, Job, LogLine, Machine, utcnow
 from pyVmomi import vmodl
 
-from .vsphere import SetupError, VCenter, VSphereError, connect, describe
+from .vsphere import SetupError, VCenter, VSphereError, cancelled_by, check_cancelled, connect, describe
 
 log = logging.getLogger(__name__)
 
@@ -35,6 +35,29 @@ def set_machine(machine_id: str, **fields) -> None:
         if m := s.get(Machine, machine_id):
             for k, v in fields.items():
                 setattr(m, k, v)
+
+
+def set_ip(machine_id: str, ip: str) -> None:
+    """Records a machine's new address, warning the machines that depend on it if it moved."""
+    with session() as s:
+        if m := s.get(Machine, machine_id):
+            old, m.ip = m.ip, ip
+            note_address_change(s, m, old, ip)
+
+
+def note_address_change(s, m: Machine, old: str | None, new: str | None) -> None:
+    """Tells the machines pointing at this one (e.g. a Wazuh server's agents) that it moved: they
+    were given its address when they were deployed, and keep it."""
+    if not old or not new or old == new:
+        return
+    for d, what in extras.dependants(s.scalars(select(Machine)).all(), m.id):
+        s.add(
+            LogLine(
+                machine_id=d.id,
+                text=f"Its {what} {m.name} moved from {old} to {new}. This machine still points at {old}: redeploy it to reconnect.",
+                tone="warn",
+            )
+        )
 
 
 def load(machine_id: str) -> Machine:
@@ -92,6 +115,9 @@ def redeploy(vc: VCenter, m: Machine) -> None:
         add_log(m.id, "Deleted the old VM")
     set_machine(m.id, ip=None)
     deploy(vc, m)
+    with session() as s:
+        if row := s.get(Machine, m.id):
+            note_address_change(s, row, m.ip, row.ip)
 
 
 def start(vc: VCenter, m: Machine) -> None:
@@ -157,7 +183,7 @@ def _record_ip(vc: VCenter, vm, machine_id: str, timeout: float) -> None:
             "to keep them reachable. Take the lab's fixed addresses out of the DHCP server's pool, then redeploy it."
         )
     if ip:
-        set_machine(machine_id, ip=ip)
+        set_ip(machine_id, ip)
         add_log(machine_id, f"Address on the LAN: {ip}")
     else:
         add_log(machine_id, "No address yet. VMware Tools hasn't reported one; check the DHCP server.", "warn")
@@ -185,7 +211,7 @@ def _recheck_ip(vc: VCenter, vm, m: Machine) -> None:
     adapter). Read it again now it's done."""
     ip = vc.ipv4(vm)
     if ip and ip != load(m.id).ip:
-        set_machine(m.id, ip=ip)
+        set_ip(m.id, ip)
         add_log(m.id, f"Address on the LAN: {ip}")
 
 
@@ -209,6 +235,7 @@ def _wait_for_status(vc: VCenter, vm, m: Machine, family: str, timeout: float) -
                 f"On the machine, {where} shows how far it got.",
                 _log_tail(vc, vm, m, CLOUDBASE_LOG) if windows else None,
             )
+        check_cancelled()
         time.sleep(5)
     return text
 
@@ -227,6 +254,7 @@ def _await_vyos(vc: VCenter, vm, m: Machine) -> None:
                 "`show log | match cloud-init` to see why.",
                 None,
             )
+        check_cancelled()
         time.sleep(5)
 
 
@@ -294,12 +322,44 @@ ACTIONS: dict[str, Callable[[VCenter, Machine], None]] = {
 }
 
 
+def _asked_to_cancel(job_id: int) -> Callable[[], str | None]:
+    """Who cancelled this job, or None; read from the database at most every 2 s, as vCenter waits
+    check twice a second."""
+    last, who = 0.0, None
+
+    def asked() -> str | None:
+        nonlocal last, who
+        if who is None and time.monotonic() - last >= 2:
+            last = time.monotonic()
+            with session() as s:
+                who = s.scalar(select(Job.cancelled_by).where(Job.id == job_id))
+        return who
+
+    return asked
+
+
 def run(job_id: int, machine_id: str, action: str) -> None:
     """Runs one job, recording its progress and outcome."""
     with session() as s:
         job = s.get(Job, job_id)
+        if job.cancelled_by:  # while it waited in the queue
+            job.state, job.started_at, job.finished_at = "failed", utcnow(), utcnow()
+            job.detail = f"Cancelled by {job.cancelled_by} before it started."
+            if m := s.get(Machine, machine_id):
+                if m.state not in STABLE_STATES:
+                    m.state = "error"
+                s.add(LogLine(machine_id=machine_id, text=f"{job.action} was cancelled by {job.cancelled_by} before it started.", tone="warn"))
+            return
         job.state = "running"
         job.started_at = utcnow()
+    token = cancelled_by.set(_asked_to_cancel(job_id))
+    try:
+        _run(job_id, machine_id, action)
+    finally:
+        cancelled_by.reset(token)
+
+
+def _run(job_id: int, machine_id: str, action: str) -> None:
     try:
         m = load(machine_id)
         with connect() as vc:
@@ -471,4 +531,5 @@ def reconcile() -> None:
             on, ip = vms[m.vm_name]
             row.state = "running" if on else "stopped"
             if ip:
-                row.ip = ip
+                old, row.ip = row.ip, ip
+                note_address_change(s, row, old, ip)

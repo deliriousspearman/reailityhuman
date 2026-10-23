@@ -12,7 +12,7 @@ from fastapi import APIRouter, FastAPI, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select, text
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, object_session
 
 from . import catalogue, cloudinit, console, extras, jobs
 from .config import settings
@@ -35,8 +35,12 @@ def ms(t: datetime | None) -> int | None:
     return None if t is None else int(t.timestamp() * 1000)
 
 
-def machine_out(m: Machine, log: bool = True) -> dict:
-    """`log`: with its activity log (left out of the list, which the panel polls every few seconds)."""
+def machine_out(m: Machine, log: bool = True, machines: list[Machine] | None = None) -> dict:
+    """`log`: with its activity log (left out of the list, which the panel polls every few seconds).
+    `machines`: every machine, to find those that depend on this one; read here if not given."""
+    if machines is None:
+        db = object_session(m)
+        machines = db.scalars(select(Machine)).all() if db else []
     return {
         "id": m.id,
         "name": m.name,
@@ -62,6 +66,8 @@ def machine_out(m: Machine, log: bool = True) -> dict:
             }
             for c in m.extras or []
         ],
+        # Machines whose extras point at this one (e.g. a Wazuh server's agents).
+        "usedBy": [{"id": d.id, "name": d.name} for d, _ in extras.dependants(machines, m.id)],
         **(
             {"log": [{"at": ms(line.at), "text": line.text, **({"tone": line.tone} if line.tone else {})} for line in m.log]}
             if log
@@ -267,7 +273,8 @@ class Hours(BaseModel):
 @router.get("/machines")
 def list_machines(db: Db) -> list[dict]:
     """Every machine, without its log (GET /machines/{id} has it)."""
-    return [machine_out(m, log=False) for m in db.scalars(select(Machine).order_by(Machine.created_at))]
+    machines = db.scalars(select(Machine).order_by(Machine.created_at)).all()
+    return [machine_out(m, log=False, machines=machines) for m in machines]
 
 
 @router.get("/machines/{machine_id}")
@@ -457,6 +464,24 @@ def redeploy_machine(machine_id: str, db: Db, who: Actor) -> dict:
 @router.delete("/machines/{machine_id}")
 def destroy_machine(machine_id: str, db: Db, who: Actor) -> dict:
     return _action(machine_id, db, who, "destroy", "destroying", "Destroy requested")
+
+
+@router.post("/machines/{machine_id}/cancel")
+def cancel_jobs(machine_id: str, db: Db, who: Actor) -> dict:
+    """Cancels the machine's jobs: those waiting are dropped, and the running one stops at its next
+    check (within seconds). The machine is then marked failed, so it can be redeployed or destroyed."""
+    m = get_machine(db, machine_id)
+    pending = db.scalars(
+        select(Job).where(Job.machine_id == m.id, Job.state.in_(("queued", "running")), Job.cancelled_by.is_(None))
+    ).all()
+    if not pending:
+        raise HTTPException(409, f"{m.name} has nothing waiting or running to cancel.")
+    for job in pending:
+        job.cancelled_by = who
+    add_log(db, m, "Cancel requested" if who == ANYONE else f"Cancel requested by {who}", "muted")
+    db.commit()
+    db.refresh(m)
+    return machine_out(m)
 
 
 @router.post("/machines/{machine_id}/extend")

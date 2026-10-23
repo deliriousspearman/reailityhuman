@@ -315,6 +315,11 @@ class PanelStore {
 		return this.#act(m, '/redeploy');
 	}
 
+	/** Cancels its jobs: waiting ones are dropped, and the running one stops within seconds. */
+	cancelMachineJobs(m: SingleMachine) {
+		return this.#act(m, '/cancel');
+	}
+
 	destroyMachine(m: SingleMachine) {
 		return this.#act(m, '', { method: 'DELETE' });
 	}

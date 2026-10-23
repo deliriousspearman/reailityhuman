@@ -456,3 +456,65 @@ def test_infrastructure_addresses_include_vcenter_and_the_hosts():
         addresses = vc.infrastructure_addresses()
     assert settings().vcenter_host.partition(":")[0] in addresses
     assert len(addresses) >= 2, addresses  # vCenter, and at least one host
+
+
+def _machine(s, machine_id, name, extras, ip):
+    s.add(Machine(id=machine_id, name=name, template="ubuntu", version="26.04", owner="jo", state="running",
+                  vm_name=f"jo-{name}", username="ubuntu", password="x", ip=ip, extras=extras))
+
+
+def test_machines_list_who_depends_on_them_and_hear_when_it_moves():
+    """An agent points at its server's address, given when it was deployed: the server lists it, and
+    the agent is told when the server's address changes."""
+    with session() as s:
+        _machine(s, "m-serv", "server1", [{"id": "wazuh", "options": {}}], "192.0.2.10")
+        _machine(s, "m-agnt", "agent1", [{"id": "wazuh-agent", "options": {"wazuh": "m-serv"}}], "192.0.2.11")
+    server = client.get("/api/machines/m-serv").json()
+    assert server["usedBy"] == [{"id": "m-agnt", "name": "agent1"}]
+    assert next(m for m in client.get("/api/machines").json() if m["id"] == "m-serv")["usedBy"] == [{"id": "m-agnt", "name": "agent1"}]
+    assert client.get("/api/machines/m-agnt").json()["usedBy"] == []
+
+    actions.set_ip("m-serv", "192.0.2.20")
+    log = client.get("/api/machines/m-agnt").json()["log"]
+    assert log[-1]["tone"] == "warn" and "server1 moved from 192.0.2.10 to 192.0.2.20" in log[-1]["text"]
+    actions.set_ip("m-serv", "192.0.2.20")  # the same address: nothing more said
+    assert len(client.get("/api/machines/m-agnt").json()["log"]) == len(log)
+
+
+def test_a_waiting_job_can_be_cancelled(queued):
+    r = client.post("/api/machines", json={"template": "ubuntu", "version": "26.04", "owner": "jo", "name": "wait01", "hours": 2})
+    machine_id = r.json()["id"]
+    r = client.post(f"/api/machines/{machine_id}/cancel", headers={"X-Lab-User": "sam"})
+    assert r.status_code == 200
+    run_queued(queued)
+    m = client.get(f"/api/machines/{machine_id}").json()
+    assert m["state"] == "error" and "cancelled by sam before it started" in m["log"][-1]["text"]
+    job = client.get(f"/api/jobs?machine={machine_id}").json()[0]
+    assert job["state"] == "failed" and job["detail"] == "Cancelled by sam before it started."
+    with connect() as vc:
+        assert vc.vm(m["vmName"]) is None
+    # Nothing left to cancel.
+    assert client.post(f"/api/machines/{machine_id}/cancel").status_code == 409
+
+
+def test_a_running_job_stops_when_cancelled(queued, monkeypatch):
+    """A deploy waiting for the machine to set itself up stops at its next check once cancelled."""
+    from app.vsphere import VCenter
+
+    r = client.post("/api/machines", json={"template": "ubuntu", "version": "26.04", "owner": "jo", "name": "slow01", "hours": 2})
+    machine_id = r.json()["id"]
+
+    def never_ready(self, vm, username, password, path):
+        # Someone presses Cancel while it waits.
+        client.post(f"/api/machines/{machine_id}/cancel", headers={"X-Lab-User": "sam"})
+        return None
+
+    monkeypatch.setattr(VCenter, "read_guest_file", never_ready)
+    run_queued(queued)
+    m = client.get(f"/api/machines/{machine_id}").json()
+    assert m["state"] == "error" and m["log"][-1]["text"] == "Deploy failed: cancelled by sam"
+    assert client.get(f"/api/jobs?machine={machine_id}").json()[0]["detail"] == "cancelled by sam"
+    # Destroying it works as for any failed deploy.
+    assert client.delete(f"/api/machines/{machine_id}").status_code == 200
+    run_queued(queued)
+    assert client.get(f"/api/machines/{machine_id}").status_code == 404

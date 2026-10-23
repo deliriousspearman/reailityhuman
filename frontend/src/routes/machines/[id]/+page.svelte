@@ -51,11 +51,33 @@
 		} catch {}
 	}
 
+	/** A warning for confirm dialogs when other machines point at this one (e.g. a server's agents). */
+	const usedByWarning = $derived.by(() => {
+		const names = (m?.usedBy ?? []).map((d) => d.name);
+		if (!names.length) return '';
+		const list = names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
+		return ` ${list} ${names.length === 1 ? 'uses' : 'use'} this machine and will lose ${names.length === 1 ? 'its' : 'their'} connection to it.`;
+	});
+
+	function stop() {
+		if (!m) return;
+		if (!usedByWarning) {
+			void store.stopMachine(m);
+			return;
+		}
+		request = {
+			title: `Stop ${m.name}?`,
+			body: `${m.name} shuts down.${usedByWarning}`,
+			label: 'Stop',
+			run: () => store.stopMachine(m),
+		};
+	}
+
 	function reset() {
 		if (!m) return;
 		request = {
 			title: `Reset ${m.name}?`,
-			body: `${m.name} goes back to how it was when it was deployed. Everything you changed or installed on it is lost.`,
+			body: `${m.name} goes back to how it was when it was deployed. Everything you changed or installed on it is lost.${usedByWarning}`,
 			label: 'Reset',
 			danger: true,
 			run: () => store.resetMachineToClean(m),
@@ -66,10 +88,21 @@
 		if (!m) return;
 		request = {
 			title: `Redeploy ${m.name}?`,
-			body: `${m.name}'s VM is deleted and made again from ${m.template} ${m.version}, with the same name, password and extras. Everything on it is lost.`,
+			body: `${m.name}'s VM is deleted and made again from ${m.template} ${m.version}, with the same name, password and extras. Everything on it is lost.${usedByWarning}`,
 			label: 'Redeploy',
 			danger: true,
 			run: () => store.redeployMachine(m),
+		};
+	}
+
+	function cancel() {
+		if (!m) return;
+		request = {
+			title: `Cancel what ${m.name} is doing?`,
+			body: `The job running on ${m.name} stops within a few seconds, and any waiting are dropped. ${m.name} is then marked as failed: if it was being deployed or reset, redeploy or destroy it.`,
+			label: 'Cancel job',
+			danger: true,
+			run: () => store.cancelMachineJobs(m),
 		};
 	}
 
@@ -77,7 +110,7 @@
 		if (!m) return;
 		request = {
 			title: `Destroy ${m.name}?`,
-			body: `${m.name} and its disk are deleted now. This can't be undone.`,
+			body: `${m.name} and its disk are deleted now. This can't be undone.${usedByWarning}`,
 			label: 'Destroy',
 			danger: true,
 			run: async () => {
@@ -136,7 +169,10 @@
 					<button class="btn" type="button" onclick={redeploy}><Icon name="rebuild" /> Redeploy</button>
 				{/if}
 				{#if m.state !== 'stopped' && m.state !== 'expired'}
-					<button class="btn" type="button" disabled={busy} onclick={() => store.stopMachine(m)}><Icon name="stop" /> Stop</button>
+					<button class="btn" type="button" disabled={busy} onclick={stop}><Icon name="stop" /> Stop</button>
+				{/if}
+				{#if busy}
+					<button class="btn" type="button" onclick={cancel}><Icon name="stop" /> Cancel job</button>
 				{/if}
 				<button class="btn" type="button" disabled={m.state !== 'running'} onclick={() => store.rebootMachine(m)}>
 					<Icon name="reboot" /> Reboot
@@ -217,6 +253,15 @@
 			<dt>Template</dt>
 			<dd><code>{t.id}/{m.version}</code></dd>
 		</div>
+		{#if m.usedBy?.length}
+			<div>
+				<dt>Used by</dt>
+				<dd>
+					{#each m.usedBy as d, i (d.id)}{i ? ', ' : ''}<a href="/machines/{d.id}">{d.name}</a>{/each}
+					<span class="stat-note">they point at this machine's address</span>
+				</dd>
+			</div>
+		{/if}
 		{#if m.extras.length}
 			<div>
 				<dt>Extras</dt>

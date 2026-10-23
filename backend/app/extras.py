@@ -414,6 +414,18 @@ def machine_options(chosen: list[dict]) -> list[tuple[Extra, Option, str]]:
     return [(x, o, c["options"][o.id]) for c in chosen if (x := find(c["id"])) for o in x.options if o.type == "machine"]
 
 
+def dependants(machines, machine_id: str) -> list[tuple[object, str]]:
+    """The machines (of `machines`) with a machine option naming this one, each with what this one is
+    to them (e.g. "Wazuh server"): they lose their connection when it goes or moves."""
+    out = []
+    for m in machines:
+        for _, o, other_id in machine_options(m.extras or []):
+            if other_id == machine_id:
+                out.append((m, x.name if (x := find(o.extra)) else o.extra))
+                break
+    return out
+
+
 def check_machine(x: Extra, o: Option, other) -> None:
     """Whether `other` (a Machine, or None) can be what a machine option names: it exists, has the
     option's extra, and is running with an address."""

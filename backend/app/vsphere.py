@@ -8,8 +8,9 @@ import ipaddress
 import ssl
 import time
 import urllib.request
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
 
 from pyVim.connect import Disconnect, SmartConnect
@@ -32,6 +33,21 @@ class SetupError(VSphereError):
     def __init__(self, message: str, log_tail: str | None = None):
         super().__init__(message)
         self.log_tail = log_tail
+
+
+class Cancelled(VSphereError):
+    """Someone cancelled the job while it waited."""
+
+
+# Set by the worker for the job it runs: who cancelled it, or None to carry on. Every wait checks it,
+# so a cancelled job stops within seconds rather than when its timeout runs out.
+cancelled_by: ContextVar[Callable[[], str | None] | None] = ContextVar("cancelled_by", default=None)
+
+
+def check_cancelled() -> None:
+    """Raises Cancelled if the running job has been cancelled."""
+    if (asked := cancelled_by.get()) and (who := asked()):
+        raise Cancelled(f"cancelled by {who}")
 
 
 def decode_text(data: bytes) -> str:
@@ -81,12 +97,16 @@ TASK_TIMEOUT = 30 * 60
 def wait(task: vim.Task, what: str, timeout: float = TASK_TIMEOUT) -> object:
     deadline = time.monotonic() + timeout
     while task.info.state in (vim.TaskInfo.State.queued, vim.TaskInfo.State.running):
-        if time.monotonic() >= deadline:
+        try:
+            check_cancelled()
+            if time.monotonic() >= deadline:
+                raise VSphereError(f"{what} didn't finish within {timeout // 60:.0f} minutes; vCenter may be overloaded or stuck")
+        except VSphereError:
             try:
                 task.CancelTask()
             except vmodl.MethodFault:
                 pass  # not cancellable, or already finished
-            raise VSphereError(f"{what} didn't finish within {timeout // 60:.0f} minutes; vCenter may be overloaded or stuck")
+            raise
         time.sleep(0.5)
     if task.info.state != vim.TaskInfo.State.success:
         err = task.info.error
@@ -345,6 +365,7 @@ class VCenter:
         while time.monotonic() < deadline:
             if self.power_state(vm) == "poweredOff":
                 return True
+            check_cancelled()
             time.sleep(2)
         self.power_off(vm)
         return False
@@ -356,8 +377,13 @@ class VCenter:
             wait(vm.ResetVM_Task(), "Reset")
 
     def clear_guestinfo(self, vm: vim.VirtualMachine, *keys: str) -> None:
-        """Empties these guestinfo keys, e.g. data holding a password once the guest has used it."""
-        wait(vm.ReconfigVM_Task(vim.vm.ConfigSpec(extraConfig=[vim.option.OptionValue(key=k, value="") for k in keys])), "Configure")
+        """Empties these guestinfo keys, e.g. data holding a password once the guest has used it. Done
+        even when the job has been cancelled."""
+        token = cancelled_by.set(None)
+        try:
+            wait(vm.ReconfigVM_Task(vim.vm.ConfigSpec(extraConfig=[vim.option.OptionValue(key=k, value="") for k in keys])), "Configure")
+        finally:
+            cancelled_by.reset(token)
 
     def wait_for_guest_down(self, vm: vim.VirtualMachine, timeout: float) -> bool:
         """Waits for VMware Tools to stop reporting the guest as running, as it does while a reboot
@@ -368,6 +394,7 @@ class VCenter:
                 return True
             if time.monotonic() >= deadline:
                 return False
+            check_cancelled()
             time.sleep(2)
 
     def revert_to_clean(self, vm: vim.VirtualMachine) -> None:
@@ -395,6 +422,7 @@ class VCenter:
                 return ip
             if time.monotonic() >= deadline:
                 return None
+            check_cancelled()
             time.sleep(3)
 
     def guest_login_ok(self, vm: vim.VirtualMachine, username: str, password: str) -> bool | None:
