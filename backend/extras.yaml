@@ -1053,6 +1053,17 @@
       # 16 GB as it's processed, filling the disk past what the indexer allows, which fails the install.
       # Unreachable while installing; then switched off.
       echo "127.0.0.1 cti.wazuh.com # lab panel: no vulnerability feed" >>/etc/hosts
+      # Its manager unpacks a vulnerability snapshot on its first start (about 13 GB, for a minute or two,
+      # removed below), taking the disk briefly past 95%, where the indexer refuses writes and the install's
+      # later steps fail. Its disk checks off while it installs (as soon as it's up), on again after.
+      idx() { curl -s --cert /etc/wazuh-indexer/certs/admin.pem --key /etc/wazuh-indexer/certs/admin-key.pem \
+        --cacert /etc/wazuh-indexer/certs/root-ca.pem -H 'Content-Type: application/json' "$@"; }
+      (for _ in $(seq 1800); do
+        idx -X PUT https://127.0.0.1:9200/_cluster/settings \
+          -d '{"persistent":{"cluster.routing.allocation.disk.threshold_enabled":false}}' 2>/dev/null | grep -q acknowledged && exit 0
+        sleep 1
+      done) &
+      disk_guard=$!
       if ! bash wazuh-install.sh --offline-installation --all-in-one </dev/null; then
         # Its last step, loading the internal users with their new passwords into the indexer (securityadmin),
         # sometimes fails on a busy 2 vCPU machine, with everything else installed and running (and Filebeat
@@ -1081,6 +1092,9 @@
       systemctl stop wazuh-manager
       rm -rf /var/ossec/queue/vd /var/ossec/tmp/*
       systemctl start wazuh-manager
+      kill "$disk_guard" 2>/dev/null || true
+      idx -X PUT https://127.0.0.1:9200/_cluster/settings -d '{"persistent":{"cluster.routing.allocation.disk.threshold_enabled":null}}' >/dev/null
+      idx -X PUT 'https://127.0.0.1:9200/_all/_settings?expand_wildcards=all' -d '{"index.blocks.read_only_allow_delete":null}' >/dev/null
       # The machine's user as a dashboard administrator, through the indexer's API. (Wazuh's own
       # password tool only takes passwords with one of .*+?- in them, which the machine's may not have.)
       admin=$(tar -xOf wazuh-install-files.tar wazuh-install-files/wazuh-passwords.txt |
