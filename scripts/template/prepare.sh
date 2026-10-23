@@ -852,10 +852,15 @@ UNIT
 	mkdir -p /etc/polkit-1/rules.d
 	cat >/etc/polkit-1/rules.d/45-lab-rdp.rules <<'RULES'
 // Lab panel template: no password prompts for colour profiles, or refreshing the package lists, in
-// Remote Desktop sessions.
+// Remote Desktop sessions; nor, for the machine's user (an administrator), for its network
+// connections (Parrot's network applet asks as the session starts).
 polkit.addRule(function (action, subject) {
 	if ((action.id.indexOf("org.freedesktop.color-manager.") === 0 ||
 	     action.id == "org.freedesktop.packagekit.system-sources-refresh") && subject.local !== true) {
+		return polkit.Result.YES;
+	}
+	if (action.id.indexOf("org.freedesktop.NetworkManager.") === 0 && subject.local !== true &&
+	    (subject.isInGroup("sudo") || subject.isInGroup("wheel"))) {
 		return polkit.Result.YES;
 	}
 });
