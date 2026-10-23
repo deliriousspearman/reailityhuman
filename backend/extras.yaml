@@ -1191,6 +1191,10 @@
       # Newer releases' packages (Ubuntu 26.04's) hand PHP to PHP-FPM, through Apache's proxy, not mod_php.
       if grep -q 'proxy:unix' /etc/apache2/conf-enabled/zabbix.conf 2>/dev/null; then
         a2enmod -q proxy proxy_fcgi
+        # The proxy doesn't hand PHP the Authorization header, which the API's tokens come in.
+        printf '%s\n' "# Written by the lab panel: Zabbix API tokens (Authorization: Bearer) reach PHP-FPM." \
+          'SetEnvIf Authorization "(.*)" HTTP_AUTHORIZATION=$1' >/etc/apache2/conf-available/lab-zabbix-auth.conf
+        a2enconf -q lab-zabbix-auth
         for unit in $(systemctl list-unit-files --no-legend 'php*-fpm.service' | awk '{print $1}'); do
           systemctl enable -q "$unit"
           systemctl restart "$unit"
