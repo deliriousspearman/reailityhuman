@@ -463,7 +463,7 @@
 - template: kali
   version: "2026.2"
   # Built by Packer (packer/build.sh kali) on 2026-10-23.
-  vsphere: Labs/Templates/tpl-kali-2026.2-20261023
+  vsphere: Labs/Templates/tpl-kali-2026.2-20261023b
   cpu: 2
   memoryGB: 4
   diskGB: 60
@@ -474,7 +474,7 @@
 - template: parrot
   version: "7"
   # Built by Packer (packer/parrot) on 2026-10-23, from Parrot Security 7.4's own image.
-  vsphere: Labs/Templates/tpl-parrot-7.4-20261023
+  vsphere: Labs/Templates/tpl-parrot-7.4-20261023b
   cpu: 2
   memoryGB: 4
   diskGB: 64
