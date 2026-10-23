@@ -1045,7 +1045,27 @@
       # 16 GB as it's processed, filling the disk past what the indexer allows, which fails the install.
       # Unreachable while installing; then switched off.
       echo "127.0.0.1 cti.wazuh.com # lab panel: no vulnerability feed" >>/etc/hosts
-      bash wazuh-install.sh --offline-installation --all-in-one </dev/null
+      if ! bash wazuh-install.sh --offline-installation --all-in-one </dev/null; then
+        # Its last step, loading the internal users with their new passwords into the indexer (securityadmin),
+        # sometimes fails on a busy 2 vCPU machine, with everything else installed and running (and Filebeat
+        # already on its new password). That step again, a few times.
+        tail -5 /var/log/wazuh-install.log | grep -q "Could not load the changes" || exit 1
+        [ -s /etc/wazuh-indexer/backup/internal_users.yml ] || exit 1
+        loaded=no
+        for _ in 1 2 3 4 5; do
+          sleep 20
+          if OPENSEARCH_CONF_DIR=/etc/wazuh-indexer OPENSEARCH_JAVA_HOME=/usr/share/wazuh-indexer/jdk \
+            /usr/share/wazuh-indexer/plugins/opensearch-security/tools/securityadmin.sh -p 9200 -nhnv -icl -h 127.0.0.1 \
+            -cacert /etc/wazuh-indexer/certs/root-ca.pem -cert /etc/wazuh-indexer/certs/admin.pem \
+            -key /etc/wazuh-indexer/certs/admin-key.pem -f /etc/wazuh-indexer/backup/internal_users.yml -t internalusers; then
+            loaded=yes
+            break
+          fi
+        done
+        [ "$loaded" = yes ] || { echo "Wazuh's internal users couldn't be loaded into its indexer."; exit 1; }
+        rm -rf /etc/wazuh-indexer/backup
+        systemctl restart filebeat wazuh-dashboard
+      fi
       rm -rf wazuh-offline wazuh-offline.tar.gz
       sed -i '/<vulnerability-detection>/,/<\/vulnerability-detection>/ s#<enabled>yes</enabled>#<enabled>no</enabled>#' /var/ossec/etc/ossec.conf
       sed -i '/cti\.wazuh\.com # lab panel/d' /etc/hosts
