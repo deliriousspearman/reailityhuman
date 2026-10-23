@@ -69,15 +69,14 @@
 # (Debian has no mysql-server package).
 - template: debian
   version: "13"
-  # Built by Packer (packer/build.sh debian) on 2026-10-18.
-  vsphere: Labs/Templates/tpl-debian-13-20261018c
+  # Built by Packer (packer/build.sh debian) on 2026-10-23.
+  vsphere: Labs/Templates/tpl-debian-13-20261023
   cpu: 2
   memoryGB: 2
-  diskGB: 25
+  diskGB: 40
   username: labuser
   family: debian
-  extras: [nginx, apache, apache-https, wordpress, nextcloud, nextcloud-snap, postgresql, mariadb, sqlite, mail, ftp, desktop, docker, juice-shop, dvwa, uptime-kuma, grafana, vaultwarden, gitea]
-  plannedExtras: [iredmail, minio, python, wazuh-agent, zabbix, zabbix-agent]
+  extras: [nginx, apache, apache-https, wordpress, nextcloud, nextcloud-snap, postgresql, mariadb, sqlite, mail, ftp, desktop, docker, juice-shop, dvwa, uptime-kuma, grafana, vaultwarden, gitea, iredmail, minio, python, wazuh-agent, zabbix, zabbix-agent]
 - template: debian
   version: "12"
   # Built by Packer (packer/build.sh debian -var version=12 -var iso=debian-12.15.0-amd64-netinst.iso) on 2026-10-18.
