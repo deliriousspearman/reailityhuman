@@ -400,16 +400,15 @@
 # the desktop extra: they have their own; nor MySQL: Debian has only MariaDB.
 - template: kali
   version: "2026.2"
-  # Built by Packer (packer/build.sh kali) on 2026-10-16.
-  vsphere: Labs/Templates/tpl-kali-2026.2-20261016
+  # Built by Packer (packer/build.sh kali) on 2026-10-23.
+  vsphere: Labs/Templates/tpl-kali-2026.2-20261023
   cpu: 2
   memoryGB: 4
   diskGB: 60
   username: kali
   family: debian
   access: [ssh, rdp, console]
-  extras: [nginx, apache, apache-https, wordpress, nextcloud, nextcloud-snap, postgresql, mariadb, sqlite, mail, ftp]
-  plannedExtras: [docker, juice-shop, dvwa, uptime-kuma, grafana, vaultwarden, gitea, minio, python, wazuh-agent, zabbix-agent]
+  extras: [nginx, apache, apache-https, wordpress, nextcloud, nextcloud-snap, postgresql, mariadb, sqlite, mail, ftp, docker, juice-shop, dvwa, uptime-kuma, grafana, vaultwarden, gitea, minio, python, wazuh-agent, zabbix-agent]
 - template: parrot
   version: "7"
   # Built by Packer (packer/parrot) on 2026-10-17, from Parrot Security 7.4's own image.
