@@ -112,9 +112,9 @@ variable "ssh_public_key" { type = string }
 locals {
   name    = var.zimbra ? "zimbra-8.8.15" : (var.desktop ? "ubuntu-desktop-${var.version}" : "ubuntu-${var.version}")
   vm_name = var.vm_name != "" ? var.vm_name : "tpl-${local.name}-${formatdate("YYYYMMDD", timestamp())}"
-  # Ubuntu Desktop on GNOME without Xorg (26.04 on): its Remote Login is set up at first boot, by
+  # Ubuntu Desktop on GNOME without Xorg (after 24.04): its Remote Login is set up at first boot, by
   # the gnome-remote-login extra.
-  desktop_flag = "--desktop --extras=${var.desktop_extras}${tonumber(split(".", var.version)[0]) >= 26 ? ",gnome-remote-login" : ""}"
+  desktop_flag = "--desktop --extras=${var.desktop_extras}${contains(["20", "22", "24"], split(".", var.version)[0]) ? "" : ",gnome-remote-login"}"
   extras_flag  = var.zimbra ? "--extras=zimbra" : (var.desktop ? local.desktop_flag : (var.extras == "" ? "" : (var.extras == "none" ? "--no-extras" : "--extras=${var.extras}")))
   media        = trimsuffix(var.media_url, "/")
   # prepare.sh reads these from its environment (sudo would drop Packer's, hence env).
