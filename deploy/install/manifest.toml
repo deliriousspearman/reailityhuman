@@ -38,7 +38,7 @@ extras = true
 id = "ubuntu-24.04"
 catalogue = "ubuntu 24.04"
 build = "packer/build.sh ubuntu"
-vars = ["version=24.04", "iso=ubuntu-24.04.5-live-server-amd64.iso", "apt_mirror={mirror.ubuntu}", "media_url={media}", "zabbix_mirror={mirror.zabbix}"]
+vars = ["version=24.04", "iso=ubuntu-24.04.5-live-server-amd64.iso", "apt_mirror={mirror.ubuntu}", "media_url={media}", "zabbix_mirror={mirror.zabbix}", "php_mirror={mirror.php}"]
 isos = ["ubuntu-24.04"]
 mirrors = ["ubuntu:dists/noble/Release"]
 extras = true
@@ -47,7 +47,7 @@ extras = true
 id = "ubuntu-22.04"
 catalogue = "ubuntu 22.04"
 build = "packer/build.sh ubuntu"
-vars = ["version=22.04", "iso=ubuntu-22.04.5-live-server-amd64.iso", "apt_mirror={mirror.ubuntu}", "media_url={media}", "zabbix_mirror={mirror.zabbix}"]
+vars = ["version=22.04", "iso=ubuntu-22.04.5-live-server-amd64.iso", "apt_mirror={mirror.ubuntu}", "media_url={media}", "zabbix_mirror={mirror.zabbix}", "php_mirror={mirror.php}"]
 isos = ["ubuntu-22.04"]
 mirrors = ["ubuntu:dists/jammy/Release"]
 extras = true

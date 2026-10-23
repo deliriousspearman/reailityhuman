@@ -37,6 +37,7 @@ epel_archive = "http://mirror.lab.example/epel-archive"     # as archives.fedora
 proxmox = "http://mirror.lab.example/proxmox"               # as download.proxmox.com/debian
 zimbra = "http://mirror.lab.example/zimbra"                 # as repo.zimbra.com (apt/87 and apt/8815, focal)
 zabbix = "http://mirror.lab.example/zabbix"                 # as repo.zabbix.com (zabbix/7.0, and its key)
+php = "http://mirror.lab.example/php"                       # as ppa.launchpadcontent.net/ondrej/php (jammy, noble)
 # internet = false
 
 [templates]

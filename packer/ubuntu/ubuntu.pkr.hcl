@@ -91,6 +91,12 @@ variable "zabbix_mirror" {
   type    = string
   default = ""
 }
+# Offline: a mirror of https://ppa.launchpadcontent.net/ondrej/php, for the Apache extras' PHP
+# versions (22.04 and 24.04).
+variable "php_mirror" {
+  type    = string
+  default = ""
+}
 variable "media_url" {
   type    = string
   default = ""
@@ -131,6 +137,7 @@ locals {
     "ZIMBRA_URL=${local.media}/linux/zimbra",
   ])
   zabbix_env = var.zabbix_mirror == "" ? "" : "ZABBIX_MIRROR=${trimsuffix(var.zabbix_mirror, "/")}"
+  php_env    = var.php_mirror == "" ? "" : "PHP_MIRROR=${trimsuffix(var.php_mirror, "/")}"
   zimbra_env = var.zimbra_mirror == "" ? "" : "ZIMBRA_MIRROR=${trimsuffix(var.zimbra_mirror, "/")}"
 }
 
@@ -200,12 +207,12 @@ build {
   sources = ["source.vsphere-iso.ubuntu"]
 
   provisioner "file" {
-    sources     = ["${path.root}/../../scripts/template/prepare.sh", "${path.root}/../../scripts/template/build-minio.sh", "${path.root}/../../scripts/template/clean.sh", "${path.root}/../../scripts/template/zimbra"]
+    sources     = ["${path.root}/../../scripts/template/prepare.sh", "${path.root}/../../scripts/template/build-minio.sh", "${path.root}/../../scripts/template/clean.sh", "${path.root}/../../scripts/template/zimbra", "${path.root}/../../scripts/template/php"]
     destination = "/tmp/"
   }
 
   provisioner "shell" {
-    inline = ["sudo env ${local.media_env} ${local.zabbix_env} ${local.zimbra_env} bash /tmp/prepare.sh ${local.extras_flag}"]
+    inline = ["sudo env ${local.media_env} ${local.zabbix_env} ${local.php_env} ${local.zimbra_env} bash /tmp/prepare.sh ${local.extras_flag}"]
   }
 
   post-processor "manifest" {

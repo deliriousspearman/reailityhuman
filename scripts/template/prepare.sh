@@ -181,6 +181,65 @@ preseed_zabbix() {
 }
 preseed_zabbix_agent() { [[ $ID == kali || $ID == parrot ]] || preseed_zabbix; }
 
+# PHP versions for the Apache extras' PHP option, on the Ubuntu releases Ondřej Surý's PPA covers
+# (22.04, 24.04): each installed beside Ubuntu's own, its Apache module switched off; a machine has the
+# one chosen switched on at first boot (lab_php in extras.py). Ubuntu's own PHP stays Ubuntu's (pinned
+# above the PPA), so WordPress, Nextcloud and the webmail keep it; the PPA's newer shared libraries,
+# which its older versions need, come in. The PPA's keys are php/ondrej-php.asc,
+# beside this script. Offline: PHP_MIRROR=<URL> of a mirror of https://ppa.launchpadcontent.net/ondrej/php.
+PHP_MIRROR=${PHP_MIRROR:-https://ppa.launchpadcontent.net/ondrej/php}
+# Keep in step with the php option's choices in backend/extras.yaml (a test checks).
+PHP_VERSIONS="5.6 7.0 7.1 7.2 7.3 7.4 8.0 8.1 8.2 8.3 8.4 8.5"
+bake_php_versions() {
+	local own
+	case $ID-${VERSION_ID:-} in
+	ubuntu-22.04) own=8.1 ;;
+	ubuntu-24.04) own=8.3 ;;
+	*) return 0 ;;
+	esac
+	[[ -f /etc/apt/sources.list.d/lab-php.sources ]] && dpkg -s "libapache2-mod-php${PHP_VERSIONS##* }" >/dev/null 2>&1 && return 0
+	if [[ ! -f $HERE/php/ondrej-php.asc ]]; then
+		echo "PHP's versions need php/ondrej-php.asc beside prepare.sh." >&2
+		return 1
+	fi
+	if ! curl -fsS -m 20 -o /dev/null "$PHP_MIRROR/ubuntu/dists/$VERSION_CODENAME/Release"; then
+		echo "    PHP versions left out: no $PHP_MIRROR (offline, give PHP_MIRROR). Ubuntu's own PHP stays."
+		return 0
+	fi
+	install -m 644 "$HERE/php/ondrej-php.asc" /usr/share/keyrings/lab-php.asc
+	printf '%s\n' "# Written by the lab panel's prepare.sh: PHP versions for the Apache extras." "Types: deb" \
+		"URIs: $PHP_MIRROR/ubuntu" "Suites: $VERSION_CODENAME" "Components: main" "Signed-By: /usr/share/keyrings/lab-php.asc" \
+		>/etc/apt/sources.list.d/lab-php.sources
+	# Ubuntu's own PHP, and the packages that choose a version (php, php-mysql…), stay Ubuntu's.
+	printf '%s\n' "# Written by the lab panel's prepare.sh: Ubuntu's own PHP stays Ubuntu's." \
+		"Package: php libapache2-mod-php php-cli php-mysql php-gd php-curl php-xml php-mbstring php-zip php-intl php-gmp php-bcmath php-pgsql php-sqlite3 php-apcu php-imagick php-redis php$own php$own-* libapache2-mod-php$own" \
+		"Pin: release o=Ubuntu" "Pin-Priority: 990" >/etc/apt/preferences.d/lab-php
+	apt-get update -q
+	local v pkgs=()
+	for v in $PHP_VERSIONS; do
+		pkgs+=("php$v-cli" "libapache2-mod-php$v")
+		for m in mysql curl gd mbstring xml zip intl sqlite3; do pkgs+=("php$v-$m"); done
+		[[ $v == [57].* ]] && pkgs+=("php$v-json")
+	done
+	printf '#!/bin/sh\nexit 101\n' >/usr/sbin/policy-rc.d
+	chmod 755 /usr/sbin/policy-rc.d
+	apt-get install -yq --no-install-recommends "${pkgs[@]}"
+	rm -f /usr/sbin/policy-rc.d
+	# Their Apache modules off (each one's package turned its own on), then Ubuntu's own on again if
+	# it's there, as the web apps (WordPress, Nextcloud, the mail extra's webmail) expect; and the php
+	# command back to Ubuntu's, which the newest version took. The Apache extras turn on the one chosen.
+	for v in $PHP_VERSIONS; do a2dismod -q -f "php$v" >/dev/null 2>&1 || true; done
+	dpkg -s "libapache2-mod-php$own" >/dev/null 2>&1 || own=
+	if [[ -n $own ]]; then
+		a2dismod -q mpm_event >/dev/null 2>&1 || true
+		a2enmod -q mpm_prefork "php$own" >/dev/null
+		update-alternatives --set php "/usr/bin/php$own" >/dev/null
+	fi
+	echo "    PHP: $PHP_VERSIONS (Ubuntu's own: ${own:-none})"
+}
+bake_apache() { bake_php_versions; }
+bake_apache_https() { bake_php_versions; }
+
 # fetch <url> <file> <checksum url> <sha1|sha256|sha512>: downloads a file and checks it. The
 # checksum file is a bare hash, or "<hash>  <name>" lines, of which the one for this file counts.
 fetch() {

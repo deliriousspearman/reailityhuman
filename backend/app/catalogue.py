@@ -5,7 +5,7 @@ The frontend has the full catalogue (descriptions, categories, flags) in src/lib
 the versions listed here can be deployed, and the rest show as "coming soon".
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import lru_cache
 
 import yaml
@@ -46,6 +46,9 @@ class LiveTemplate:
     # Extras every machine from it gets, not chosen (e.g. Ubuntu Desktop 26.04's Remote Login): hidden
     # ones, in extras.yaml.
     always: tuple[str, ...] = ()
+    # More choices for per-template options (extras.yaml perTemplate), by option id, e.g. the PHP
+    # versions this template has: {"php": ("7.4", "8.1")}.
+    choices: dict[str, tuple[str, ...]] = field(default_factory=dict)
 
 
 ACCESS = ("ssh", "rdp", "web", "console")
@@ -79,6 +82,7 @@ def _load() -> list[LiveTemplate]:
             planned_extras=tuple(e.get("plannedExtras", [])),
             fixed_password=str(e.get("password", "")),
             always=tuple(e.get("always", [])),
+            choices={k: tuple(str(v) for v in vs) for k, vs in (e.get("choices") or {}).items()},
         )
         if (family == "image") != bool(t.fixed_password):
             raise ValueError(f"templates.yaml: {t.template} {t.version}: give a password for family image (its own sign-in), and only then")
@@ -90,8 +94,15 @@ def _load() -> list[LiveTemplate]:
             x = extras.find(extra_id)
             if x is None or family not in x.families:
                 raise ValueError(f"templates.yaml: {t.template} {t.version} lists extra '{extra_id}', which extras.yaml has no {family} steps for")
+            for o in x.options:
+                if o.id in t.choices and o.per_template:
+                    if unknown := set(t.choices[o.id]) - {v for v, _ in o.choices}:
+                        raise ValueError(f"templates.yaml: {t.template} {t.version}: {o.id} has no choice {', '.join(sorted(unknown))}")
             if x.hidden != (extra_id in t.always):
                 raise ValueError(f"templates.yaml: {t.template} {t.version}: '{extra_id}' goes under always if and only if it's hidden")
+        per_template = {o.id for i in t.extras + t.always if (x := extras.find(i)) for o in x.options if o.per_template}
+        if unknown := set(t.choices) - per_template:
+            raise ValueError(f"templates.yaml: {t.template} {t.version}: choices for {', '.join(sorted(unknown))}, which none of its extras has as a perTemplate option")
         out.append(t)
     return out
 

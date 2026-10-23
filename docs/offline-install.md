@@ -212,6 +212,7 @@ What each mirror must hold, by template. The install checks each one for the fil
 | `epel_archive` | archives.fedoraproject.org/pub/archive/epel | CentOS 6 | `6/x86_64/repodata/repomd.xml` |
 | `proxmox` | download.proxmox.com/debian | Proxmox VE 7–9 | `pve/dists/<codename>/Release` |
 | `zabbix` | repo.zabbix.com (`zabbix/7.0`, and its key `zabbix-official-repo-apr2024.gpg`) | Ubuntu, Debian, Kali, Parrot (the Zabbix extras; optional: without it, they're left out) | — |
+| `php` | ppa.launchpadcontent.net/ondrej/php (`ubuntu/dists/jammy`, `noble`) | Ubuntu 22.04, 24.04 (the Apache extras' PHP versions; optional: without it, only Ubuntu's own PHP) | — |
 | `zimbra` | repo.zimbra.com (`apt/87` and `apt/8815`, focal) | Zimbra 8.8.15 | `apt/8815/dists/focal/Release` |
 
 These need no mirror:

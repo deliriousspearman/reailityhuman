@@ -116,7 +116,10 @@ def queue(db: Session, m: Machine, action: str, by: str) -> None:
 # Config and status ------------------------------------------------------------------------------------
 
 
-def extra_out(x: extras.Extra) -> dict:
+def extra_out(x: extras.Extra, choices: dict[str, tuple[str, ...]] | None = None) -> dict:
+    """`choices`: the template's, for per-template options (extras.allowed_choices). A per-template
+    option left with only its default isn't listed: there's nothing to choose."""
+    options = [o for o in x.options if not (o.per_template and len(extras.allowed_choices(o, choices)) < 2)]
     return {
         "id": x.id,
         "name": x.name,
@@ -136,12 +139,12 @@ def extra_out(x: extras.Extra) -> dict:
                 "required": o.required,
                 "default": o.default,
                 **({"pattern": o.pattern} if o.pattern else {}),
-                **({"choices": [{"value": v, "label": label} for v, label in o.choices]} if o.choices else {}),
+                **({"choices": [{"value": v, "label": label} for v, label in extras.allowed_choices(o, choices)]} if o.choices else {}),
                 **({"when": {k: list(vs) for k, vs in o.when.items()}} if o.when else {}),
                 # For a machine option: the extra the machine must have.
                 **({"extra": o.extra} if o.extra else {}),
             }
-            for o in x.options
+            for o in options
         ],
     }
 
@@ -157,7 +160,7 @@ def config() -> dict:
                 "resources": {"cpu": t.cpu, "memoryGB": t.memory_gb, "diskGB": t.disk_gb},
                 "username": t.username,
                 "family": t.family,
-                "extras": [extra_out(extras.find(i)) for i in t.extras],
+                "extras": [extra_out(extras.find(i), t.choices) for i in t.extras],
                 **({"access": list(t.access)} if t.access else {}),
                 **({"webUrl": t.web_url} if t.web_url else {}),
                 # A complete image's own sign-in, the same on every machine (family "image").
@@ -307,10 +310,10 @@ def deploy_machine(req: DeployRequest, db: Db) -> dict:
     # A complete image's own password, whatever its length: the rules are for passwords people choose.
     password = tpl.fixed_password or password
     try:
-        chosen = extras.resolve(tpl.extras, [c.model_dump() for c in req.extras], req.name)
+        chosen = extras.resolve(tpl.extras, [c.model_dump() for c in req.extras], req.name, tpl.choices)
         if tpl.always:
             # What the template sets up on every machine, first; checked against the rest for clashes.
-            chosen = extras.resolve(tpl.extras + tpl.always, [{"id": i, "options": {}} for i in tpl.always] + chosen, req.name)
+            chosen = extras.resolve(tpl.extras + tpl.always, [{"id": i, "options": {}} for i in tpl.always] + chosen, req.name, tpl.choices)
         for x, o, other_id in extras.machine_options(chosen):
             extras.check_machine(x, o, db.get(Machine, other_id))
     except extras.ExtraError as e:
@@ -364,7 +367,9 @@ def deploy_machine(req: DeployRequest, db: Db) -> dict:
             value = c["options"][o.id]
             return (other.name if (other := db.get(Machine, value)) else value) if o.type == "machine" else value
 
-        details = ", ".join(f"{o.label.lower()} {shown(o)}" for o in x.options if c["options"].get(o.id))
+        details = ", ".join(
+            f"{o.label.lower()} {shown(o)}" for o in x.options if c["options"].get(o.id) and not (o.per_template and c["options"][o.id] == o.default)
+        )
         add_log(db, m, f"With {x.name}{f' ({details})' if details else ''}", "muted")
     queue(db, m, "deploy", owner)
     db.refresh(m)

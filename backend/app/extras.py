@@ -91,6 +91,27 @@ lab_cert() {
 	chmod 600 "$LAB_KEY"
 }
 
+# lab_php <version|none>: Apache runs that PHP version (its module on, every other PHP module off),
+# and so does the php command, with a phpinfo() page at /info.php. Debian family, from the versions
+# prepare.sh baked in. "none": nothing changes.
+lab_php() {
+	local v=$1 m
+	[ "$v" = none ] && return 0
+	if [ ! -e "/usr/lib/apache2/modules/libphp$v.so" ]; then
+		echo "PHP $v isn't in this template." >&2
+		return 1
+	fi
+	for m in /etc/apache2/mods-enabled/php*.load; do
+		[ -e "$m" ] || continue
+		m=${m##*/}
+		a2dismod -q -f "${m%.load}" >/dev/null
+	done
+	a2dismod -q mpm_event mpm_worker >/dev/null 2>&1 || true
+	a2enmod -q mpm_prefork "php$v" >/dev/null
+	update-alternatives --set php "/usr/bin/php$v" >/dev/null
+	echo '<?php phpinfo();' >/var/www/html/info.php
+}
+
 # lab_apache: Apache turned on and (re)started, with whatever configuration it has now.
 lab_apache() {
 	# By the service that exists: some Debian-family systems (Parrot) have an /etc/httpd folder from
@@ -195,6 +216,9 @@ class Option:
     # script gets that machine's details as <id>_ip, <id>_name, <id>_username, <id>_password and
     # <id>_<option> for each of that extra's options (expand()).
     extra: str = ""
+    # For type "choice": only the default unless a template lists more for it (templates.yaml
+    # `choices`), e.g. PHP versions, which only some templates have.
+    per_template: bool = False
 
 
 @dataclass(frozen=True)
@@ -253,6 +277,7 @@ def extras() -> dict[str, Extra]:
                 choices=tuple((str(c["value"]), c["label"]) for c in o.get("choices", [])),
                 when={k: tuple(str(v) for v in vs) for k, vs in o.get("when", {}).items()},
                 extra=o.get("extra", ""),
+                per_template=bool(o.get("perTemplate", False)),
             )
             for o in e.get("options", [])
         )
@@ -318,7 +343,16 @@ def fill_default(template: str, hostname: str) -> str:
     return template.replace("{fqdn}", fqdn).replace("{hostname}", hostname)
 
 
-def _check_value(x: Extra, o: Option, value: str) -> str:
+def allowed_choices(o: Option, template_choices: dict[str, tuple[str, ...]] | None = None) -> list[tuple[str, str]]:
+    """A choice option's (value, label) pairs on a template: all of them, or for a per-template
+    option its default and those the template lists."""
+    if not o.per_template:
+        return list(o.choices)
+    allowed = {o.default, *(template_choices or {}).get(o.id, ())}
+    return [(v, label) for v, label in o.choices if v in allowed]
+
+
+def _check_value(x: Extra, o: Option, value: str, template_choices: dict[str, tuple[str, ...]] | None = None) -> str:
     if o.type == "hostname":
         value = value.lower().rstrip(".")
         if len(value) > 253 or not HOSTNAME_RULE.match(value):
@@ -327,8 +361,8 @@ def _check_value(x: Extra, o: Option, value: str) -> str:
         if len(value) > 200 or (o.pattern and not re.fullmatch(o.pattern, value)):
             raise ExtraError(f"{x.name}: '{value}' isn't a valid {o.label.lower()}.")
     elif o.type == "choice":
-        if value not in {v for v, _ in o.choices}:
-            raise ExtraError(f"{x.name}: '{value}' isn't one of the choices for {o.label.lower()}.")
+        if value not in {v for v, _ in allowed_choices(o, template_choices)}:
+            raise ExtraError(f"{x.name}: '{value}' isn't one of the choices for {o.label.lower()} on this template.")
     elif o.type == "machine":
         if not MACHINE_ID_RULE.match(value):
             raise ExtraError(f"{x.name}: choose a machine for {o.label.lower()}.")
@@ -355,7 +389,9 @@ def disk_gb(chosen: list[dict]) -> int:
     return settings().clone_disk_gb + sum(x.disk_gb for c in chosen if (x := find(c["id"])))
 
 
-def resolve(offered: tuple[str, ...], chosen: list[dict], hostname: str) -> list[dict]:
+def resolve(
+    offered: tuple[str, ...], chosen: list[dict], hostname: str, template_choices: dict[str, tuple[str, ...]] | None = None
+) -> list[dict]:
     """Checks what was chosen against what this template offers, and fills in each option's default.
 
     `chosen` is [{"id": ..., "options": {...}}]. Returns the same shape with every option set, which
@@ -390,7 +426,7 @@ def resolve(offered: tuple[str, ...], chosen: list[dict], hostname: str) -> list
                 if o.required:
                     raise ExtraError(f"{x.name}: fill in {o.label.lower()}.")
                 value = fill_default(o.default, hostname) if o.type in ("hostname", "text") else o.default or "no"
-            values[o.id] = _check_value(x, o, value) if value else ""
+            values[o.id] = _check_value(x, o, value, template_choices) if value else ""
         out.append({"id": x.id, "options": values})
     return out
 

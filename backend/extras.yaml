@@ -67,14 +67,36 @@
 - id: apache
   name: Apache
   category: Web servers
-  description: Apache web server on port 80, with a page showing the machine's name.
+  description: Apache web server on port 80, with a page showing the machine's name; optionally with a PHP version of your choice.
   ports: [80]
-  links: ["http://{ip}/"]
+  links: ["http://{ip}/", {text: "http://{ip}/info.php", when: {php: ["5.6", "7.0", "7.1", "7.2", "7.3", "7.4", "8.0", "8.1", "8.2", "8.3", "8.4", "8.5"]}}]
+  options:
+    - id: php
+      label: PHP
+      type: choice
+      default: none
+      perTemplate: true
+      help: Runs this PHP version in Apache (mod_php), with a phpinfo() page at /info.php. Versions before 8.2 no longer get security fixes, so they suit testing old applications and their weaknesses.
+      choices:
+        - {value: none, label: No PHP}
+        - {value: "5.6", label: PHP 5.6 (unsupported since 2018)}
+        - {value: "7.0", label: PHP 7.0 (unsupported since 2019)}
+        - {value: "7.1", label: PHP 7.1 (unsupported since 2019)}
+        - {value: "7.2", label: PHP 7.2 (unsupported since 2020)}
+        - {value: "7.3", label: PHP 7.3 (unsupported since 2021)}
+        - {value: "7.4", label: PHP 7.4 (unsupported since 2022)}
+        - {value: "8.0", label: PHP 8.0 (unsupported since 2023)}
+        - {value: "8.1", label: PHP 8.1 (unsupported since 2025)}
+        - {value: "8.2", label: PHP 8.2}
+        - {value: "8.3", label: PHP 8.3}
+        - {value: "8.4", label: PHP 8.4}
+        - {value: "8.5", label: PHP 8.5}
   debian:
     packages: [apache2]
     script: |
       echo "<h1>$hostname</h1><p>Apache, deployed by the lab panel.</p>" >/var/www/html/index.html
-      systemctl enable --now apache2
+      lab_php "$php"
+      lab_apache
   rhel:
     packages: [httpd]
     script: |
@@ -85,15 +107,35 @@
 - id: apache-https
   name: Apache + HTTPS
   category: Web servers
-  description: Apache on ports 80 and 443, with a self-signed certificate made for this machine.
+  description: Apache on ports 80 and 443, with a self-signed certificate made for this machine; optionally with a PHP version of your choice.
   ports: [80, 443]
-  links: ["http://{ip}/", "https://{ip}/"]
+  links: ["http://{ip}/", "https://{ip}/", {text: "https://{ip}/info.php", when: {php: ["5.6", "7.0", "7.1", "7.2", "7.3", "7.4", "8.0", "8.1", "8.2", "8.3", "8.4", "8.5"]}}]
   options:
     - id: domain
       label: Domain name
       help: The name the certificate is for, e.g. intranet.lab.example. The machine's name and address are always on it too.
       type: hostname
       default: "{fqdn}"
+    - id: php
+      label: PHP
+      type: choice
+      default: none
+      perTemplate: true
+      help: Runs this PHP version in Apache (mod_php), with a phpinfo() page at /info.php. Versions before 8.2 no longer get security fixes, so they suit testing old applications and their weaknesses.
+      choices:
+        - {value: none, label: No PHP}
+        - {value: "5.6", label: PHP 5.6 (unsupported since 2018)}
+        - {value: "7.0", label: PHP 7.0 (unsupported since 2019)}
+        - {value: "7.1", label: PHP 7.1 (unsupported since 2019)}
+        - {value: "7.2", label: PHP 7.2 (unsupported since 2020)}
+        - {value: "7.3", label: PHP 7.3 (unsupported since 2021)}
+        - {value: "7.4", label: PHP 7.4 (unsupported since 2022)}
+        - {value: "8.0", label: PHP 8.0 (unsupported since 2023)}
+        - {value: "8.1", label: PHP 8.1 (unsupported since 2025)}
+        - {value: "8.2", label: PHP 8.2}
+        - {value: "8.3", label: PHP 8.3}
+        - {value: "8.4", label: PHP 8.4}
+        - {value: "8.5", label: PHP 8.5}
   debian:
     packages: [apache2, openssl]
     script: |
@@ -104,6 +146,7 @@
       echo "<h1>$domain</h1><p>Apache over HTTPS, deployed by the lab panel.</p>" >/var/www/html/index.html
       a2enmod -q ssl
       a2ensite -q default-ssl
+      lab_php "$php"
       lab_apache
   rhel:
     packages: [httpd, mod_ssl, openssl]

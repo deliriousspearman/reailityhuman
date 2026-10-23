@@ -21,6 +21,9 @@
 #               else https://{ip}/
 #   planned     optional: true while its template isn't built yet. It can't be deployed, but shows
 #               under each service it will offer ("Soon"). Once built, take this out.
+#   choices     optional: more choices for extras' perTemplate options, by option id, e.g. the PHP
+#               versions the template has: {php: ["7.4", "8.3"]}. Without, such an option has only its
+#               default (and isn't shown)
 #   always      optional: hidden extras (extras.yaml) every machine of it gets, not chosen; e.g.
 #               Ubuntu Desktop 26.04's Remote Login
 #   plannedExtras  optional: extras prepped in prepare.sh but not in this template yet, as it was built
@@ -40,6 +43,8 @@
   username: ubuntu
   family: debian
   extras: [nginx, apache, apache-https, wordpress, nextcloud, nextcloud-snap, postgresql, mariadb, mysql, sqlite, mail, ftp, desktop, docker, juice-shop, dvwa, uptime-kuma, grafana, vaultwarden, gitea, iredmail, minio, python, wazuh-agent, zabbix, zabbix-agent]
+  # PHP versions for the Apache extras: Ubuntu's own, which the template has with the web apps.
+  choices: {php: ["8.5"]}
 
 - template: ubuntu
   version: "24.04"
@@ -52,6 +57,8 @@
   username: ubuntu
   family: debian
   extras: [nginx, apache, apache-https, wordpress, nextcloud, nextcloud-snap, postgresql, mariadb, mysql, sqlite, mail, ftp, desktop, docker, juice-shop, dvwa, uptime-kuma, grafana, vaultwarden, gitea, iredmail, minio, python, wazuh, wazuh-agent, zabbix, zabbix-agent]
+  # PHP versions for the Apache extras: Ubuntu's own, which the template has with the web apps.
+  choices: {php: ["8.3"]}
 - template: ubuntu
   version: "22.04"
   # Built by Packer (packer/build.sh ubuntu -var version=22.04 -var iso=ubuntu-22.04.5-live-server-amd64.iso) on 2026-10-23, with every
@@ -64,6 +71,8 @@
   family: debian
   # Not Nextcloud: it needs PHP 8.3, and 22.04 has 8.1 (the snap brings its own).
   extras: [nginx, apache, apache-https, wordpress, nextcloud-snap, postgresql, mariadb, mysql, sqlite, mail, ftp, desktop, docker, juice-shop, dvwa, uptime-kuma, grafana, vaultwarden, gitea, minio, python, wazuh, wazuh-agent, zabbix, zabbix-agent]
+  # PHP versions for the Apache extras: Ubuntu's own, which the template has with the web apps.
+  choices: {php: ["8.1"]}
 
 # Debian (packer/debian, from the netinst ISO): a plain server with every extra baked in, except MySQL
 # (Debian has no mysql-server package).

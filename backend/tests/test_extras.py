@@ -221,7 +221,7 @@ def test_extras_run_in_catalogue_order(monkeypatch):
 
 def test_defaults_follow_the_name_and_machine_domain(monkeypatch):
     [c] = extras.resolve(ALL, [{"id": "apache-https", "options": {}}], "web01")
-    assert c == {"id": "apache-https", "options": {"domain": "web01"}}
+    assert c == {"id": "apache-https", "options": {"domain": "web01", "php": "none"}}
     monkeypatch.setattr(settings(), "machine_domain", "lab.example")
     [c] = extras.resolve(ALL, [{"id": "apache-https", "options": {"domain": "  "}}], "web01")
     assert c["options"]["domain"] == "web01.lab.example"
@@ -360,7 +360,7 @@ def test_deploy_waits_for_extras(queued, offered, guest):
     r = deploy(chosen=[{"id": "apache-https", "options": {"domain": "intranet.lab.example"}}])
     assert r.status_code == 201, r.text
     assert r.json()["extras"] == [
-        {"id": "apache-https", "name": "Apache + HTTPS", "options": {"domain": "intranet.lab.example"}, "links": [], "notes": []}
+        {"id": "apache-https", "name": "Apache + HTTPS", "options": {"domain": "intranet.lab.example", "php": "none"}, "links": [], "notes": []}
     ]  # links once it has an address
     run_queued(queued)
     m = client.get(f"/api/machines/{r.json()['id']}").json()
@@ -557,3 +557,43 @@ def test_machines_show_the_memory_their_extras_gave_them():
     m.extras = []
     assert machine_out(m, log=False)["memoryGB"] == 2
     assert machine_out(m, log=False)["cpu"] == 2
+
+
+# PHP versions (a per-template choice) -----------------------------------------------------------------
+
+
+def test_php_versions_are_those_prepare_sh_bakes():
+    versions = re.search(r'^PHP_VERSIONS="([^"]*)"', _prepare_sh().read_text(), re.M).group(1).split()
+    php = next(o for o in extras.find("apache").options if o.id == "php")
+    assert php.per_template and php.default == "none"
+    assert [v for v, _ in php.choices if v != "none"] == versions
+    assert php.choices == next(o for o in extras.find("apache-https").options if o.id == "php").choices
+
+
+def test_a_template_offers_only_its_own_php_versions(queued, monkeypatch):
+    """The PHP option shows the versions the template lists (its choices), refuses others, and isn't
+    shown at all where a template lists none."""
+    key = ("ubuntu", "26.04")
+    monkeypatch.setitem(catalogue.catalogue(), key, replace(catalogue.catalogue()[key], choices={"php": ("7.4", "8.5")}))
+    t = next(t for t in client.get("/api/config").json()["templates"] if (t["template"], t["version"]) == key)
+    php = next(o for o in next(x for x in t["extras"] if x["id"] == "apache")["options"] if o["id"] == "php")
+    assert [c["value"] for c in php["choices"]] == ["none", "7.4", "8.5"]
+
+    r = deploy("php01", [{"id": "apache", "options": {"php": "5.6"}}])
+    assert r.status_code == 422 and "isn't one of the choices for php on this template" in r.json()["detail"]
+    r = deploy("php02", [{"id": "apache", "options": {"php": "7.4"}}])
+    assert r.status_code == 201, r.text
+    assert next(x for x in r.json()["extras"] if x["id"] == "apache")["options"]["php"] == "7.4"
+    queued.clear()
+
+    monkeypatch.setitem(catalogue.catalogue(), key, replace(catalogue.catalogue()[key], choices={}))
+    t = next(t for t in client.get("/api/config").json()["templates"] if (t["template"], t["version"]) == key)
+    assert "php" not in {o["id"] for o in next(x for x in t["extras"] if x["id"] == "apache")["options"]}
+
+
+def test_apache_switches_on_the_php_chosen():
+    config = extras.cloud_config(extras.resolve(("apache",), [{"id": "apache", "options": {"php": "8.5"}}], "web01", {"php": ("8.5",)}), "debian", "web01")
+    script = next(f["content"] for f in config["write_files"] if f["path"].endswith("/apache.sh"))
+    assert "php=8.5" in script.replace("'", "") and 'lab_php "$php"' in script
+    lib = next(f["content"] for f in config["write_files"] if f["path"].endswith("/lib.sh"))
+    assert "lab_php()" in lib and "a2enmod -q mpm_prefork" in lib

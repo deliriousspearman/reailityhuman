@@ -165,6 +165,13 @@ and Parrot: they have no Zabbix server (Zabbix's Debian packages don't fit their
 their agent is their own `zabbix-agent2`. Each agent
 extra picks its server's machine; Zabbix's server adds agents itself (an auto-registration action).
 
+**PHP versions** (the Apache extras' PHP option): on Ubuntu 22.04 and 24.04, PHP 5.6 to 8.5 from Ondřej
+Surý's PPA, each with its Apache module and the usual extensions (its keys are
+`scripts/template/php/ondrej-php.asc`; offline, `-var php_mirror=`, else they're left out). Ubuntu's own
+PHP stays the default (pinned above the PPA), so WordPress and Nextcloud keep it. A machine runs the
+version chosen, with a `phpinfo()` page at `/info.php`. Other templates offer their own PHP only; list a
+template's versions under `choices: {php: [...]}` in `templates.yaml`.
+
 **VyOS** builds from our own ISO (part 2), whose cloud-init takes the panel's settings from vCenter
 (the `vyos` family): the user through cloud-config `users` (with none there, VyOS adds `vyos` /
 `vyos`), the rest as configuration commands. The template uses BIOS, not EFI: on EFI the installed
