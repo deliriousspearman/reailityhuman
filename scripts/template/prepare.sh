@@ -151,15 +151,15 @@ preseed_mail() {
 	EOF
 }
 
-# Zabbix 7.0's apt repository, for the zabbix and zabbix-agent extras: Ubuntu's, or Debian 13's for Kali
-# and Parrot (built on it). Offline: ZABBIX_MIRROR=<URL> of a mirror of https://repo.zabbix.com. Its key
-# is checked against the fingerprint Zabbix publishes (Zabbix LLC, Apr 2024).
+# Zabbix 7.0's apt repository, for the zabbix and zabbix-agent extras on Ubuntu and Debian. (Kali and
+# Parrot take their own zabbix-agent2, and have no server: Zabbix's Debian packages don't fit their newer
+# libraries.) Offline: ZABBIX_MIRROR=<URL> of a mirror of https://repo.zabbix.com. Its key is checked
+# against the fingerprint Zabbix publishes (Zabbix LLC, Apr 2024).
 ZABBIX_MIRROR=${ZABBIX_MIRROR:-https://repo.zabbix.com}
 ZABBIX_KEY_FPR=4C3D6F2CC75F5146754FC374D913219AB5333005
 preseed_zabbix() {
 	[[ -f /etc/apt/sources.list.d/zabbix.sources ]] && return 0
 	local key=/usr/share/keyrings/zabbix.gpg distro=$ID suite=${VERSION_CODENAME:-}
-	case $ID in kali | parrot) distro=debian suite=trixie ;; esac
 	command -v gpg >/dev/null || apt-get install -yq gnupg >/dev/null
 	curl -fsSL -o "$key.new" "$ZABBIX_MIRROR/zabbix-official-repo-apr2024.gpg"
 	if ! gpg --show-keys --with-colons "$key.new" 2>/dev/null | grep -q "^fpr:::::::::$ZABBIX_KEY_FPR:"; then
@@ -173,7 +173,7 @@ preseed_zabbix() {
 		>/etc/apt/sources.list.d/zabbix.sources
 	apt-get update -q
 }
-preseed_zabbix_agent() { preseed_zabbix; }
+preseed_zabbix_agent() { [[ $ID == kali || $ID == parrot ]] || preseed_zabbix; }
 
 # fetch <url> <file> <checksum url> <sha1|sha256|sha512>: downloads a file and checks it. The
 # checksum file is a bare hash, or "<hash>  <name>" lines, of which the one for this file counts.
@@ -497,6 +497,8 @@ if [[ $WANT_EXTRAS == all ]]; then
 	if ! ((IREDMAIL_HERE)); then mapfile -t CHOSEN < <(printf '%s\n' "${CHOSEN[@]}" | grep -vx iredmail); fi
 	mapfile -t CHOSEN < <(printf '%s\n' "${CHOSEN[@]}" | grep -vx zimbra)
 	if ! ((WAZUH_HERE)); then mapfile -t CHOSEN < <(printf '%s\n' "${CHOSEN[@]}" | grep -vx wazuh); fi
+	# Zabbix's server: not on Kali or Parrot (see preseed_zabbix).
+	if [[ $ID == kali || $ID == parrot ]]; then mapfile -t CHOSEN < <(printf '%s\n' "${CHOSEN[@]}" | grep -vx zabbix); fi
 else
 	IFS=, read -ra CHOSEN <<<"$WANT_EXTRAS"
 fi

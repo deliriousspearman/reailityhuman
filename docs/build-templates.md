@@ -157,7 +157,9 @@ it installs in the template, and installs at first boot from those alone.
 **Wazuh** (server and agent extras) and **Zabbix** (the same): Wazuh 4.14's server bundle (its installer's
 `--download-wazuh`, about 1 GB) goes only into Ubuntu 22.04 and 24.04 and Debian 12, which Wazuh supports;
 the server installs from it at first boot (about 15 minutes, 4 GB at least). Zabbix 7.0 LTS's packages come
-from Zabbix's repository (its key checked by fingerprint; offline, `-var zabbix_mirror=`). Each agent
+from Zabbix's repository (its key checked by fingerprint; offline, `-var zabbix_mirror=`), except on Kali
+and Parrot: they have no Zabbix server (Zabbix's Debian packages don't fit their newer libraries), and
+their agent is their own `zabbix-agent2`. Each agent
 extra picks its server's machine; Zabbix's server adds agents itself (an auto-registration action).
 
 **VyOS** builds from our own ISO (part 2), whose cloud-init takes the panel's settings from vCenter
