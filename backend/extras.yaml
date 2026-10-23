@@ -1035,6 +1035,10 @@
       mkdir -p /root/wazuh
       cp "$src/wazuh-install.sh" /root/wazuh/
       cd /root/wazuh
+      # It gives its dashboard 5 minutes to start, then removes everything: on a busy lab host that's too
+      # little. Twenty.
+      sed -i 's/^\(\s*max_dashboard_initialize_retries=\)20$/\180/' wazuh-install.sh
+      grep -q 'max_dashboard_initialize_retries=80' wazuh-install.sh || { echo "Wazuh's installer has changed: its dashboard wait isn't where it was."; exit 1; }
       # Its bundle, unpacked where its installer looks, and this machine's copy of it removed: there's no
       # room for it twice over (1.6 GB) and Wazuh. The installer wants the archive there too, but doesn't
       # unpack it when the folder is: an empty one stands in.
@@ -1133,6 +1137,8 @@
     packages: [zabbix-server-pgsql, zabbix-frontend-php, zabbix-apache-conf, zabbix-sql-scripts, zabbix-agent2, php-pgsql, postgresql, apache2, libapache2-mod-php]
     script: |
       systemctl enable -q --now postgresql
+      # Started in the background (postgresql.service only starts its clusters'): ready once it answers.
+      for _ in $(seq 60); do pg_isready -q && break; sleep 2; done
       db_pass=$(openssl rand -hex 16)
       if ! sudo -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname = 'zabbix'" | grep -q 1; then
         sudo -u postgres psql -qc "CREATE USER zabbix PASSWORD '$db_pass'"
@@ -1176,6 +1182,14 @@
       sudo -u postgres psql -q zabbix -v u="$username" -v h="$hash" <<'SQL'
       UPDATE users SET username = :'u', passwd = :'h' WHERE username = 'Admin' OR username = :'u';
       SQL
+      # Newer releases' packages (Ubuntu 26.04's) hand PHP to PHP-FPM, through Apache's proxy, not mod_php.
+      if grep -q 'proxy:unix' /etc/apache2/conf-enabled/zabbix.conf 2>/dev/null; then
+        a2enmod -q proxy proxy_fcgi
+        for unit in $(systemctl list-unit-files --no-legend 'php*-fpm.service' | awk '{print $1}'); do
+          systemctl enable -q "$unit"
+          systemctl restart "$unit"
+        done
+      fi
       systemctl enable -q zabbix-server zabbix-agent2 apache2
       systemctl restart zabbix-server zabbix-agent2 apache2
       lab_wait_http http://127.0.0.1/zabbix/
