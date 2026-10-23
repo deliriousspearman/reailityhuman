@@ -776,8 +776,10 @@ Before=xrdp.service
 
 [Service]
 Type=oneshot
-ExecStart=/bin/sh -c '[ -e /etc/ssl/private/ssl-cert-snakeoil.key ] || make-ssl-cert generate-default-snakeoil --force-overwrite'
+# xrdp's keys first; then the certificate with openssl itself, not make-ssl-cert, which needs
+# debconf's lock and fails when something else holds it at first boot (Ubuntu Desktop's did).
 ExecStart=/bin/sh -c '[ -e /etc/xrdp/rsakeys.ini ] || xrdp-keygen xrdp auto'
+ExecStart=/bin/sh -c 'k=/etc/ssl/private/ssl-cert-snakeoil.key c=/etc/ssl/certs/ssl-cert-snakeoil.pem; [ -s $$k ] && [ -s $$c ] && exit 0; openssl req -x509 -newkey rsa:2048 -nodes -days 3650 -subj "/CN=$$(hostname -f)" -keyout $$k -out $$c 2>/dev/null && chgrp ssl-cert $$k && chmod 640 $$k'
 
 [Install]
 WantedBy=multi-user.target
