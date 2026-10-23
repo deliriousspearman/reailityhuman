@@ -425,7 +425,7 @@
 - template: ubuntu-desktop
   version: "26.04"
   # Built by Packer (packer/build.sh ubuntu -var desktop=true) on 2026-10-23.
-  vsphere: Labs/Templates/tpl-ubuntu-desktop-26.04-20261023
+  vsphere: Labs/Templates/tpl-ubuntu-desktop-26.04-20261023b
   cpu: 2
   memoryGB: 4
   diskGB: 40
@@ -437,7 +437,7 @@
 - template: ubuntu-desktop
   version: "24.04"
   # Built by Packer (packer/build.sh ubuntu -var desktop=true -var version=24.04 -var iso=ubuntu-24.04.5-live-server-amd64.iso) on 2026-10-23.
-  vsphere: Labs/Templates/tpl-ubuntu-desktop-24.04-20261023
+  vsphere: Labs/Templates/tpl-ubuntu-desktop-24.04-20261023b
   cpu: 2
   memoryGB: 4
   diskGB: 40
@@ -448,7 +448,7 @@
 - template: ubuntu-desktop
   version: "22.04"
   # Built by Packer (packer/build.sh ubuntu -var desktop=true -var version=22.04 -var iso=ubuntu-22.04.5-live-server-amd64.iso) on 2026-10-23.
-  vsphere: Labs/Templates/tpl-ubuntu-desktop-22.04-20261023
+  vsphere: Labs/Templates/tpl-ubuntu-desktop-22.04-20261023b
   cpu: 2
   memoryGB: 4
   diskGB: 40
