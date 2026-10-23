@@ -410,16 +410,15 @@
   extras: [nginx, apache, apache-https, wordpress, nextcloud, nextcloud-snap, postgresql, mariadb, sqlite, mail, ftp, docker, juice-shop, dvwa, uptime-kuma, grafana, vaultwarden, gitea, minio, python, wazuh-agent, zabbix-agent]
 - template: parrot
   version: "7"
-  # Built by Packer (packer/parrot) on 2026-10-17, from Parrot Security 7.4's own image.
-  vsphere: Labs/Templates/tpl-parrot-7.4-20261017
+  # Built by Packer (packer/parrot) on 2026-10-23, from Parrot Security 7.4's own image.
+  vsphere: Labs/Templates/tpl-parrot-7.4-20261023
   cpu: 2
   memoryGB: 4
   diskGB: 64
   username: labuser
   family: debian
   access: [ssh, rdp, console]
-  extras: [nginx, apache, apache-https, wordpress, nextcloud, nextcloud-snap, postgresql, mariadb, sqlite, mail, ftp]
-  plannedExtras: [docker, juice-shop, dvwa, uptime-kuma, grafana, vaultwarden, gitea, minio, python, wazuh-agent, zabbix-agent]
+  extras: [nginx, apache, apache-https, wordpress, nextcloud, nextcloud-snap, postgresql, mariadb, sqlite, mail, ftp, docker, juice-shop, dvwa, uptime-kuma, grafana, vaultwarden, gitea, minio, python, wazuh-agent, zabbix-agent]
 
 # The RHEL family: CentOS Stream, Rocky Linux, AlmaLinux (packer/rhel, kickstart from the boot ISO).
 # Its extras so far are the web servers. Planned until each template is built.
