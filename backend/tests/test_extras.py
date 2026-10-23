@@ -463,6 +463,17 @@ def test_extras_needing_more_memory_get_it(monkeypatch):
     assert extras.memory_gb(2, []) == 2
 
 
+def test_disk_is_a_clones_own_plus_its_extras(monkeypatch):
+    from app.config import settings
+    from app.extras import Extra
+
+    monkeypatch.setattr(settings(), "clone_disk_gb", 10)
+    big = Extra("big", "Big", "", disk_gb=20)
+    monkeypatch.setattr(extras, "extras", lambda: {"big": big})
+    assert extras.disk_gb([]) == 10
+    assert extras.disk_gb([{"id": "big"}]) == 30
+
+
 def test_config_sends_category_memory_and_ports(offered):
     t = client.get("/api/config").json()["templates"][0]
     https = next(x for x in t["extras"] if x["id"] == "apache-https")

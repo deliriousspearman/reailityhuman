@@ -208,6 +208,8 @@ class Extra:
     min_memory_gb: int = 0
     # Least vCPUs a machine needs for it (e.g. Wazuh's all-in-one server): a machine with it gets as many.
     min_cpu: int = 0
+    # Disk (GB) it writes on the machine beyond a plain clone, e.g. a Wazuh server's indexes.
+    disk_gb: int = 0
     # Ports it listens on, e.g. (80,) for a web server. Extras sharing a port can't be chosen together.
     ports: tuple[int, ...] = ()
     # Worked out from the ports at load: the extras it can't be chosen with.
@@ -275,6 +277,7 @@ def extras() -> dict[str, Extra]:
             category=e.get("category", "Other"),
             min_memory_gb=int(e.get("minMemoryGB", 0)),
             min_cpu=int(e.get("minCPU", 0)),
+            disk_gb=int(e.get("diskGB", 0)),
             ports=tuple(int(p) for p in e.get("ports", [])),
             links=tuple(_conditional(link) for link in e.get("links", [])),
             notes=tuple(_conditional(n) for n in e.get("notes", [])),
@@ -342,6 +345,11 @@ def memory_gb(template_memory_gb: int, chosen: list[dict]) -> int:
 def cpu(template_cpu: int, chosen: list[dict]) -> int:
     """A machine's vCPUs: its template's, or more where an extra chosen needs more."""
     return max([template_cpu, *(x.min_cpu for c in chosen if (x := find(c["id"])))])
+
+
+def disk_gb(chosen: list[dict]) -> int:
+    """About how much datastore space a new machine writes: a clone's own, plus what its extras do."""
+    return settings().clone_disk_gb + sum(x.disk_gb for c in chosen if (x := find(c["id"])))
 
 
 def resolve(offered: tuple[str, ...], chosen: list[dict], hostname: str) -> list[dict]:

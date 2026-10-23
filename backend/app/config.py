@@ -36,6 +36,11 @@ class Settings(BaseSettings):
     # How far machines may overcommit the cluster's memory: 1.5 lets VMs be configured with 1.5x
     # the physical memory, and ESXi reclaims what they don't use (ballooning, compression).
     memory_overcommit: float = Field(default=1.0, ge=1.0)
+    # Datastore space deploys never use (GB): a full datastore pauses every VM that writes to it.
+    datastore_reserve_gb: int = 30
+    # What a new machine writes on its own (GB), as a linked clone: logs, updates, Windows' first
+    # boot. Extras that write more add their diskGB (extras.yaml).
+    clone_disk_gb: int = 10
     # How long an expired machine is kept (powered off) before it's deleted.
     grace_minutes: int = 24 * 60
     # How long a deploy waits for the machine to report an IP address.

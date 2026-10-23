@@ -9,6 +9,9 @@
 #   minMemoryGB  optional: the least memory a machine needs for it (e.g. a desktop); a machine with
 #              it gets at least this much, more than its template's if need be
 #   minCPU     optional: the least vCPUs it needs; likewise, a machine with it gets at least as many
+#   diskGB     optional: about how much it writes on the machine (GB) beyond a plain clone's
+#              CLONE_DISK_GB, e.g. a server's database; deploys check it against the datastore's free
+#              space, less DATASTORE_RESERVE_GB
 #   ports      the ports it listens on. Extras that would share one can't be chosen together: each
 #              web service (80/443) gets a machine of its own, while FTP or a desktop go with any.
 #   links      addresses shown on the machine's page, once it has an address; and
@@ -500,6 +503,7 @@
   ports: [25, 80, 110, 143, 443, 465, 587, 993, 995, 4190]
   password: true
   setupMinutes: 20
+  diskGB: 5
   links: ["https://{ip}/mail/", "https://{ip}/iredadmin/"]
   notes:
     - "Mailboxes: {username}@{domain}, postmaster@{domain} and any test users ({users}), each with the machine's password. {username}@{domain} and postmaster@{domain} are iRedAdmin's administrators."
@@ -610,6 +614,7 @@
   ports: [25, 80, 110, 143, 443, 465, 587, 993, 995, 7071]
   password: true
   setupMinutes: 40
+  diskGB: 5
   links: ["https://{ip}/", "https://{ip}:7071/"]
   notes:
     - "Sign in to webmail and to the admin console (port 7071) as {username}@{domain}, with the machine's password. Test users ({users}) have it too."
@@ -948,6 +953,7 @@
   category: Storage
   description: MinIO, S3-compatible object storage, with its web console and its user as the administrator; and mc, its command-line client. The April 2025 release, the last with the full console.
   ports: [9000, 9001]
+  diskGB: 2
   password: true
   links: ["http://{ip}:9001/"]
   notes:
@@ -1018,6 +1024,7 @@
   minMemoryGB: 4
   minCPU: 4
   setupMinutes: 30
+  diskGB: 20
   links: ["https://{ip}/"]
   notes:
     - "Sign in to the dashboard as {username}, with the machine's password (an administrator). The certificate is self-signed."
@@ -1134,6 +1141,7 @@
   ports: [80, 10051]
   password: true
   setupMinutes: 5
+  diskGB: 3
   links: ["http://{ip}/zabbix/"]
   notes:
     - "Sign in as {username}, with the machine's password (Zabbix's Admin is renamed to it)."

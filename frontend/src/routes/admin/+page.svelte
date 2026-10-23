@@ -88,7 +88,16 @@
 			note="Room for {roomFor} more {roomFor === 1 ? 'machine' : 'machines'} of {biggest} GB"
 		/>
 		<Meter label="CPU" used={cap.used.cpu} total={cap.total.cpu} unit="vCPU" note="Can be overcommitted; stopped VMs don't count" />
-		<Meter label="Storage" used={cap.used.diskGB} total={cap.total.diskGB} unit="GB" note="Linked clones: only changes use space" />
+		<Meter
+			label="Storage"
+			used={cap.used.diskGB}
+			total={cap.total.diskGB}
+			unit="GB"
+			reserve={cap.reserveGB ?? 0}
+			note={cap.reserveGB
+				? `Linked clones: only changes use space. ${cap.reserveGB} GB is kept free; deploys stop below it.`
+				: 'Linked clones: only changes use space'}
+		/>
 	</div>
 {:else if store.capacityProblem}
 	<p class="problem"><strong>Can't read capacity:</strong> {store.capacityProblem}</p>

@@ -188,6 +188,8 @@ export interface SingleMachine {
 	 * they serve and notes on them (e.g. how to sign in); those are empty until it has an address.
 	 */
 	extras: { id: string; name: string; options: Record<string, string>; links: string[]; notes: string[] }[];
+	/** Machines whose extras point at this one, e.g. the agents of a Wazuh server. */
+	usedBy?: { id: string; name: string }[];
 	/** Only from GET /machines/{id}: the list leaves it out. */
 	log?: LogLine[];
 }
@@ -228,6 +230,8 @@ export interface Extra {
 	minMemoryGB: number;
 	/** Least vCPUs a machine needs for it: a machine with it gets at least as many. */
 	minCPU?: number;
+	/** About how much disk it writes beyond a plain clone (GB); 0: nothing much. */
+	diskGB?: number;
 	/** Ports it means the machine listens on. */
 	ports: number[];
 	options: ExtraOption[];
@@ -268,6 +272,8 @@ export interface PanelConfig {
 	machineDomain: string;
 	/** How long an expired machine is kept before it's deleted. */
 	graceMs: number;
+	/** What a new machine writes on its own (GB); extras add their diskGB. */
+	cloneDiskGB?: number;
 	maxMachines: number;
 	maxPermanent: number;
 	vcenterConfigured: boolean;
@@ -286,6 +292,8 @@ export interface PanelConfig {
 export interface Capacity {
 	total: { cpu: number; memoryGB: number; diskGB: number };
 	used: { cpu: number; memoryGB: number; diskGB: number };
+	/** Datastore space deploys never use (GB). */
+	reserveGB?: number;
 }
 
 /** A person's own network, shared by all their single machines and reached over one WireGuard tunnel. */

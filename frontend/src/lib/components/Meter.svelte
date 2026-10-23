@@ -1,11 +1,26 @@
 <script lang="ts">
 	// A capacity meter: how much of one resource is in use. One series, so no legend; the numbers are
 	// printed beside the bar and the fullness is named in words, not colour alone.
-	let { label, used, total, unit, note }: { label: string; used: number; total: number; unit: string; note?: string } =
-		$props();
+	// `reserve`: an amount that must stay free (the datastore's): full once less than that is free,
+	// getting full under twice that, whatever the percentage.
+	let {
+		label,
+		used,
+		total,
+		unit,
+		note,
+		reserve = 0,
+	}: { label: string; used: number; total: number; unit: string; note?: string; reserve?: number } = $props();
 
 	const ratio = $derived(Math.min(1, used / total));
-	const level = $derived(ratio >= 0.9 ? { tone: 'error', text: 'Full' } : ratio >= 0.75 ? { tone: 'warn', text: 'Getting full' } : { tone: 'up', text: 'Room free' });
+	const free = $derived(total - used);
+	const level = $derived(
+		ratio >= 0.9 || (reserve && free < reserve)
+			? { tone: 'error', text: 'Full' }
+			: ratio >= 0.75 || (reserve && free < 2 * reserve)
+				? { tone: 'warn', text: 'Getting full' }
+				: { tone: 'up', text: 'Room free' },
+	);
 </script>
 
 <div class="meter" data-tone={level.tone}>

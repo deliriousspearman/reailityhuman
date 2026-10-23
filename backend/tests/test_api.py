@@ -282,6 +282,42 @@ def test_machines_on_their_way_up_count_against_memory(queued, monkeypatch):
     assert r.status_code == 409 and "Not enough memory" in r.json()["detail"]
 
 
+def test_deploys_keep_the_datastore_reserve_free(queued, monkeypatch):
+    """A deploy is refused if it would leave less than DATASTORE_RESERVE_GB free, counting what deploys
+    still running will write."""
+    from app import api
+    from app.config import settings
+    from app.vsphere import Capacity
+
+    monkeypatch.setattr(settings(), "datastore_reserve_gb", 30)
+    monkeypatch.setattr(settings(), "clone_disk_gb", 10)
+    # 48 GB free: room for one 10 GB machine above the reserve, not two.
+    monkeypatch.setattr(api, "vcenter_capacity", lambda fresh=False: Capacity(8, 64, 100, 0, 0, 52))
+
+    def ask(name):
+        return client.post("/api/machines", json={"template": "ubuntu", "version": "26.04", "owner": "jo", "name": name, "hours": 2})
+
+    assert ask("disk01").status_code == 201
+    r = ask("disk02")
+    assert r.status_code == 409 and "Not enough disk" in r.json()["detail"] and "30 GB must stay free" in r.json()["detail"]
+    assert client.get("/api/capacity").json()["reserveGB"] == 30
+    queued.clear()
+
+
+def test_expired_machines_dont_count_against_the_quota(queued, monkeypatch):
+    from app.config import settings
+
+    monkeypatch.setattr(settings(), "max_machines", 1)
+    m = deploy(queued, "old01")
+    r = client.post("/api/machines", json={"template": "ubuntu", "version": "26.04", "owner": "jo", "name": "new01", "hours": 2})
+    assert r.status_code == 409 and "1 machines at a time" in r.json()["detail"]
+    with session() as s:
+        s.get(Machine, m["id"]).state = "expired"
+    r = client.post("/api/machines", json={"template": "ubuntu", "version": "26.04", "owner": "jo", "name": "new01", "hours": 2})
+    assert r.status_code == 201, r.text
+    queued.clear()
+
+
 def test_reconcile_leaves_a_failed_deploy_flagged(queued):
     """A deploy that failed after powering on (e.g. an extra didn't install) stays "error", though
     vCenter says the VM runs; other failures are cleared once the VM looks fine."""

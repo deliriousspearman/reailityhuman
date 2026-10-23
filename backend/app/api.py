@@ -119,6 +119,7 @@ def extra_out(x: extras.Extra) -> dict:
         "category": x.category,
         "minMemoryGB": x.min_memory_gb,
         "minCPU": x.min_cpu,
+        "diskGB": x.disk_gb,
         "ports": sorted(x.ports),
         "options": [
             {
@@ -164,6 +165,8 @@ def config() -> dict:
         # Fills {fqdn} in option defaults: "<name>.<machineDomain>", or just the name when empty.
         "machineDomain": cfg.machine_domain.strip("."),
         "graceMs": cfg.grace_minutes * 60_000,
+        # What a new machine writes on its own (GB); extras add their diskGB.
+        "cloneDiskGB": cfg.clone_disk_gb,
         "maxMachines": cfg.max_machines,
         "maxPermanent": cfg.max_permanent,
         "vcenterConfigured": cfg.vcenter_configured,
@@ -229,6 +232,8 @@ def capacity() -> dict:
     return {
         "total": {"cpu": c.cpu, "memoryGB": int(c.memory_gb * settings().memory_overcommit), "diskGB": c.disk_gb},
         "used": {"cpu": c.used_cpu, "memoryGB": c.used_memory_gb, "diskGB": c.used_disk_gb},
+        # Datastore space deploys never use.
+        "reserveGB": settings().datastore_reserve_gb,
     }
 
 
@@ -302,7 +307,10 @@ def deploy_machine(req: DeployRequest, db: Db) -> dict:
         raise HTTPException(422, str(e)) from e
     if db.scalar(select(Machine).where(Machine.name == req.name)):
         raise HTTPException(409, f"There's already a machine called {req.name}.")
-    count = db.scalar(select(func.count()).select_from(Machine))
+    # Expired machines don't count: they're off, and deleted once their grace period ends. Their disk
+    # still counts, in capacity_blocker.
+    expired = db.scalar(select(func.count()).select_from(Machine).where(Machine.state == "expired"))
+    count = db.scalar(select(func.count()).select_from(Machine)) - expired
     if count >= cfg.max_machines:
         raise HTTPException(409, f"There can be {cfg.max_machines} machines at a time. Destroy one to deploy another.")
     if req.hours is None:
@@ -311,7 +319,7 @@ def deploy_machine(req: DeployRequest, db: Db) -> dict:
             raise HTTPException(409, f"{cfg.max_permanent} machines can be kept permanently. Set an expiry on another one first.")
     if not cfg.vcenter_configured:
         raise HTTPException(503, "vCenter isn't configured yet, so nothing can be deployed.")
-    blocker = capacity_blocker(db, extras.memory_gb(tpl.memory_gb, chosen), tpl.disk_gb)
+    blocker = capacity_blocker(db, extras.memory_gb(tpl.memory_gb, chosen), extras.disk_gb(chosen))
     if blocker:
         raise HTTPException(409, blocker)
     forget_capacity()
@@ -363,7 +371,11 @@ def new_id(db: Session) -> str:
 def capacity_blocker(db: Session, memory_gb: int, disk_gb: int) -> str | None:
     """Why a machine this size won't fit right now, or None. CPU can be overcommitted; memory and
     disk can't. Machines already on their way up (cloning, or starting) count as using memory too,
-    so deploys close together can't all squeeze into the same free memory."""
+    so deploys close together can't all squeeze into the same free memory; and deploys still running
+    count the disk they'll write, which a linked clone does after its clone. `disk_gb`: what the
+    machine will write (extras.disk_gb), or 0 to check memory alone. The datastore always keeps
+    DATASTORE_RESERVE_GB free: when it fills, every VM that writes to it is paused."""
+    cfg = settings()
     c = vcenter_capacity()
     starting = db.scalars(select(Machine).where(Machine.state == "deploying")).all()
     pending = sum(
@@ -371,12 +383,17 @@ def capacity_blocker(db: Session, memory_gb: int, disk_gb: int) -> str | None:
         for m in starting
         if m.vm_name not in c.powered_on and (tpl := catalogue.find(m.template, m.version))
     )
-    free_mem = int(c.memory_gb * settings().memory_overcommit) - c.used_memory_gb - pending
-    free_disk = c.disk_gb - c.used_disk_gb
+    free_mem = int(c.memory_gb * cfg.memory_overcommit) - c.used_memory_gb - pending
     if memory_gb > free_mem:
         return f"Not enough memory free right now: it needs {memory_gb} GB and {max(free_mem, 0)} GB is free. Try again later."
-    if disk_gb > free_disk:
-        return f"Not enough disk free right now: it needs up to {disk_gb} GB and {free_disk} GB is free."
+    if disk_gb:
+        writing = sum(extras.disk_gb(m.extras or []) for m in starting)
+        free_disk = c.disk_gb - c.used_disk_gb - writing
+        if disk_gb > free_disk - cfg.datastore_reserve_gb:
+            return (
+                f"Not enough disk free: it needs about {disk_gb} GB, and {cfg.datastore_reserve_gb} GB must stay free "
+                f"for the machines already running ({max(free_disk, 0)} GB is free). Destroy a machine you don't need."
+            )
     return None
 
 

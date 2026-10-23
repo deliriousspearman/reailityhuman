@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import { untrack } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import Icon from '$lib/components/Icon.svelte';
 	import OsLogo from '$lib/components/OsLogo.svelte';
 	import { clock, hoursLabel, inWords } from '$lib/format';
@@ -136,6 +136,27 @@
 	/** The machine's memory and vCPUs: the template's, or more where an extra chosen needs more (as the panel gives it). */
 	const memoryGB = $derived(Math.max(deployed?.resources.memoryGB ?? 0, ...chosen.map((x) => x.minMemoryGB)));
 	const cpu = $derived(Math.max(deployed?.resources.cpu ?? 0, ...chosen.map((x) => x.minCPU ?? 0)));
+
+	// Whether it fits in what's free now, as a hint before deploying (the API checks for itself, and
+	// also counts deploys still running). Read on load, then every 30 s, as on the admin page.
+	onMount(() => {
+		void store.refreshCapacity();
+		const timer = setInterval(() => store.refreshCapacity(), 30_000);
+		return () => clearInterval(timer);
+	});
+	/** About how much disk it writes: a clone's own, plus what its extras do (extras.disk_gb in the API). */
+	const diskNeed = $derived((store.config?.cloneDiskGB ?? 10) + chosen.reduce((n, x) => n + (x.diskGB ?? 0), 0));
+	const room = $derived.by(() => {
+		const cap = store.capacity;
+		if (!cap) return null;
+		const freeMemory = Math.max(0, cap.total.memoryGB - cap.used.memoryGB);
+		const freeDisk = Math.max(0, cap.total.diskGB - cap.used.diskGB - (cap.reserveGB ?? 0));
+		if (memoryGB > freeMemory) return { fits: false, text: `Not enough memory free right now: it needs ${memoryGB} GB, and ${freeMemory} GB is free.` };
+		if (diskNeed > freeDisk) {
+			return { fits: false, text: `Not enough disk free: it needs about ${diskNeed} GB, and ${freeDisk} GB can be used.` };
+		}
+		return { fits: true, text: `Fits: ${freeMemory} GB of memory and ${freeDisk} GB of disk available.` };
+	});
 
 	/** A note when an extra needs more memory or vCPUs than the template has, or null. */
 	function moreMemory(x: Extra): string | null {
@@ -468,6 +489,9 @@
 				<div><dt>Machine</dt><dd>{template.name} {version}</dd></div>
 				<div><dt>Owner</dt><dd>{owner.trim().toLowerCase() || '–'}</dd></div>
 				<div><dt>Uses</dt><dd>{cpu} vCPU, {memoryGB} GB memory, {deployed?.resources.diskGB} GB disk</dd></div>
+				{#if room}
+					<div><dt>Room</dt><dd class="room" class:short={!room.fits}>{room.text}</dd></div>
+				{/if}
 				<div><dt>Network</dt><dd>The LAN, with an address from DHCP</dd></div>
 				<div><dt>Sign in with</dt><dd>{signInWays.join(', ')}</dd></div>
 				{#if chosen.length}
@@ -801,6 +825,9 @@
 	}
 	.flag-notes .tag {
 		margin-inline-end: 0.3rem;
+	}
+	.room.short {
+		color: var(--lms-medium);
 	}
 	.blocker {
 		display: flex;

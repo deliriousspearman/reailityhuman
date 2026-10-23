@@ -93,7 +93,7 @@
 <div class="section-heading">
 	<h2>Machines</h2>
 	{#if store.config}
-		<p>{store.machines.length} of {store.machineQuota}, {store.permanentCount} of {store.permanentQuota} kept permanently</p>
+		<p>{store.machineCount} of {store.machineQuota}, {store.permanentCount} of {store.permanentQuota} kept permanently</p>
 	{/if}
 </div>
 {#if store.user}

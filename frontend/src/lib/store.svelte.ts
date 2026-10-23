@@ -138,6 +138,12 @@ class PanelStore {
 		return this.config?.maxMachines ?? 0;
 	}
 
+	/** Machines counted against the quota: expired ones don't count, as they're deleted once their
+	 * grace period ends. */
+	get machineCount() {
+		return this.machines.filter((m) => m.state !== 'expired').length;
+	}
+
 	get permanentQuota() {
 		return this.config?.maxPermanent ?? 0;
 	}
@@ -217,7 +223,7 @@ class PanelStore {
 		if (!this.config) return 'Loading…';
 		if (!this.isLive(template.id)) return `${template.name} isn't available yet.`;
 		if (!this.config.vcenterConfigured) return "vCenter isn't set up yet, so nothing can be deployed. An admin needs to configure it.";
-		if (this.machines.length >= this.machineQuota) {
+		if (this.machineCount >= this.machineQuota) {
 			return `There can be ${this.machineQuota} machines at a time. Destroy one to deploy another.`;
 		}
 		return null;

@@ -179,6 +179,9 @@ two need a way to read them: an agent or a check on the PC, and the DHCP server'
   gets 4 and 4 GB); Wazuh's bundled vulnerability database is left out (it unpacked to about 17 GB);
   Kali and Parrot have no Zabbix server (their own agent). Later, maybe: Wazuh and Zabbix agents on
   Windows; vulnerability detection as an option where there's internet and disk.
+- **Project review (2026-10-23):** [review-2026-10-23.md](review-2026-10-23.md). Its five top
+  priorities are done: a datastore reserve, machines that depend on each other, cancelling a stuck job,
+  expired machines out of the quota, and capacity on the deploy form. The rest is kept for later.
 - **Mail, suggested:** Mailpit (a mail catcher for apps) and GoPhish (phishing exercises), both small
   Docker extras; Mailcow for a realistic organisation mail server.
 
