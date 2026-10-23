@@ -1136,7 +1136,13 @@
   debian:
     packages: [zabbix-server-pgsql, zabbix-frontend-php, zabbix-apache-conf, zabbix-sql-scripts, zabbix-agent2, php-pgsql, postgresql, apache2, libapache2-mod-php]
     script: |
-      systemctl enable -q --now postgresql
+      # PostgreSQL's SSL is on ssl-cert's snakeoil certificate, which clean.sh deletes from templates: this
+      # machine's own, or it won't start (as the postgresql extra does).
+      if [ ! -e /etc/ssl/private/ssl-cert-snakeoil.key ] && command -v make-ssl-cert >/dev/null; then
+        make-ssl-cert generate-default-snakeoil --force-overwrite
+      fi
+      systemctl enable -q postgresql
+      systemctl restart postgresql
       # Started in the background (postgresql.service only starts its clusters'): ready once it answers.
       for _ in $(seq 60); do pg_isready -q && break; sleep 2; done
       db_pass=$(openssl rand -hex 16)
