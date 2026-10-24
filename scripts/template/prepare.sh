@@ -703,6 +703,15 @@ df -h / | tail -1 | awk '{print "  / is " $2 " (" $4 " free)"}'
 # --- 4. cloud-init ---------------------------------------------------------------------------------
 
 echo "==> cloud-init"
+# cloud-init only runs if its systemd generator does, and a generator that crashes can stop the ones
+# after it: Parrot's sslh generator, with no sslh configuration, sometimes did on a clone's first boot,
+# and the machine never set itself up. sslh isn't used here: its generator and service are off.
+if [[ -e /usr/lib/systemd/system-generators/systemd-sslh-generator ]]; then
+	mkdir -p /etc/systemd/system-generators
+	ln -sfn /dev/null /etc/systemd/system-generators/systemd-sslh-generator
+	systemctl disable -q sslh.service 2>/dev/null || true
+	echo "  sslh: its generator masked, its service off"
+fi
 # Ubuntu's installer leftovers; the names differ between releases (22.04: subiquity-disable-...,
 # 26.04: 00-subiquity-disable-...). None of them exist on Debian or the RHEL family.
 rm -fv /etc/cloud/cloud-init.disabled \
