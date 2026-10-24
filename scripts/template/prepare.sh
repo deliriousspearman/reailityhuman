@@ -630,6 +630,9 @@ echo "==> Packages"
 case $FAMILY in
 debian)
 	export DEBIAN_FRONTEND=noninteractive
+	# Wait for apt's lock rather than fail: a freshly booted system's own updates may hold it (Parrot's
+	# did). Kept in the template, for the extras' installs at first boot too.
+	echo 'DPkg::Lock::Timeout "600";' >/etc/apt/apt.conf.d/90lab-lock-timeout
 	apt-get update -q
 	apt-get full-upgrade -yq -o Dpkg::Options::=--force-confold
 	# curl: the extras' downloads (a minimal Debian install has none).
