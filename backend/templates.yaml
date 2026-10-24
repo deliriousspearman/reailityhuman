@@ -63,7 +63,7 @@
   version: "22.04"
   # Built by Packer (packer/build.sh ubuntu -var version=22.04 -var iso=ubuntu-22.04.5-live-server-amd64.iso) on 2026-10-23, with every
   # extra baked in.
-  vsphere: Labs/Templates/tpl-ubuntu-22.04-20261023
+  vsphere: Labs/Templates/tpl-ubuntu-22.04-20261023b
   cpu: 2
   memoryGB: 2
   diskGB: 40
@@ -71,8 +71,8 @@
   family: debian
   # Not Nextcloud: it needs PHP 8.3, and 22.04 has 8.1 (the snap brings its own).
   extras: [nginx, apache, apache-https, wordpress, nextcloud-snap, postgresql, mariadb, mysql, sqlite, mail, ftp, desktop, docker, juice-shop, dvwa, uptime-kuma, grafana, vaultwarden, gitea, minio, python, wazuh, wazuh-agent, zabbix, zabbix-agent]
-  # PHP versions for the Apache extras: Ubuntu's own, which the template has with the web apps.
-  choices: {php: ["8.1"]}
+  # PHP versions for the Apache extras: Ondřej Surý's PPA's, baked in (prepare.sh's PHP_VERSIONS).
+  choices: {php: ["5.6", "7.0", "7.1", "7.2", "7.3", "7.4", "8.0", "8.1", "8.2", "8.3", "8.4", "8.5"]}
 
 # Debian (packer/debian, from the netinst ISO): a plain server with every extra baked in, except MySQL
 # (Debian has no mysql-server package).

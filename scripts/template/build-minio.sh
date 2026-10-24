@@ -72,6 +72,6 @@ build() {
 build minio "$MINIO" "$MINIO_COMMIT" github.com/minio/minio/cmd
 build mc "$MC" "$MC_COMMIT" github.com/minio/mc/cmd
 
-"$out/minio" --version | head -1
-"$out/mc" --version | head -1
+"$out/minio" --version | sed -n 1p
+"$out/mc" --version | sed -n 1p
 (cd "$out" && sha256sum minio mc >SHA256SUMS)
