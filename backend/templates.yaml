@@ -474,7 +474,7 @@
 - template: parrot
   version: "7"
   # Built by Packer (packer/parrot) on 2026-10-23, from Parrot Security 7.4's own image.
-  vsphere: Labs/Templates/tpl-parrot-7.4-20261024
+  vsphere: Labs/Templates/tpl-parrot-7.4-20261024b
   cpu: 2
   memoryGB: 4
   diskGB: 64
