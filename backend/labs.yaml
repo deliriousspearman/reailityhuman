@@ -1,0 +1,54 @@
+# Pro Labs: multi-machine labs deployed as one instance (app/labs.py loads this).
+#
+#   slug        the lab's id (lowercase, hyphens); matches its page in frontend/src/lib/labs.ts
+#   title       its name, as shown
+#   description one line, shown on the catalogue card
+#   level       Beginner, Intermediate or Advanced
+#   domain      the AD domain (domain labs); empty for standalone
+#   resetScope  lab (the whole instance resets together) or machine
+#   planned     true while its golden templates aren't built: listed, but can't be deployed yet
+#   machines    each a template from the catalogue (templates.yaml):
+#                 name       role name; the machine's hostname is <instance>-<name> (keep it short)
+#                 template   a template id, and version
+#                 role       shown to learners
+#                 bootOrder  lower sets up first (the domain controller before members)
+#                 extras     extras applied at deploy (usually none: golden templates are pre-built)
+#   flags       the flags planted per instance, for the checklist on the lab's page:
+#                 id, where (a human description of where it's planted)
+
+# Brookfield Logistics: a small company's Active Directory domain with the common misconfigurations,
+# for practising a domain compromise end to end. Deployed from golden templates built once (the
+# domain, Exchange with mailboxes and sample mail, and a joined workstation), so an instance comes up
+# in minutes. Its weaknesses are seeded by the scripts in the vuln-ad project.
+- slug: brookfield
+  title: Brookfield Logistics
+  description: A small company's Windows domain — a controller, a mail server and a staff workstation — set up with the usual Active Directory weaknesses to find and chain.
+  level: Intermediate
+  domain: brookfield.local
+  resetScope: lab
+  planned: true
+  machines:
+    - name: dc
+      template: brookfield-dc
+      version: "1"
+      role: Domain controller
+      bootOrder: 1
+    - name: mail
+      template: brookfield-mail
+      version: "1"
+      role: Exchange mail server
+      bootOrder: 2
+    - name: ws
+      template: brookfield-ws
+      version: "1"
+      role: Staff workstation
+      bootOrder: 3
+  flags:
+    - id: user
+      where: the staff workstation, on the user's desktop (user.txt)
+    - id: share
+      where: a file share on the domain controller
+    - id: mail
+      where: a message in a user's mailbox (Outlook on the web)
+    - id: root
+      where: the domain controller, on the Administrator's desktop (root.txt)
