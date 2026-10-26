@@ -178,6 +178,7 @@
 		font: 600 1rem var(--lms-mono);
 		color: var(--lms-gray-3);
 		vertical-align: middle;
+		white-space: nowrap;
 	}
 	.subtitle {
 		display: flex;

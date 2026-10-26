@@ -108,8 +108,8 @@ pass-the-ticket, SMB signing off. Plus file shares, users and sample emails.
 |---|---|---|
 | 1 | Lab definitions: `backend/labs.yaml` and `app/labs.py`, validated like `templates.yaml`; Brookfield defined, marked `planned` | Done 2026-10-24 |
 | 2 | Orchestration: `POST /api/instances` deploys a lab's machines in boot order through the existing job pipeline (each waits its turn in `machines.pending`; `actions.advance_instance` queues it, or fails it if a machine before it failed); reset (in boot order), destroy and cancel act on the whole instance | Done 2026-10-26 |
-| 3 | The Instances page (a "Soon" placeholder today), on `/api/instances`; Deploy on the lab's page | Next |
-| 4 | Flags: random per instance, and the checklist | — |
+| 3 | The Pro Labs pages from `labs.yaml` (machines in boot order, flags, a Deploy form); the Instances list and each instance's page, with Reset lab, Cancel jobs, Destroy lab and extending the whole lab (`POST /api/instances/{id}/extend`, which starts an expired lab again in boot order) | Done 2026-10-26 |
+| 4 | Flags: random per instance, and the checklist | Next |
 | 5 | The golden set: build the lab once (Exchange takes about 2.5 hours), save its three machines as templates, and mark Brookfield live | — |
 | 6 | End-to-end test of a whole instance | — |
 
