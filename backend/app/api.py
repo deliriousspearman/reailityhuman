@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session, object_session
 from . import actions, catalogue, cloudinit, console, extras, jobs, labs
 from .config import settings
 from .deps import ANYONE, OWNER_RULE, Actor, Db, add_log, get_machine
-from .models import STABLE_STATES, Job, Machine, utcnow
+from .models import STABLE_STATES, InstanceFlag, Job, Machine, utcnow
 from .vsphere import Capacity, VSphereError, connect
 
 # A hostname label: starts with a letter, doesn't end with a hyphen; 15 at most, Windows' limit.
@@ -628,6 +628,7 @@ def instance_out(db: Session, instance_id: str) -> dict:
     everyone = db.scalars(select(Machine)).all()
     first = machines[0]
     lab = labs.find(first.lab or "")
+    planted = {f.flag_id: f for f in db.scalars(select(InstanceFlag).where(InstanceFlag.instance_id == instance_id))}
     return {
         "id": instance_id,
         "lab": first.lab,
@@ -637,6 +638,16 @@ def instance_out(db: Session, instance_id: str) -> dict:
         "createdAt": ms(min(m.created_at for m in machines)),
         "expiresAt": ms(first.expires_at),
         "machines": [machine_out(m, log=False, machines=everyone) for m in machines],
+        # The flags to find (labs.yaml), each with its value this instance and whether it's planted yet.
+        "flags": [
+            {
+                "id": f.id,
+                "where": f.where,
+                **({"value": planted[f.id].value} if f.id in planted else {}),
+                "planted": bool(f.id in planted and planted[f.id].planted_at),
+            }
+            for f in (lab.flags if lab else [])
+        ],
     }
 
 
@@ -727,6 +738,7 @@ def deploy_instance(req: InstanceRequest, db: Db) -> dict:
             earlier = ", ".join(o.name for o, *_ in planned if o.boot_order < lm.boot_order)
             add_log(db, m, f"Waits for {earlier} to be ready first", "muted")
     db.commit()
+    actions.generate_flags(instance_id, lab)
     try:
         actions.advance_instance(instance_id, jobs.enqueue)
     except Exception as e:
@@ -746,6 +758,9 @@ def reset_instance(instance_id: str, db: Db, who: Actor) -> dict:
         m.state, m.pending = "resetting", "reset"
         add_log(db, m, "Reset requested with the whole lab" if who == ANYONE else f"Reset requested with the whole lab, asked by {who}", "muted")
     db.commit()
+    lab = labs.find(machines[0].lab or "")
+    if lab:
+        actions.generate_flags(instance_id, lab)
     try:
         actions.advance_instance(instance_id, jobs.enqueue)
     except Exception as e:
@@ -788,6 +803,7 @@ def destroy_instance(instance_id: str, db: Db, who: Actor) -> dict:
     for m in machines:
         require_idle(m)
     out = instance_out(db, instance_id)
+    db.execute(InstanceFlag.__table__.delete().where(InstanceFlag.instance_id == instance_id))
     for m in machines:
         m.state = "destroying"
         add_log(db, m, "Destroy requested with the whole lab" if who == ANYONE else f"Destroy requested with the whole lab, asked by {who}", "muted")

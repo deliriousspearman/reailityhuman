@@ -43,12 +43,23 @@
       version: "1"
       role: Staff workstation
       bootOrder: 3
+  # Planted fresh in every instance (actions.plant_flags), once each machine is running. file: the
+  # flag's value is written there; run: the program is run with the value as its last argument. The
+  # golden templates (step 5) make these paths and the share, and bake in the mail script.
   flags:
     - id: user
-      where: the staff workstation, on the user's desktop (user.txt)
+      where: the staff workstation, on the signed-in user's desktop (user.txt)
+      machine: ws
+      file: C:\Users\Public\Desktop\user.txt
     - id: share
-      where: a file share on the domain controller
+      where: the Finance file share on the domain controller (flag.txt)
+      machine: dc
+      file: C:\Shares\Finance\flag.txt
     - id: mail
       where: a message in a user's mailbox (Outlook on the web)
+      machine: mail
+      run: C:\lab\plant-mail-flag.ps1
     - id: root
       where: the domain controller, on the Administrator's desktop (root.txt)
+      machine: dc
+      file: C:\Users\Administrator\Desktop\root.txt

@@ -72,6 +72,22 @@ class LogLine(Base):
     machine: Mapped[Machine] = relationship(back_populates="log")
 
 
+class InstanceFlag(Base):
+    """A Pro Lab instance's flags: a random value per flag, new each deploy or reset, planted into the
+    lab's machines (actions.plant_flags). Learners find the values; the panel shows the checklist."""
+
+    __tablename__ = "instance_flags"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    instance_id: Mapped[str] = mapped_column(String(16), index=True)
+    # The flag's id in labs.yaml, e.g. "root".
+    flag_id: Mapped[str] = mapped_column(String(32))
+    # Its value this time round, e.g. "LAB{a1b2c3d4e5f6}".
+    value: Mapped[str] = mapped_column(String(64))
+    # Set once it's been planted on its machine; None while that's still to happen.
+    planted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class Job(Base):
     __tablename__ = "jobs"
 

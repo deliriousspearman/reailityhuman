@@ -480,6 +480,53 @@ class VCenter:
         except OSError as e:
             raise VSphereError(f"Couldn't fetch {path} from the ESXi host running the machine: {e}") from e
 
+    def write_guest_file(self, vm: vim.VirtualMachine, username: str, password: str, path: str, content: bytes) -> None:
+        """Writes a file inside the guest through VMware Tools, signed in as `username`, overwriting any
+        file already there (used to plant a Pro Lab's flags). The panel's account needs Guest operations
+        → Modify. As with reading, the bytes go to the ESXi host running the VM, so the panel's server
+        needs to reach that host on port 443."""
+        gom = self.content.guestOperationsManager
+        auth = vim.vm.guest.NamePasswordAuthentication(username=username, password=password)
+        spec = vim.vm.guest.FileManager.FileAttributes()
+        try:
+            url = gom.fileManager.InitiateFileTransferToGuest(
+                vm=vm, auth=auth, guestFilePath=path, fileAttributes=spec, fileSize=len(content), overwrite=True
+            )
+        except vim.fault.NoPermission as e:
+            raise VSphereError(
+                "The panel's vCenter account can't write files in machines (it needs Virtual machine → "
+                "Guest operations → Modify; re-run scripts/setup_vcenter.py)"
+            ) from e
+        except vmodl.MethodFault as e:
+            raise VSphereError(f"Couldn't write {path} in the machine: {describe(e)}") from e
+        if "://*" in url:
+            host = self.props(vm, "runtime.host").get("runtime.host")
+            url = url.replace("://*", f"://{self.props(host, 'name').get('name')}", 1)
+        context = ssl._create_unverified_context() if self.cfg.vcenter_insecure else ssl.create_default_context()
+        req = urllib.request.Request(url, data=content, method="PUT", headers={"Content-Type": "application/octet-stream"})
+        try:
+            with urllib.request.urlopen(req, context=context, timeout=30):
+                pass
+        except OSError as e:
+            raise VSphereError(f"Couldn't send {path} to the ESXi host running the machine: {e}") from e
+
+    def run_guest_program(self, vm: vim.VirtualMachine, username: str, password: str, program: str, args: str) -> int:
+        """Starts a program inside the guest through VMware Tools, signed in as `username`, and returns
+        its PID (it doesn't wait for it). Used to run a planting script on a Pro Lab's machine. The
+        panel's account needs Guest operations → Execute."""
+        gom = self.content.guestOperationsManager
+        auth = vim.vm.guest.NamePasswordAuthentication(username=username, password=password)
+        spec = vim.vm.guest.ProcessManager.ProgramSpec(programPath=program, arguments=args)
+        try:
+            return gom.processManager.StartProgramInGuest(vm=vm, auth=auth, spec=spec)
+        except vim.fault.NoPermission as e:
+            raise VSphereError(
+                "The panel's vCenter account can't run programs in machines (it needs Virtual machine → "
+                "Guest operations → Execute; re-run scripts/setup_vcenter.py)"
+            ) from e
+        except vmodl.MethodFault as e:
+            raise VSphereError(f"Couldn't run {program} in the machine: {describe(e)}") from e
+
     def console_ticket(self, vm: vim.VirtualMachine) -> "ConsoleTicket":
         """Where to open the VM's screen: a WebMKS ticket from vCenter, for the ESXi host running the
         VM. The ticket is single-use and lapses if it isn't used within a few seconds."""

@@ -20,6 +20,10 @@ LAB = """
     - {name: dc, template: ubuntu, version: "26.04", role: Domain controller, bootOrder: 1}
     - {name: web, template: ubuntu, version: "26.04", bootOrder: 2}
     - {name: ws, template: ubuntu, version: "26.04", bootOrder: 2}
+  flags:
+    - {id: root, where: the dc, machine: dc, file: "/root/root.txt"}
+    - {id: mail, where: a mailbox, machine: web, run: "C:/lab/plant.ps1"}
+    - {id: note, where: just a note, machine: dc}
 - slug: later
   title: Later
   description: Not built yet.
@@ -27,6 +31,18 @@ LAB = """
   machines:
     - {name: dc, template: not-built, version: "1"}
 """
+
+
+@pytest.fixture(autouse=True)
+def plantable(monkeypatch):
+    """vcsim has no guests: record what would be written/run instead of talking to one."""
+    from app.vsphere import VCenter
+    planted = {"files": {}, "runs": {}}
+    monkeypatch.setattr(VCenter, "write_guest_file",
+                        lambda self, vm, u, pw, path, content: planted["files"].__setitem__(path, content))
+    monkeypatch.setattr(VCenter, "run_guest_program",
+                        lambda self, vm, u, pw, prog, args: planted["runs"].__setitem__(prog, args) or 1234)
+    return planted
 
 
 @pytest.fixture(autouse=True)
@@ -187,3 +203,68 @@ def test_extend_restarts_an_expired_lab_in_boot_order(queued):
     run_queued(queued)
     i = client.get(f"/api/instances/{i['id']}").json()
     assert i["state"] == "running" and i["expiresAt"] > utcnow().timestamp() * 1000
+
+
+def flags(instance) -> dict[str, dict]:
+    return {f["id"]: f for f in instance["flags"]}
+
+
+def test_flags_are_generated_and_planted(queued, plantable):
+    i = deploy()
+    f = flags(i)
+    # Three flags, each with a LAB{...} value, none planted until the machines come up.
+    assert set(f) == {"root", "mail", "note"}
+    assert all(x["value"].startswith("LAB{") for x in f.values())
+    assert all(not x["planted"] for x in f.values())
+    run_queued(queued)
+
+    i = client.get(f"/api/instances/{i['id']}").json()
+    f = flags(i)
+    assert f["root"]["planted"] and f["mail"]["planted"]
+    assert not f["note"]["planted"]  # no file or run: just listed
+    # Planted where the lab says, with the flag's value.
+    assert plantable["files"]["/root/root.txt"].decode().strip() == f["root"]["value"]
+    assert f["mail"]["value"] in plantable["runs"][actions.POWERSHELL]
+
+
+def test_reset_makes_new_flag_values(queued, plantable):
+    i = deploy()
+    run_queued(queued)
+    before = {k: v["value"] for k, v in flags(client.get(f"/api/instances/{i['id']}").json()).items()}
+    client.post(f"/api/instances/{i['id']}/reset")
+    after_deploy = flags(client.get(f"/api/instances/{i['id']}").json())
+    assert all(not x["planted"] for x in after_deploy.values())  # fresh, not yet planted
+    assert {k: v["value"] for k, v in after_deploy.items()} != before  # new values
+    run_queued(queued)
+    assert all(x["planted"] for x in flags(client.get(f"/api/instances/{i['id']}").json()).values() if x["id"] != "note")
+
+
+def test_destroy_clears_the_flags(queued, plantable):
+    from app.db import session
+    from app.models import InstanceFlag
+    from sqlalchemy import select
+
+    i = deploy()
+    run_queued(queued)
+    client.delete(f"/api/instances/{i['id']}")
+    run_queued(queued)
+    with session() as s:
+        assert s.scalars(select(InstanceFlag).where(InstanceFlag.instance_id == i["id"])).all() == []
+
+
+def test_a_planting_failure_doesnt_fail_the_machine(queued, monkeypatch):
+    from app.vsphere import VCenter, VSphereError
+
+    def boom(self, vm, u, pw, path, content):
+        raise VSphereError("guest ops off")
+
+    monkeypatch.setattr(VCenter, "write_guest_file", boom)
+    monkeypatch.setattr(VCenter, "run_guest_program", lambda *a: 1)
+    i = deploy()
+    run_queued(queued)
+    i = client.get(f"/api/instances/{i['id']}").json()
+    assert i["state"] == "running"  # still up
+    assert not flags(i)["root"]["planted"]
+    dc = next(m for m in i["machines"] if m["role"] == "dc")
+    log = client.get(f"/api/machines/{dc['id']}").json()["log"]
+    assert any("Couldn't plant the 'root' flag" in line["text"] for line in log)

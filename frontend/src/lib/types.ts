@@ -85,6 +85,8 @@ export interface Instance {
 	expiresAt: number | null;
 	/** In boot order, without their logs. */
 	machines: SingleMachine[];
+	/** The flags to find, each with its value this instance and whether it's planted yet. */
+	flags: { id: string; where: string; value?: string; planted: boolean }[];
 }
 
 export type JobState = 'queued' | 'running' | 'done' | 'failed';

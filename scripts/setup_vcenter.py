@@ -66,6 +66,8 @@ PRIVILEGES = [
     "VirtualMachine.Config.Settings",
     "VirtualMachine.Config.EditDevice",  # point the NIC at the port group
     "VirtualMachine.GuestOperations.Query",  # read whether extras finished, through VMware Tools
+    "VirtualMachine.GuestOperations.Modify",  # plant a Pro Lab's flags (write files in the guest)
+    "VirtualMachine.GuestOperations.Execute",  # run a Pro Lab's flag-planting script in the guest
     "VirtualMachine.Interact.DeviceConnection",  # NIC connected at power on (if the template's isn't)
     "VirtualMachine.Interact.ConsoleInteract",  # the console in the browser (a WebMKS ticket)
     "VirtualMachine.Inventory.CreateFromExisting",

@@ -5,6 +5,7 @@ transaction, so the panel shows progress while a job runs.
 """
 
 import logging
+import secrets
 import time
 from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
@@ -14,7 +15,7 @@ from sqlalchemy import select, text
 from . import catalogue, cloudinit, extras, labs
 from .config import settings
 from .db import session
-from .models import STABLE_STATES, Job, LogLine, Machine, utcnow
+from .models import STABLE_STATES, InstanceFlag, Job, LogLine, Machine, utcnow
 from pyVmomi import vmodl
 
 from .vsphere import SetupError, VCenter, VSphereError, cancelled_by, check_cancelled, connect, describe
@@ -104,6 +105,7 @@ def deploy(vc: VCenter, m: Machine) -> None:
     _record_ip(vc, vm, m.id, settings().ip_timeout_seconds)
     _await_setup(vc, vm, m)
     _recheck_ip(vc, vm, m)
+    plant_flags(vc, m)
     set_machine(m.id, state="running")
     add_log(m.id, f"Ready. Sign in as {m.username}.", "ok")
 
@@ -155,6 +157,7 @@ def reset(vc: VCenter, m: Machine) -> None:
     _record_ip(vc, vm, m.id, settings().ip_timeout_seconds)
     _await_setup(vc, vm, m)
     _recheck_ip(vc, vm, m)
+    plant_flags(vc, m)
     set_machine(m.id, state="running")
     add_log(m.id, "Running", "ok")
 
@@ -401,6 +404,58 @@ def _run(job_id: int, machine_id: str, action: str) -> None:
 
 
 # Pro Labs ---------------------------------------------------------------------------------------------
+
+# PowerShell, to run a flag's planting script (labs.yaml flag `run`) in a Windows guest.
+POWERSHELL = r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
+
+
+def new_flag() -> str:
+    return f"LAB{{{secrets.token_hex(6)}}}"
+
+
+def generate_flags(instance_id: str, lab: labs.Lab) -> None:
+    """Gives the instance a fresh random value for each of its lab's flags (new on every deploy and
+    reset), replacing any it had. Planted into the machines by plant_flags once each is running."""
+    with session() as s:
+        s.execute(InstanceFlag.__table__.delete().where(InstanceFlag.instance_id == instance_id))
+        for f in lab.flags:
+            s.add(InstanceFlag(instance_id=instance_id, flag_id=f.id, value=new_flag()))
+
+
+def plant_flags(vc: VCenter, m: Machine) -> None:
+    """Plants this instance's flags that belong on this machine (by its role), once it's running: a
+    file flag's value is written to its path, a run flag's script is run with the value. A flag that
+    won't plant is logged as a warning and left for the checklist to show as missing; it doesn't fail
+    the machine, which is otherwise ready."""
+    if not m.instance_id or not m.role:
+        return
+    lab = labs.find(m.lab or "")
+    if lab is None:
+        return
+    flags = [f for f in lab.flags if f.machine == m.role and (f.file or f.run)]
+    if not flags:
+        return
+    with session() as s:
+        values = dict(s.execute(select(InstanceFlag.flag_id, InstanceFlag.value).where(InstanceFlag.instance_id == m.instance_id)).all())
+    vm = vc.require_vm(m.vm_name)
+    for f in flags:
+        value = values.get(f.id)
+        if value is None:
+            continue
+        try:
+            if f.file:
+                vc.write_guest_file(vm, m.username, m.password, f.file, (value + "\r\n").encode())
+            else:
+                vc.run_guest_program(vm, m.username, m.password, POWERSHELL,
+                                     f'-NoProfile -ExecutionPolicy Bypass -File "{f.run}" "{value}"')
+        except VSphereError as e:
+            add_log(m.id, f"Couldn't plant the '{f.id}' flag: {e}", "warn")
+            continue
+        with session() as s:
+            row = s.scalar(select(InstanceFlag).where(InstanceFlag.instance_id == m.instance_id, InstanceFlag.flag_id == f.id))
+            if row:
+                row.planted_at = utcnow()
+        add_log(m.id, f"Planted the '{f.id}' flag", "muted")
 
 
 def advance_instance(instance_id: str, enqueue: Callable[[str, str, str], None]) -> None:

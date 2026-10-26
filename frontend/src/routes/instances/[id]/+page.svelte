@@ -17,6 +17,7 @@
 	const expired = $derived(i?.state === 'expired');
 
 	let request = $state<ConfirmRequest>();
+	let showFlags = $state(false);
 
 	function reset() {
 		if (!i) return;
@@ -143,11 +144,22 @@
 	</div>
 	<p class="hint">Each machine's page has its sign-in, console and activity.</p>
 
-	{#if lab?.flags.length}
-		<div class="section-heading"><h2>Flags</h2></div>
+	{#if i.flags.length}
+		<div class="section-heading">
+			<h2>Flags</h2>
+			<button class="btn btn-quiet btn-sm" type="button" onclick={() => (showFlags = !showFlags)}>
+				<Icon name="eye" />{showFlags ? 'Hide values' : 'Show values'}
+			</button>
+		</div>
+		<p class="hint">{i.flags.filter((f) => f.planted).length} of {i.flags.length} planted; new values each deploy and reset.</p>
 		<ul class="flags">
-			{#each lab.flags as f (f.id)}
-				<li><span class="tag">{f.id}</span> {f.where}</li>
+			{#each i.flags as f (f.id)}
+				<li>
+					<span class="flag-dot" data-tone={f.planted ? 'up' : 'down'} title={f.planted ? 'Planted' : 'Not planted yet'}></span>
+					<span class="tag">{f.id}</span>
+					<span class="flag-where">{f.where}</span>
+					{#if showFlags && f.value}<code class="flag-value">{f.value}</code>{/if}
+				</li>
 			{/each}
 		</ul>
 	{/if}
@@ -210,14 +222,40 @@
 	.section-heading {
 		margin-top: 1.5rem;
 	}
+	.section-heading {
+		display: flex;
+		align-items: center;
+		gap: 1rem;
+	}
 	.flags {
 		display: grid;
 		gap: 0.5rem;
-		margin: 0;
+		margin: 0.5rem 0 0;
 		padding: 0;
 		list-style: none;
 	}
-	.flags .tag {
-		margin-inline-end: 0.4rem;
+	.flags li {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.5rem;
+	}
+	.flag-dot {
+		flex-shrink: 0;
+		width: 0.55rem;
+		height: 0.55rem;
+		border-radius: 50%;
+		background: var(--lab-up);
+	}
+	.flag-dot[data-tone='down'] {
+		background: transparent;
+		box-shadow: inset 0 0 0 2px var(--lms-gray-4);
+	}
+	.flag-where {
+		color: var(--lms-gray-2);
+	}
+	.flag-value {
+		font: 0.85rem var(--lms-mono);
+		color: var(--lms-lime-text);
 	}
 </style>

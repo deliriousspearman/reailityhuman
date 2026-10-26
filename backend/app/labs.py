@@ -46,6 +46,15 @@ class Flag:
     id: str
     # Where it's planted, for the checklist on the lab's page, e.g. "the workstation desktop (user.txt)".
     where: str
+    # The machine (a lab machine's role name) this flag is planted on; empty for a flag that isn't
+    # planted automatically (just listed).
+    machine: str = ""
+    # How it's planted on that machine, once it's running (actions.plant_flags), one of:
+    #  - file: the flag's value is written to this path in the guest (e.g. r"C:\Users\...\user.txt");
+    #  - run:  this program is run in the guest with the flag's value as its last argument (e.g. a
+    #          script baked into the golden template that drops the flag into a mailbox).
+    file: str = ""
+    run: str = ""
 
 
 @dataclass(frozen=True)
@@ -90,7 +99,10 @@ def _load() -> list[Lab]:
             )
             for m in e.get("machines", [])
         )
-        flags = tuple(Flag(id=f["id"], where=f["where"]) for f in e.get("flags", []))
+        flags = tuple(
+            Flag(id=f["id"], where=f["where"], machine=f.get("machine", ""), file=f.get("file", ""), run=f.get("run", ""))
+            for f in e.get("flags", [])
+        )
         lab = Lab(
             slug=slug,
             title=e["title"],
@@ -108,6 +120,14 @@ def _load() -> list[Lab]:
             raise ValueError(f"labs.yaml: {slug} has two machines with the same name")
         if len({f.id for f in lab.flags}) != len(lab.flags):
             raise ValueError(f"labs.yaml: {slug} has two flags with the same id")
+        names = {m.name for m in lab.machines}
+        for f in lab.flags:
+            if f.machine and f.machine not in names:
+                raise ValueError(f"labs.yaml: {slug}: flag '{f.id}' is planted on '{f.machine}', which isn't one of its machines")
+            if f.file and f.run:
+                raise ValueError(f"labs.yaml: {slug}: flag '{f.id}' can be planted as a file or by running a program, not both")
+            if (f.file or f.run) and not f.machine:
+                raise ValueError(f"labs.yaml: {slug}: flag '{f.id}' says how to plant it but not on which machine")
         for m in lab.machines:
             if not NAME_RULE.match(m.name):
                 raise ValueError(f"labs.yaml: {slug}: '{m.name}' isn't a valid machine name (1-9 lowercase letters or digits, starting with a letter)")
