@@ -107,8 +107,8 @@ pass-the-ticket, SMB signing off. Plus file shares, users and sample emails.
 | Step | What | State |
 |---|---|---|
 | 1 | Lab definitions: `backend/labs.yaml` and `app/labs.py`, validated like `templates.yaml`; Brookfield defined, marked `planned` | Done 2026-10-24 |
-| 2 | Orchestration: `instance_id` and `lab` on machines (migration 0008); deploy a lab's machines in boot order through the existing job pipeline; reset and destroy the whole instance | Next |
-| 3 | The Instances page (a "Soon" placeholder today) | — |
+| 2 | Orchestration: `POST /api/instances` deploys a lab's machines in boot order through the existing job pipeline (each waits its turn in `machines.pending`; `actions.advance_instance` queues it, or fails it if a machine before it failed); reset (in boot order), destroy and cancel act on the whole instance | Done 2026-10-26 |
+| 3 | The Instances page (a "Soon" placeholder today), on `/api/instances`; Deploy on the lab's page | Next |
 | 4 | Flags: random per instance, and the checklist | — |
 | 5 | The golden set: build the lab once (Exchange takes about 2.5 hours), save its three machines as templates, and mark Brookfield live | — |
 | 6 | End-to-end test of a whole instance | — |
