@@ -111,7 +111,8 @@ class Config:
 
     def save(self) -> None:
         self.path.write_text(dumps(self.data))
-        print(f"  Saved your answers in {self.path}.")
+        from .out import out
+        out.info(f"Saved your answers in {self.path}.")
 
     # Shorthands.
     def mirrors(self) -> dict:

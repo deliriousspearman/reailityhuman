@@ -12,6 +12,7 @@ from datetime import date
 from pathlib import Path
 
 from .checks import Context, Item
+from .out import out
 from .manifest import command
 from .state import save
 
@@ -68,7 +69,7 @@ def name_for(ctx: Context, item: Item, taken: set[str]) -> str:
 def build_all(ctx: Context, state: dict, state_path: Path, logs: Path, verbose: bool) -> None:
     items = [i for i in ctx.items if i.status == "ready"]
     if not items:
-        print("Nothing to build.")
+        out.info("Nothing to build: every template is built already or isn't ready.")
         return
     logs.mkdir(parents=True, exist_ok=True)
     pkrvars(ctx)
@@ -90,7 +91,8 @@ def build_all(ctx: Context, state: dict, state_path: Path, logs: Path, verbose: 
             if failed_need:
                 records[t.id] = {"status": "skipped", "reason": f"{', '.join(failed_need)} didn't build"}
                 save(state_path, state)
-                print(f"[{n}/{len(items)}] {t.id}: skipped ({', '.join(failed_need)} didn't build)")
+                out.warn(f"[{n}/{len(items)}] {t.id}: skipped ({', '.join(failed_need)} didn't build)",
+                         fix=f"build {', '.join(failed_need)} first (it's listed above), then run the install again")
                 continue
             name = "" if t.base else name_for(ctx, item, taken)
             extra_vars = dict(item.extra_vars)
@@ -100,7 +102,8 @@ def build_all(ctx: Context, state: dict, state_path: Path, logs: Path, verbose: 
             if name and t.import_script:
                 env["NAME"] = name
             log = logs / f"{t.id}.log"
-            print(f"[{n}/{len(items)}] {t.id}: building{f' {name}' if name else ''} (log: {log})", flush=True)
+            out.info(f"[{n}/{len(items)}] {t.id}: building{f' {name}' if name else ''}…")
+            out.detail(f"log: {log}")
             started = time.time()
             ok = run(argv, dict(base_env, **env), ctx.manifest.src, log, verbose)
             minutes = (time.time() - started) / 60
@@ -111,12 +114,15 @@ def build_all(ctx: Context, state: dict, state_path: Path, logs: Path, verbose: 
                                  "left_out": item.left_out, "minutes": round(minutes, 1),
                                  "date": f"{date.today():%Y-%m-%d}", "log": str(log)}
                 taken.add(name)
-                print(f"    built in {minutes:.0f} min")
+                out.ok(f"{t.id}: built in {minutes:.0f} min ({name})")
             else:
                 records[t.id] = {"status": "failed", "minutes": round(minutes, 1), "log": str(log),
                                  "tail": tail(log)}
-                print(f"    FAILED after {minutes:.0f} min; the end of its log:")
-                print("      " + "\n      ".join(tail(log, 12).splitlines()))
+                out.fail(f"{t.id}: the build failed after {minutes:.0f} min",
+                         error=f"packer/build.sh exited non-zero (command: {' '.join(argv)})",
+                         fix="the log's end above usually names the step that failed; fix it and run the install again "
+                             "(built templates are kept, so only this one rebuilds)",
+                         log=log, tail=tail(log))
             save(state_path, state)
     finally:
         if media:

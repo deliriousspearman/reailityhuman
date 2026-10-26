@@ -17,6 +17,7 @@ import ssl
 from pathlib import Path
 
 from . import builds, catalogue, checks, isos, report, tests
+from .out import out
 from .checks import Context
 from .config import Config, ConfigError, ask, confirm, interactive
 from .manifest import Manifest
@@ -40,7 +41,10 @@ def main() -> int:
     p.add_argument("--skip-templates", action="store_true", help="don't build templates")
     p.add_argument("--verify-isos", action="store_true", help="also check each ISO's SHA-256 (slow)")
     p.add_argument("--verbose", action="store_true", help="show the builds' whole output")
+    p.add_argument("--no-color", action="store_true", help="no colour in the output (also NO_COLOR=1)")
     a = p.parse_args()
+    if a.no_color:
+        out.colour = False
     if a.yes:
         os.environ["LAB_INSTALL_YES"] = "1"
     asking = interactive()
@@ -48,11 +52,11 @@ def main() -> int:
     try:
         cfg = Config.load(a.config)
         if not a.config.exists():
-            print(f"No {a.config} yet: answer these (they're saved there), or Ctrl+C and copy lab-install.toml.example.")
+            out.info(f"No {a.config} yet: answer these (they're saved there), or Ctrl+C and copy lab-install.toml.example.")
         cfg.complete(asking)
     except ConfigError as e:
-        print(f"Config: {e}", file=sys.stderr)
-        return 1
+        return fail(f"the config can't be used: {e}",
+                    f"fix {a.config} (copy deploy/install/lab-install.toml.example for the comments), then run the install again")
     if a.only:
         cfg.data["templates"]["build"] = [x.strip() for x in a.only.split(",")]
     if a.rebuild:
@@ -64,10 +68,14 @@ def main() -> int:
     panel = f"https://{cfg.get('panel', 'address')}"
 
     step("Checks")
-    checks.run(ctx, state, a.verify_isos)
+    try:
+        checks.run(ctx, state, a.verify_isos)
+    except Exception as e:  # noqa: BLE001  a check itself broke
+        out.unexpected("The checks", e, WORK / "install.log")
+        return 1
     report.print_checks(ctx)
     if ctx.failed and not ctx.vc:
-        return fail("vCenter can't be used; fix the above and run it again.")
+        return fail("vCenter can't be used, so nothing else can run", "fix the failures above and run the install again")
 
     if a.command == "clean-isos":
         removed = isos.clean(ctx, state, cfg.get("templates", "remove_isos") if not asking else "ask", asking)
@@ -80,9 +88,10 @@ def main() -> int:
     else:
         report.print_summary(ctx)
     if a.check:
+        out.summary()
         return 1 if ctx.failed else 0
     if ctx.failed:
-        return fail("A check failed (above): fix it and run the install again.")
+        return fail("a check failed, so nothing was changed", "fix the failure(s) above and run the install again")
 
     # Step 5: go on without what isn't ready, or stop.
     not_ready = [i for i in ctx.items if i.status == "not ready"]
@@ -92,12 +101,14 @@ def main() -> int:
             choice = "skip" if asking and confirm(
                 f"{len(not_ready)} template(s) aren't ready. Build the rest without them?") else "cancel"
         if choice == "cancel":
-            return fail("Cancelled: nothing was changed. Fix what's missing (above) and run it again.")
+            return fail("cancelled: some templates aren't ready, and the config says to stop rather than skip them",
+                        "add what each one needs (above), or set [templates] on_missing = \"skip\" to build the rest without them")
         for i in not_ready:
             state.setdefault("templates", {})[i.t.id] = {"status": "skipped", "reason": "; ".join(i.reasons)}
         save(state_path, state)
     elif asking and not confirm("Go ahead?", True):
-        return fail("Cancelled: nothing was changed.")
+        out.info("Cancelled: nothing was changed.")
+        return 0
 
     WORK.mkdir(parents=True, exist_ok=True)
     if ctx.needs_setup:
@@ -112,7 +123,7 @@ def main() -> int:
         builds.build_all(ctx, state, state_path, WORK / "logs", a.verbose)
         step("The panel's catalogue")
         ready, planned = catalogue.write(manifest, state, cfg.get("vcenter", "template_folder"), ROOT)
-        print(f"  {ready} template(s) deployable, {planned} shown as coming soon.")
+        out.ok(f"{ready} template(s) deployable, {planned} shown as coming soon.")
         compose("up", "-d", "--no-build", "--force-recreate", "api", "worker")
         wait_for_panel(panel)
 
@@ -132,24 +143,30 @@ def main() -> int:
     records = state.get("templates", {})
     built = sum(1 for r in records.values() if r.get("status") == "built")
     failed = sum(1 for r in records.values() if r.get("status") == "failed")
-    print(f"  {built} template(s) built, {failed} failed. The report: {path}")
-    print(f"  The panel: {panel}")
+    for tid, r in records.items():
+        if r.get("status") == "failed":
+            out.warn(f"{tid} didn't build", fix=f"see its log ({r.get('log')}) and the report; run the install again to retry it")
+    out.ok(f"{built} template(s) built, {failed} failed.")
+    out.detail(f"report: {path}")
+    out.info(f"The panel: {panel}")
+    out.summary()
     return 1 if failed else 0
 
 
 def step(text: str) -> None:
-    print(f"\n=== {text}", flush=True)
+    out.step(text)
 
 
-def fail(text: str) -> int:
-    print(f"\n{text}", file=sys.stderr)
+def fail(text: str, fix: str = "") -> int:
+    """A failure that stops the install: shown now and in the summary."""
+    out.fail(text, fix=fix)
     return 1
 
 
 def setup_vcenter(ctx: Context, asking: bool) -> None:
     """vCenter's folders, roles and the panel account's rights (scripts/setup_vcenter.py)."""
     if asking and not confirm("vCenter needs its Labs folders or the panel's rights set up. Do it now?", True):
-        print("  Skipped: the panel can't deploy until it's done (scripts/setup_vcenter.py).")
+        out.warn("vCenter setup skipped", fix="run scripts/setup_vcenter.py (or the install again): the panel can't deploy until it's done")
         return
     v = ctx.cfg.data["vcenter"]
     argv = [sys.executable, "scripts/setup_vcenter.py", "--host", v["host"],
@@ -158,7 +175,12 @@ def setup_vcenter(ctx: Context, asking: bool) -> None:
             "--account", ctx.cfg.panel_account().user, "--account-password-file", v["panel_credentials"], "--yes"]
     if v["insecure"]:
         argv.append("--insecure")
-    subprocess.run(argv, cwd=SRC, check=False)
+    r = subprocess.run(argv, cwd=SRC, check=False)
+    if r.returncode == 0:
+        out.ok("vCenter's folders, roles and the panel's rights are set up")
+    else:
+        out.warn(f"setup_vcenter.py exited with status {r.returncode}",
+                 fix="its output above says what failed; the panel may lack some rights until it's fixed")
     ctx.inv = ctx.vc.inventory(v["datacenter"], v["cluster"], v["datastore"], v["network"], v["template_folder"])
 
 
@@ -179,8 +201,8 @@ def install_panel(cfg: Config) -> None:
                         "/data/caddy/pki/authorities/local/root.crt"], capture_output=True, text=True)
     if r.returncode == 0:
         cert.write_text(r.stdout)
-        print(f"  Browsers trust the panel once they trust its root certificate: {cert}")
-    print(f"  The panel is up: https://{cfg.get('panel', 'address')}")
+        out.detail(f"browsers trust the panel once they trust its root certificate: {cert}")
+    out.ok(f"the panel is up: https://{cfg.get('panel', 'address')}")
 
 
 def write_env(cfg: Config) -> None:
@@ -228,11 +250,18 @@ def wait_for_panel(panel: str, minutes: int = 3) -> None:
                 return
         except OSError:
             time.sleep(5)
-    print(f"  The panel didn't answer at {panel} within {minutes} minutes; carrying on.")
+    out.warn(f"the panel didn't answer at {panel} within {minutes} minutes",
+             fix="check it started: docker compose -p lab-deploy logs api; carrying on for now")
 
 
 if __name__ == "__main__":
     try:
         sys.exit(main())
     except KeyboardInterrupt:
-        sys.exit("\nStopped. Run it again to carry on where it stopped.")
+        out.line()
+        out.info("Stopped. Run it again to carry on where it stopped.")
+        sys.exit(130)
+    except Exception as e:  # noqa: BLE001  nothing should reach here; if it does, show it readably
+        out.unexpected("The install", e, WORK / "install.log")
+        out.summary()
+        sys.exit(1)

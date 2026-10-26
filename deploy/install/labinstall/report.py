@@ -4,34 +4,40 @@ from datetime import date, timedelta
 from pathlib import Path
 
 from .checks import FAIL, OK, WARN, Context
+from .out import out
 
-MARK = {OK: "ok  ", WARN: "warn", FAIL: "FAIL"}
+LEVEL = {OK: "ok", WARN: "warn", FAIL: "fail"}
 
 
 def print_checks(ctx: Context) -> None:
+    """Each check as an outcome (✔ OK, ! WARN, ✘ FAIL), grouped by area; the warnings and failures are
+    kept for the summary. A warning or failure carries the fix its check set."""
     area = None
     for c in ctx.checks:
         if c.area != area:
             area = c.area
-            print(f"\n{area}")
-        print(f"  [{MARK[c.status]}] {c.detail}")
+            out.line()
+            out.line(out.style("bold", f"  {area}"))
+        out.outcome(LEVEL[c.status], c.detail, fix=c.fix)
 
 
 def print_summary(ctx: Context) -> None:
-    print("\nTemplates")
-    width = max((len(i.t.id) for i in ctx.items), default=10)
+    out.line()
+    out.line(out.style("bold", "  Templates"))
     for i in ctx.items:
         if i.status == "built":
-            line = f"built already ({i.existing})"
+            out.ok(f"{i.t.id}: built already ({i.existing})")
         elif i.status == "ready":
-            line = "ready"
             if i.left_out:
-                line += f"; without {', '.join(f'{e} ({why})' for e, why in i.left_out.items())}"
+                out.warn(f"{i.t.id}: ready, but without {', '.join(f'{e} ({why})' for e, why in i.left_out.items())}",
+                         fix="add what each left-out extra needs (the ISO or media above) and rebuild, or leave it out")
+            else:
+                out.ok(f"{i.t.id}: ready to build")
         else:
-            line = "NOT READY: " + "; ".join(i.reasons)
-        print(f"  {i.t.id:<{width}}  {line}")
+            out.warn(f"{i.t.id}: not ready: {'; '.join(i.reasons)}",
+                     fix="add what it needs (above), or it's skipped")
     counts = {s: sum(1 for i in ctx.items if i.status == s) for s in ("ready", "built", "not ready")}
-    print(f"\n  {counts['ready']} to build, {counts['built']} built already, {counts['not ready']} not ready.")
+    out.info(f"{counts['ready']} to build, {counts['built']} built already, {counts['not ready']} not ready.")
 
 
 def write(ctx: Context, state: dict, path: Path, panel: str, removed: list[str]) -> None:
@@ -68,5 +74,5 @@ def write(ctx: Context, state: dict, path: Path, panel: str, removed: list[str])
     if removed:
         lines += ["", "## ISOs removed", "", "Carry these in again before rebuilding their templates:", ""]
         lines += [f"- {f}" for f in removed]
-    lines += ["", "## Checks", ""] + [f"- {c.area}: {c.status}: {c.detail}" for c in ctx.checks]
+    lines += ["", "## Checks", ""] + [f"- {c.area}: {c.status}: {c.detail}" + (f" (fix: {c.fix})" if c.fix else "") for c in ctx.checks]
     path.write_text("\n".join(lines) + "\n")

@@ -4,6 +4,7 @@ templates are built (docs/offline-install.md, step 10)."""
 import hashlib
 
 from .config import ask, confirm
+from .out import out
 from .vcenter import VCenterError
 
 
@@ -11,7 +12,7 @@ def sha256_of(ctx, file: str) -> str:
     """Reads a datastore ISO back through vCenter (slow: the whole file over the network)."""
     h = hashlib.sha256()
     path = f"{ctx.cfg.get('vcenter', 'iso_folder')}/{file}"
-    print(f"  Checking {file}…", flush=True)
+    out.info(f"Checking {file}…")
     with ctx.vc.open_file(ctx.inv, path) as r:
         while chunk := r.read(4 << 20):
             h.update(chunk)
@@ -47,14 +48,14 @@ def clean(ctx, state: dict, mode: str, interactive: bool) -> list[str]:
     """Removes the ISOs `mode` says (none, all, keep-windows, ask). Returns the files removed."""
     files = candidates(ctx, state)
     if not files:
-        print("  No ISOs to remove: each one is still needed by a template not built yet, or none are ours.")
+        out.info("No ISOs to remove: each one is still needed by a template not built yet, or none are ours.")
         return []
     total = sum(s for _, s, _ in files) / 1024**3
     windows = sum(s for _, s, w in files if w) / 1024**3
     if mode == "ask":
         if not interactive:
             return []
-        print(f"\n  The ISOs of the templates built take {total:.1f} GB ({windows:.1f} GB of it Windows').")
+        out.info(f"The ISOs of the templates built take {total:.1f} GB ({windows:.1f} GB of it Windows').")
         print("  Templates don't need them; rebuilding one does (Windows' evaluations expire, so those get rebuilt).")
         print("    1. Keep them all\n    2. Remove them all\n    3. Keep only Windows' (frees "
               f"{total - windows:.1f} GB)\n    4. Choose")
@@ -73,9 +74,9 @@ def clean(ctx, state: dict, mode: str, interactive: bool) -> list[str]:
         try:
             ctx.vc.delete_file(ctx.inv, f"{folder}/{f}")
             removed.append(f)
-            print(f"  Removed {f}")
+            out.ok(f"removed {f}")
         except VCenterError as e:
-            print(f"  Couldn't remove {f}: {e}")
+            out.warn(f"couldn't remove {f}: {e}", fix="remove it by hand from the datastore browser if you want the space back")
         except Exception as e:  # a vSphere fault
-            print(f"  Couldn't remove {f}: {getattr(e, 'msg', e)}")
+            out.warn(f"couldn't remove {f}: {getattr(e, 'msg', e)}", fix="remove it by hand from the datastore browser if you want the space back")
     return removed

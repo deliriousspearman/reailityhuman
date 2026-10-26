@@ -23,6 +23,7 @@ class Check:
     area: str
     status: str
     detail: str
+    fix: str = ""
 
 
 @dataclass
@@ -50,8 +51,8 @@ class Context:
     items: list[Item] = field(default_factory=list)
     needs_setup: bool = False
 
-    def add(self, area: str, status: str, detail: str) -> None:
-        self.checks.append(Check(area, status, detail))
+    def add(self, area: str, status: str, detail: str, fix: str = "") -> None:
+        self.checks.append(Check(area, status, detail, fix))
 
     @property
     def failed(self) -> bool:
@@ -76,32 +77,38 @@ def run(ctx: Context, state: dict, verify_isos: bool = False) -> None:
         ctx.vc = VCenter(cfg.get("vcenter", "host"), admin.user, admin.password, cfg.get("vcenter", "insecure"))
         ctx.add("vCenter", OK, f"{admin.user} signs in")
     except (ConfigError, VCenterError) as e:
-        ctx.add("vCenter", FAIL, str(e))
+        ctx.add("vCenter", FAIL, f"the admin account can't be used: {e}",
+                "check [vcenter] host and admin_credentials in the config (the file has the user then the password)")
         return
     try:
         panel = cfg.panel_account()
         VCenter(cfg.get("vcenter", "host"), panel.user, panel.password, cfg.get("vcenter", "insecure")).close()
         ctx.add("vCenter", OK, f"the panel's account, {panel.user}, signs in")
     except (ConfigError, VCenterError) as e:
-        ctx.add("vCenter", FAIL, f"the panel's account: {e}")
+        ctx.add("vCenter", FAIL, f"the panel's account can't sign in: {e}",
+                "check [vcenter] panel_credentials; create the account in vCenter if it isn't there")
         panel = None
     v = cfg.data["vcenter"]
     try:
         ctx.inv = ctx.vc.inventory(v["datacenter"], v["cluster"], v["datastore"], v["network"], v["template_folder"])
     except VCenterError as e:
-        ctx.add("vCenter", FAIL, str(e))
+        ctx.add("vCenter", FAIL, f"vCenter's inventory can't be read: {e}",
+                "check [vcenter] datacenter, cluster and datastore match the names in vCenter")
         return
     inv = ctx.inv
     if inv.network is None:
-        ctx.add("vCenter", FAIL, f"no port group '{v['network']}' in {v['datacenter']}")
+        ctx.add("vCenter", FAIL, f"no port group '{v['network']}' in {v['datacenter']}",
+                "make the port group (a VLAN for the lab), or set [vcenter] network to one that exists")
     if inv.template_folder is None or inv.machine_folder is None:
         ctx.needs_setup = True
-        ctx.add("vCenter", WARN, f"no {v['template_folder']} or {MACHINE_FOLDER} folder yet: setup_vcenter.py makes them")
+        ctx.add("vCenter", WARN, f"no {v['template_folder']} or {MACHINE_FOLDER} folder yet",
+                "the install runs setup_vcenter.py to make them and grant the panel's rights")
     elif panel:
         missing = set(panel_privileges(ctx.manifest.src)) - ctx.vc.privileges(inv.machine_folder, panel.user)
         if missing:
             ctx.needs_setup = True
-            ctx.add("vCenter", WARN, f"{panel.user} lacks {len(missing)} of the panel's rights on {MACHINE_FOLDER}: setup_vcenter.py grants them")
+            ctx.add("vCenter", WARN, f"{panel.user} lacks {len(missing)} of the panel's rights on {MACHINE_FOLDER}",
+                    "the install runs setup_vcenter.py to grant them")
         else:
             ctx.add("vCenter", OK, f"{panel.user} has the panel's rights")
 
@@ -112,27 +119,33 @@ def run(ctx: Context, state: dict, verify_isos: bool = False) -> None:
             ctx.add("Hosts", OK, f"{h.name}'s clock agrees with this server's")
         else:
             ctx.add("Hosts", WARN, f"{h.name}'s clock is {skew / 60:.0f} minutes off this server's "
-                    "(evaluation licences and certificates go by it)")
+                    "(evaluation licences and certificates go by it)",
+                    "set the host and this server to the same NTP source, so Windows evaluations and certificates are dated right")
         if not ctx.vc.nested(h):
-            ctx.add("Hosts", WARN, f"{h.name} can't run nested hypervisors: Proxmox VE and XCP-ng won't build")
+            ctx.add("Hosts", WARN, f"{h.name} can't run nested hypervisors: Proxmox VE and XCP-ng won't build",
+                    "turn on hardware virtualisation for the host's VMs (expose it in the cluster/host settings), or skip those templates")
 
     # The ISO folder.
     files = ctx.vc.files(inv, v["iso_folder"])
     if files is None:
-        ctx.add("ISOs", FAIL, f"no folder '{v['iso_folder']}' on {v['datastore']}")
+        ctx.add("ISOs", FAIL, f"no folder '{v['iso_folder']}' on {v['datastore']}",
+                f"make a folder '{v['iso_folder']}' on {v['datastore']} and put the templates' ISOs in it (scripts/isos)")
         files = {}
     ctx.iso_files = files
 
     # The media folder.
     if not ctx.media_dir.is_dir():
-        ctx.add("Media", WARN, f"no media folder at {ctx.media_dir}: templates and extras that need it are left out")
+        ctx.add("Media", WARN, f"no media folder at {ctx.media_dir}: templates and extras that need it are left out",
+                "put the media folder in the bundle (scripts/isos/fetch-media.sh) if you want those templates and extras")
     else:
         ctx.add("Media", OK, f"{ctx.media_dir}, served at {ctx.media_url}")
         if not port_free(port):
-            ctx.add("Media", FAIL, f"port {port} is in use on this server: set [media] port")
+            ctx.add("Media", FAIL, f"port {port} is in use on this server",
+                    "set [media] port to a free port (ss -ltn shows what's in use)")
     office = (ctx.media_dir / "windows/office/setup.exe").is_file()
     if not office and not cfg.internet:
-        ctx.add("Media", WARN, "no Office files (windows/office): Windows templates are built without the Outlook extra")
+        ctx.add("Media", WARN, "no Office files (windows/office): Windows templates are built without the Outlook extra",
+                "put Office's setup files in media/windows/office if you want Outlook; otherwise ignore this")
 
     # Each template.
     mirror_results: dict[str, str | None] = {}
@@ -149,7 +162,8 @@ def run(ctx: Context, state: dict, verify_isos: bool = False) -> None:
     # Mirrors, once each.
     for m, problem in sorted(mirror_results.items()):
         if problem:
-            ctx.add("Mirrors", WARN, problem)
+            ctx.add("Mirrors", WARN, problem,
+                    "check the mirror's URL in the config and that this server reaches it; the templates needing it are left out otherwise")
         else:
             ctx.add("Mirrors", OK, f"{m}: {cfg.mirror(m.split(':')[0])} has {m.split(':', 1)[1]}")
 
@@ -159,12 +173,14 @@ def run(ctx: Context, state: dict, verify_isos: bool = False) -> None:
     free = ctx.vc.free_gb(inv)
     ctx.add("Room", OK if free >= need else WARN,
             f"the datastore has {free:.0f} GB free; the templates to build need at most {need} GB "
-            "(their disks are thin, so usually much less)")
+            "(their disks are thin, so usually much less)",
+            "" if free >= need else "free space on the datastore, or build fewer at once (--only), if a build runs out of room")
     if ready:
         total, used = ctx.vc.memory_gb(inv)
         biggest = max(i.t.memory_gb for i in ready)
         ctx.add("Room", OK if total - used >= biggest else WARN,
-                f"{total - used:.0f} of {total:.0f} GB of memory free; the largest build needs {biggest} GB")
+                f"{total - used:.0f} of {total:.0f} GB of memory free; the largest build needs {biggest} GB",
+                "" if total - used >= biggest else "free memory on the host before building, or that build may not power on")
 
 
 def assess(ctx: Context, t: Template, state: dict, built_names: set[str], mirror_results: dict,

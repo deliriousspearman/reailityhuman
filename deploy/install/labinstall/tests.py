@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 from .checks import Context
+from .out import out
 
 
 def run_tests(ctx: Context, state: dict, panel: str, mode: str, logs: Path) -> None:
@@ -21,8 +22,8 @@ def run_tests(ctx: Context, state: dict, panel: str, mode: str, logs: Path) -> N
             "--report", str(report)]
     if mode == "lifecycle":
         argv.append("--no-extras")
-    print(f"Testing {len(todo)} template(s) through the panel ({'lifecycle' if mode == 'lifecycle' else 'every extra'}); "
-          f"report: {report}", flush=True)
+    out.info(f"Testing {len(todo)} template(s) through the panel ({'lifecycle' if mode == 'lifecycle' else 'every extra'})…")
+    out.detail(f"report: {report}")
     with open(logs / "e2e.log", "w") as log:
         subprocess.run(argv, cwd=ctx.manifest.src, stdout=log, stderr=subprocess.STDOUT)
     results = parse(report)
@@ -33,7 +34,15 @@ def run_tests(ctx: Context, state: dict, panel: str, mode: str, logs: Path) -> N
         else:
             records[t.id]["test"] = "passed" if all(v == "pass" for v in mine.values()) else "failed"
             records[t.id]["test_results"] = mine
-        print(f"  {t.id}: {records[t.id]['test']}")
+        result = records[t.id]["test"]
+        if result == "passed":
+            out.ok(f"{t.id}: passed its tests")
+        elif result == "failed":
+            out.fail(f"{t.id}: a test failed through the panel",
+                     fix="see the e2e report and e2e.log above; the template built but doesn't deploy cleanly",
+                     log=logs / "e2e.log")
+        else:
+            out.warn(f"{t.id}: {result}", fix="see e2e.log if a test was expected")
 
 
 def parse(report: Path) -> dict[str, str]:
