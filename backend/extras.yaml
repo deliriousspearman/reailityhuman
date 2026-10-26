@@ -1594,6 +1594,9 @@
   # No ports listed: it's alone on its template, so there's nothing to clash with.
   setupMinutes: 150
   minMemoryGB: 8
+  # Exchange's install writes tens of GB as the clone grows; counted so a deploy that would fill the
+  # datastore is refused up front (without this it under-counted and a Brookfield deploy filled it).
+  diskGB: 45
   notes:
     - "Outlook on the web: https://{ip}/owa, and the admin centre: https://{ip}/ecp. Sign in as the domain controller's user (DOMAIN\\user, with its password; its machine page has them). The certificate is self-signed."
     - "Unlicensed, Exchange runs as a 180-day trial. It uses the domain controller for DNS, so keep that running."
