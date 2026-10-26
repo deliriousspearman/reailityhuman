@@ -30,6 +30,17 @@ LAB = """
   planned: true
   machines:
     - {name: dc, template: not-built, version: "1"}
+- slug: wired
+  title: Wired
+  description: An agent registers with the instance's server.
+  machines:
+    - {name: srv, template: ubuntu, version: "26.04", bootOrder: 1, extras: [zabbix]}
+    - name: agent
+      template: ubuntu
+      version: "26.04"
+      bootOrder: 2
+      extras:
+        - {zabbix-agent: {zabbix: "@srv"}}
 """
 
 
@@ -268,3 +279,16 @@ def test_a_planting_failure_doesnt_fail_the_machine(queued, monkeypatch):
     dc = next(m for m in i["machines"] if m["role"] == "dc")
     log = client.get(f"/api/machines/{dc['id']}").json()["log"]
     assert any("Couldn't plant the 'root' flag" in line["text"] for line in log)
+
+
+def test_a_machine_ref_resolves_to_the_instances_machine(queued):
+    """@srv in the lab becomes the instance's srv machine id on the agent's extra."""
+    r = client.post("/api/instances", json={"lab": "wired", "owner": "jo", "hours": 4})
+    assert r.status_code == 201, r.text
+    i = r.json()
+    srv = next(m for m in i["machines"] if m["role"] == "srv")
+    agent = next(m for m in i["machines"] if m["role"] == "agent")
+    agent_extra = next(x for x in agent["extras"] if x["id"] == "zabbix-agent")
+    assert agent_extra["options"]["zabbix"] == srv["id"]
+    # srv sees the agent as a dependant (the usedBy wiring works across the instance).
+    assert agent["id"] in [d["id"] for d in srv["usedBy"]]

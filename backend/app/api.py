@@ -409,10 +409,12 @@ def resolve_extras(tpl: catalogue.LiveTemplate, chosen: list[dict], name: str) -
     return chosen
 
 
-def new_id(db: Session) -> str:
+def new_id(db: Session, taken: set[str] = frozenset()) -> str:
+    """A free machine id. `taken`: ids allocated this request but not yet in the database (a lab's
+    machines are given ids together, before any row is created)."""
     while True:
         machine_id = f"m-{secrets.token_hex(2)}"
-        if db.get(Machine, machine_id) is None:
+        if machine_id not in taken and db.get(Machine, machine_id) is None:
             return machine_id
 
 
@@ -674,13 +676,26 @@ def deploy_instance(req: InstanceRequest, db: Db) -> dict:
     owner = req.owner.strip().lower()
     if not OWNER_RULE.match(owner):
         raise HTTPException(422, OWNER_PROBLEM)
+    instance_id = new_instance_id(db)
+    # Pre-allocate each machine's id and name up front, so a member's extras can be wired to the
+    # instance's other machines (a lab machine option "@role" -> that machine's id) before anything
+    # is created. "<instance>-<role>": unique, and within Windows' 15 characters (labs.NAME_RULE).
+    ordered = sorted(lab.machines, key=lambda lm: lm.boot_order)
+    ids: dict[str, str] = {}
+    for lm in ordered:
+        ids[lm.name] = new_id(db, taken=set(ids.values()))
+    names = {lm.name: f"{instance_id.replace('-', '')}-{lm.name}" for lm in ordered}
     planned = []
     try:
-        for lm in sorted(lab.machines, key=lambda lm: lm.boot_order):
+        for lm in ordered:
             tpl = catalogue.find(lm.template, lm.version)
             if tpl is None:
                 raise HTTPException(409, f"{lab.title}'s {lm.name} comes from {lm.template} {lm.version}, which can't be deployed any more.")
-            planned.append((lm, tpl, resolve_extras(tpl, [{"id": i, "options": {}} for i in lm.extras], lm.name)))
+            chosen_in = [
+                {"id": lx.id, "options": {k: (ids[ref.group(1)] if (ref := labs.MACHINE_REF.match(v)) else v) for k, v in lx.options}}
+                for lx in lm.extras
+            ]
+            planned.append((lm, tpl, resolve_extras(tpl, chosen_in, names[lm.name])))
     except extras.ExtraError as e:
         raise HTTPException(422, str(e)) from e
     expired = db.scalar(select(func.count()).select_from(Machine).where(Machine.state == "expired"))
@@ -702,13 +717,10 @@ def deploy_instance(req: InstanceRequest, db: Db) -> dict:
         raise HTTPException(409, blocker)
     forget_capacity()
 
-    instance_id = new_instance_id(db)
     expires_at = None if req.hours is None else utcnow() + timedelta(hours=req.hours)
     first_turn = planned[0][0].boot_order
     for lm, tpl, chosen in planned:
-        # "<instance>-<role>", e.g. "i3fa2-dc": unique, and within Windows' 15 characters (labs.NAME_RULE).
-        name = f"{instance_id.replace('-', '')}-{lm.name}"
-        machine_id = new_id(db)
+        name, machine_id = names[lm.name], ids[lm.name]
         m = Machine(
             id=machine_id,
             name=name,

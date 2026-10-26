@@ -92,3 +92,59 @@ def test_total_memory_sums_the_machines(monkeypatch):
     )
     monkeypatch.setattr(catalogue, "find", lambda t, v: LiveTemplate(template="t", version="1", vsphere="x", cpu=2, memory_gb=4, disk_gb=40, username="a", family="windows"))
     assert labs.total_memory_gb(lab) == 8
+
+
+# Cross-machine extra wiring: a lab member's extra points at another machine by "@role".
+
+WIRED = """
+- slug: wired
+  title: Wired
+  description: A member joins the dc.
+  planned: true
+  machines:
+    - {name: dc, template: not-built, version: "1", bootOrder: 1}
+    - name: ws
+      template: not-built
+      version: "1"
+      bootOrder: 2
+      extras:
+        - {join-domain: {dc: "@dc"}}
+"""
+
+
+def test_a_machine_extra_can_point_at_another_machine(load):
+    lab = load(WIRED)["wired"]
+    ws = next(m for m in lab.machines if m.name == "ws")
+    assert ws.extras[0].id == "join-domain"
+    assert dict(ws.extras[0].options) == {"dc": "@dc"}
+
+
+def test_a_bare_extra_id_still_works(load):
+    lab = load(WIRED.replace('- {join-domain: {dc: "@dc"}}', "- join-domain"))["wired"]
+    ws = next(m for m in lab.machines if m.name == "ws")
+    assert ws.extras[0].id == "join-domain" and ws.extras[0].options == ()
+
+
+def test_machine_ref_must_name_a_real_machine(load):
+    with pytest.raises(ValueError, match="isn't one of the lab's machines"):
+        load(WIRED.replace("@dc", "@nope"))
+
+
+def test_machine_ref_must_boot_earlier(load):
+    with pytest.raises(ValueError, match="must boot before it"):
+        load(WIRED.replace("bootOrder: 2", "bootOrder: 1"))
+
+
+def test_a_machine_option_must_be_a_ref(load):
+    with pytest.raises(ValueError, match="must be set to another machine"):
+        load(WIRED.replace('{dc: "@dc"}', '{dc: "m-1234"}'))
+
+
+def test_a_ref_on_a_non_machine_option_is_refused(load):
+    with pytest.raises(ValueError, match="isn't a machine option"):
+        load(WIRED.replace("{dc: \"@dc\"}", "{netbios: \"@dc\"}").replace("join-domain", "domain-controller"))
+
+
+def test_an_unknown_option_is_refused(load):
+    with pytest.raises(ValueError, match="has no option"):
+        load(WIRED.replace('{dc: "@dc"}', '{nope: "@dc"}'))

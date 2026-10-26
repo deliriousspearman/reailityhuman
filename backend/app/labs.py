@@ -26,6 +26,19 @@ LEVELS = ("Beginner", "Intermediate", "Advanced")
 
 
 @dataclass(frozen=True)
+class LabExtra:
+    # An extra applied to a lab machine, with its options filled in. A machine option's value can be
+    # "@<role>", meaning the instance's machine with that role (e.g. a member joining the instance's
+    # "@dc"); the orchestration fills in that machine's id when the instance is deployed.
+    id: str
+    options: tuple[tuple[str, str], ...] = ()
+
+
+# A machine option's value of this form names another machine in the same instance, by role.
+MACHINE_REF = re.compile(r"^@([a-z][a-z0-9]{0,8})$")
+
+
+@dataclass(frozen=True)
 class LabMachine:
     # Role name, e.g. "dc"; the machine's hostname is "<instance>-<name>".
     name: str
@@ -35,9 +48,9 @@ class LabMachine:
     role: str = ""
     # Lower boots and sets up first: the domain controller (1) before members that join it (2+).
     boot_order: int = 1
-    # Extras applied when the machine is deployed (usually none: a lab's machines come from golden
-    # templates that are already set up).
-    extras: tuple[str, ...] = ()
+    # Extras applied when the machine is deployed, with their options. A member's machine option can
+    # point at an earlier machine in the instance with "@<role>".
+    extras: tuple[LabExtra, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -73,6 +86,19 @@ class Lab:
     planned: bool = False
 
 
+def _lab_extra(slug: str, machine: str, entry) -> LabExtra:
+    """One of a lab machine's extras: either "id" (no options) or {id: {option: value}}."""
+    if isinstance(entry, str):
+        return LabExtra(id=entry)
+    if not isinstance(entry, dict) or len(entry) != 1:
+        raise ValueError(f"labs.yaml: {slug}/{machine}: each extra is an id or a single {{id: {{options}}}} mapping")
+    (extra_id, options), = entry.items()
+    options = options or {}
+    if not isinstance(options, dict):
+        raise ValueError(f"labs.yaml: {slug}/{machine}: the options of '{extra_id}' must be a mapping")
+    return LabExtra(id=extra_id, options=tuple((k, str(v)) for k, v in options.items()))
+
+
 def _path():
     return settings().catalogue_path.with_name("labs.yaml")
 
@@ -95,7 +121,7 @@ def _load() -> list[Lab]:
                 version=str(m["version"]),
                 role=m.get("role", ""),
                 boot_order=int(m.get("bootOrder", 1)),
-                extras=tuple(m.get("extras", [])),
+                extras=tuple(_lab_extra(slug, m["name"], x) for x in m.get("extras", [])),
             )
             for m in e.get("machines", [])
         )
@@ -133,17 +159,40 @@ def _load() -> list[Lab]:
                 raise ValueError(f"labs.yaml: {slug}: '{m.name}' isn't a valid machine name (1-9 lowercase letters or digits, starting with a letter)")
             if m.boot_order < 1:
                 raise ValueError(f"labs.yaml: {slug}/{m.name}: bootOrder starts at 1")
+            # A machine option in a lab names another machine by "@role"; it must be a machine in the
+            # lab, carry the extra the option needs, and boot earlier (so it's up first).
+            boot = {lm.name: lm.boot_order for lm in lab.machines}
+            roles = {lm.name for lm in lab.machines}
+            for lx in m.extras:
+                x = extras.find(lx.id)
+                if x is None:
+                    raise ValueError(f"labs.yaml: {slug}/{m.name} lists extra '{lx.id}', which isn't in extras.yaml")
+                opts = {o.id: o for o in x.options}
+                for opt_id, value in lx.options:
+                    o = opts.get(opt_id)
+                    if o is None:
+                        raise ValueError(f"labs.yaml: {slug}/{m.name}: extra '{lx.id}' has no option '{opt_id}'")
+                    if ref := MACHINE_REF.match(value):
+                        target = ref.group(1)
+                        if o.type != "machine":
+                            raise ValueError(f"labs.yaml: {slug}/{m.name}: '{lx.id}.{opt_id}' is set to a machine (@{target}) but isn't a machine option")
+                        if target not in roles:
+                            raise ValueError(f"labs.yaml: {slug}/{m.name}: '{lx.id}.{opt_id}' points at @{target}, which isn't one of the lab's machines")
+                        if target == m.name:
+                            raise ValueError(f"labs.yaml: {slug}/{m.name}: '{lx.id}.{opt_id}' points at itself")
+                        if boot[target] >= m.boot_order:
+                            raise ValueError(f"labs.yaml: {slug}/{m.name}: '{lx.id}.{opt_id}' points at @{target}, which must boot before it (give @{target} a lower bootOrder)")
+                    elif o.type == "machine":
+                        raise ValueError(f"labs.yaml: {slug}/{m.name}: machine option '{lx.id}.{opt_id}' must be set to another machine as '@role'")
             # The template a machine comes from must exist (unless the whole lab is still planned),
             # and any extras it applies must be offered by that template.
             if not planned:
                 t = catalogue.find(m.template, m.version)
                 if t is None:
                     raise ValueError(f"labs.yaml: {slug}/{m.name} uses {m.template} {m.version}, which isn't a template that can be deployed (mark the lab planned until it's built)")
-                for extra_id in m.extras:
-                    if extras.find(extra_id) is None:
-                        raise ValueError(f"labs.yaml: {slug}/{m.name} lists extra '{extra_id}', which isn't in extras.yaml")
-                    if extra_id not in t.extras:
-                        raise ValueError(f"labs.yaml: {slug}/{m.name}: {m.template} {m.version} doesn't offer the extra '{extra_id}'")
+                for lx in m.extras:
+                    if lx.id not in t.extras:
+                        raise ValueError(f"labs.yaml: {slug}/{m.name}: {m.template} {m.version} doesn't offer the extra '{lx.id}'")
         out.append(lab)
     if len({lab.slug for lab in out}) != len(out):
         raise ValueError("labs.yaml: two labs share a slug")
@@ -171,5 +220,5 @@ def total_memory_gb(lab: Lab) -> int:
     for m in lab.machines:
         t = catalogue.find(m.template, m.version)
         if t is not None:
-            total += extras.memory_gb(t.memory_gb, [{"id": i} for i in m.extras])
+            total += extras.memory_gb(t.memory_gb, [{"id": lx.id} for lx in m.extras])
     return total
