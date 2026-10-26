@@ -113,12 +113,48 @@ pass-the-ticket, SMB signing off. Plus file shares, users and sample emails.
 | 5 | The golden set: build the lab once (Exchange takes about 2.5 hours), save its three machines as templates, and mark Brookfield live | — |
 | 6 | End-to-end test of a whole instance | — |
 
-### 2. A batch of services (medium, each)
+### 2. The install script: clear outcomes, colours and full errors (small to medium)
+
+Asked 2026-10-26. The offline install (`deploy/install.sh` and `deploy/install/labinstall`, see
+[offline-install.md](offline-install.md)) prints plain text today. The bash part prints `==> step` lines, and
+the Python part prints `[ok]`, `[warn]` and `[FAIL]` in its check report and `FAILED` after a build. Some
+errors are a single line pointing at a log ("Docker didn't install: see …/docker-install.log").
+
+**Outcomes.** Every step and check ends in one of three, marked the same way in both parts:
+- **Success** (green `✔ OK`): what was done, e.g. "Docker 27.3 installed from the bundle".
+- **Warning** (yellow `! WARN`): it carries on, but something is left out or needs a look, e.g. a template
+  skipped because its ISO is missing, or no media folder.
+- **Failed** (red `✘ FAIL`): it stops, or that item is left out, and the summary at the end lists it again.
+
+Steps get a bold heading, and details and log paths are dimmed.
+
+**Colours only where they work.** Only when the output is a terminal, and never with `NO_COLOR` set or
+`--no-color` given. The text alone still says which outcome it is, so logs and the Markdown report stay
+readable without them. `docker run` gets `-t` only at a terminal, as it does now.
+
+**Verbose errors.** Every failure says:
+- what it was doing;
+- what went wrong: the command or call and its exit code or exception, not just "failed";
+- the end of the relevant log, inline (the last 20 or so lines), and the log's full path;
+- what to do next: the likely cause and the fix, where it's known.
+
+For example: vCenter refusing sign-in names the user and host; a bundle checksum failure names each damaged
+file; a Docker install failure shows dpkg's errors. Unexpected Python exceptions print a traceback to the
+log and a readable summary on screen, never a bare traceback alone.
+
+**Also:** the final summary gives a count of each outcome and lists every warning and failure with its fix.
+`--verbose` keeps its meaning (every build's output as it runs).
+
+**Tests.** Unit tests for the output helpers (colours on and off, `NO_COLOR`, not a terminal); a forced
+failure in each part (a damaged bundle file, a wrong vCenter password, a missing ISO) shows the full error;
+shellcheck passes on `install.sh`.
+
+### 3. A batch of services (medium, each)
 
 Asked 2026-10-23, each with an option for example data: GitLab CE, Jenkins, Prometheus, FreeBSD,
 Alpine, FreeIPA (on Rocky), ELK, Graylog, k3s, Redis, MongoDB and Tomcat.
 
-### 3. Keep a vCenter session open in the API (small)
+### 4. Keep a vCenter session open in the API (small)
 
 **Why.** The panel signs in to vCenter for each request, and on this vCenter that takes 14 to 20
 seconds. Opening a console therefore takes about 25 seconds, and the health and capacity checks are
@@ -141,7 +177,7 @@ just as slow.
 **Separately:** find out why sign-in is slow on this vCenter. DNS lookups inside the appliance or
 single sign-on are the usual causes. Production may not have the problem.
 
-### 4. Console on the other systems (small)
+### 5. Console on the other systems (small)
 
 Open the console on each of these and check the screen, the keyboard, and Ctrl+Alt+Del:
 
@@ -159,7 +195,7 @@ Open the console on each of these and check the screen, the keyboard, and Ctrl+A
 Fix what turns up. Add a note on the console page for any system that needs one, for example how to
 sign in at the OPNsense menu.
 
-### 5. More templates (medium, each)
+### 6. More templates (medium, each)
 
 | Template | Approach | Notes |
 |---|---|---|
@@ -169,7 +205,7 @@ sign in at the OPNsense menu.
 Each follows the usual path: `packer/<name>`, ISO in `scripts/isos/isos.txt`, entry in
 `templates.yaml`, e2e tests, commit.
 
-### 6. Capacity warnings (small)
+### 7. Capacity warnings (small)
 
 Alerts on the panel's Admin page, and refusal to deploy, when one of these runs low:
 - the datastore (done: deploys keep `DATASTORE_RESERVE_GB` free);
