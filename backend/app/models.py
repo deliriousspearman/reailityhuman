@@ -45,6 +45,14 @@ class Machine(Base):
     ssh_key: Mapped[str | None] = mapped_column(Text)
     # Extras chosen at deploy, with every option filled in: [{"id": "apache-https", "options": {...}}].
     extras: Mapped[list] = mapped_column(JSON, default=list)
+    # Pro Labs: the instance it belongs to ("i-xxxx"), its lab's slug and its role name in the lab
+    # (labs.yaml); None for a machine deployed on its own.
+    instance_id: Mapped[str | None] = mapped_column(String(16), index=True)
+    lab: Mapped[str | None] = mapped_column(String(32))
+    role: Mapped[str | None] = mapped_column(String(16))
+    # The action it waits to run (deploy or reset) until the machines before it in the lab's boot
+    # order are ready; actions.advance_instance queues it then.
+    pending: Mapped[str | None] = mapped_column(String(16))
 
     log: Mapped[list["LogLine"]] = relationship(
         back_populates="machine", cascade="all, delete-orphan", order_by="LogLine.id"

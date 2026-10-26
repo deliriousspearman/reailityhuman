@@ -11,7 +11,7 @@ from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select, text
 
-from . import catalogue, cloudinit, extras
+from . import catalogue, cloudinit, extras, labs
 from .config import settings
 from .db import session
 from .models import STABLE_STATES, Job, LogLine, Machine, utcnow
@@ -338,8 +338,20 @@ def _asked_to_cancel(job_id: int) -> Callable[[], str | None]:
     return asked
 
 
-def run(job_id: int, machine_id: str, action: str) -> None:
-    """Runs one job, recording its progress and outcome."""
+def run(job_id: int, machine_id: str, action: str, enqueue: Callable[[str, str, str], None] | None = None) -> None:
+    """Runs one job, recording its progress and outcome. For a lab's machine, the next machines in its
+    boot order are queued after (`enqueue(machine_id, action, by)`, as the API queues jobs)."""
+    with session() as s:
+        m = s.get(Machine, machine_id)
+        instance_id = m.instance_id if m else None
+    try:
+        _start(job_id, machine_id, action)
+    finally:
+        if instance_id and enqueue:
+            advance_instance(instance_id, enqueue)
+
+
+def _start(job_id: int, machine_id: str, action: str) -> None:
     with session() as s:
         job = s.get(Job, job_id)
         if job.cancelled_by:  # while it waited in the queue
@@ -386,6 +398,50 @@ def _run(job_id: int, machine_id: str, action: str) -> None:
     with session() as s:
         job = s.get(Job, job_id)
         job.state, job.finished_at = "done", utcnow()
+
+
+# Pro Labs ---------------------------------------------------------------------------------------------
+
+
+def advance_instance(instance_id: str, enqueue: Callable[[str, str, str], None]) -> None:
+    """Queues a lab instance's machines whose turn has come: those waiting (`pending`) with the lowest
+    boot order, once every machine before them is running. If one before them failed (or was stopped
+    or destroyed meanwhile), those waiting are failed too, as they'd set up without it (members of a
+    domain without its controller). Called after every job on a lab's machine, when a lab is deployed
+    or reset, and by the sweep; the rows are locked, so two callers never queue the same machine."""
+    queued: list[tuple[str, str]] = []
+    with session() as s:
+        machines = s.scalars(select(Machine).where(Machine.instance_id == instance_id).order_by(Machine.id).with_for_update()).all()
+        waiting = [m for m in machines if m.pending]
+        if not waiting:
+            return
+        lab = labs.find(machines[0].lab or "")
+        order = {lm.name: lm.boot_order for lm in lab.machines} if lab else {}
+        turn = min(order.get(m.role or "", 1) for m in waiting)
+        before = [m for m in machines if not m.pending and order.get(m.role or "", 1) < turn]
+        if any(m.state not in STABLE_STATES for m in before):
+            return  # still on their way
+        if failed := [m.role or m.name for m in before if m.state != "running"]:
+            for m in waiting:
+                verb = "deployed" if m.pending == "deploy" else m.pending
+                m.pending, m.state = None, "error"
+                s.add(LogLine(machine_id=m.id, text=f"Not {verb}: {', '.join(failed)} isn't running, and this machine needs it first.", tone="error"))
+            return
+        for m in waiting:
+            if order.get(m.role or "", 1) == turn:
+                queued.append((m.id, m.pending))
+                m.pending = None
+    for machine_id, action in queued:
+        enqueue(machine_id, action, SYSTEM)
+
+
+def advance_instances(enqueue: Callable[[str, str, str], None]) -> None:
+    """advance_instance for every instance with machines waiting: picks up where a job's own call
+    didn't happen (the worker stopped between the two)."""
+    with session() as s:
+        instance_ids = set(s.scalars(select(Machine.instance_id).where(Machine.pending.is_not(None))))
+    for instance_id in instance_ids:
+        advance_instance(instance_id, enqueue)
 
 
 def in_words(period: timedelta) -> str:

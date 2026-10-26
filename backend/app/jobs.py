@@ -19,13 +19,14 @@ app = procrastinate.App(connector=procrastinate.PsycopgConnector(conninfo=settin
 
 @app.task(name="machine_action")
 def machine_action(job_id: int, machine_id: str, action: str) -> None:
-    actions.run(job_id, machine_id, action)
+    actions.run(job_id, machine_id, action, enqueue)
 
 
 @app.periodic(cron="* * * * *")
 @app.task(name="sweep", queueing_lock="sweep")
 def sweep(timestamp: int) -> None:
     actions.recover_lost_jobs()
+    actions.advance_instances(enqueue)
     actions.expiry_sweep(enqueue)
     actions.reconcile()
     if timestamp % 3600 < 60:  # once an hour is plenty

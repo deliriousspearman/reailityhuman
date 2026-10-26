@@ -123,4 +123,4 @@ def run_queued(deferred: list[dict]) -> None:
     from app import actions
 
     while deferred:
-        actions.run(**deferred.pop(0))
+        actions.run(**deferred.pop(0), enqueue=jobs.enqueue)

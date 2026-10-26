@@ -14,7 +14,7 @@ from sqlalchemy import func, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, object_session
 
-from . import catalogue, cloudinit, console, extras, jobs
+from . import actions, catalogue, cloudinit, console, extras, jobs, labs
 from .config import settings
 from .deps import ANYONE, OWNER_RULE, Actor, Db, add_log, get_machine
 from .models import STABLE_STATES, Job, Machine, utcnow
@@ -68,6 +68,12 @@ def machine_out(m: Machine, log: bool = True, machines: list[Machine] | None = N
         ],
         # Machines whose extras point at this one (e.g. a Wazuh server's agents).
         "usedBy": [{"id": d.id, "name": d.name} for d, _ in extras.dependants(machines, m.id)],
+        # Pro Labs: its instance, lab and role there (empty for a machine deployed on its own), and
+        # what it's waiting to do until the machines before it in the lab's boot order are ready.
+        "instanceId": m.instance_id or "",
+        "lab": m.lab or "",
+        "role": m.role or "",
+        **({"pending": m.pending} if m.pending else {}),
         **(
             {"log": [{"at": ms(line.at), "text": line.text, **({"tone": line.tone} if line.tone else {})} for line in m.log]}
             if log
@@ -310,10 +316,7 @@ def deploy_machine(req: DeployRequest, db: Db) -> dict:
     # A complete image's own password, whatever its length: the rules are for passwords people choose.
     password = tpl.fixed_password or password
     try:
-        chosen = extras.resolve(tpl.extras, [c.model_dump() for c in req.extras], req.name, tpl.choices)
-        if tpl.always:
-            # What the template sets up on every machine, first; checked against the rest for clashes.
-            chosen = extras.resolve(tpl.extras + tpl.always, [{"id": i, "options": {}} for i in tpl.always] + chosen, req.name, tpl.choices)
+        chosen = resolve_extras(tpl, [c.model_dump() for c in req.extras], req.name)
         for x, o, other_id in extras.machine_options(chosen):
             extras.check_machine(x, o, db.get(Machine, other_id))
     except extras.ExtraError as e:
@@ -374,6 +377,15 @@ def deploy_machine(req: DeployRequest, db: Db) -> dict:
     queue(db, m, "deploy", owner)
     db.refresh(m)
     return machine_out(m)
+
+
+def resolve_extras(tpl: catalogue.LiveTemplate, chosen: list[dict], name: str) -> list[dict]:
+    """The extras chosen for a machine of this template, checked, with every option filled in."""
+    chosen = extras.resolve(tpl.extras, chosen, name, tpl.choices)
+    if tpl.always:
+        # What the template sets up on every machine, first; checked against the rest for clashes.
+        chosen = extras.resolve(tpl.extras + tpl.always, [{"id": i, "options": {}} for i in tpl.always] + chosen, name, tpl.choices)
+    return chosen
 
 
 def new_id(db: Session) -> str:
@@ -479,17 +491,28 @@ def cancel_jobs(machine_id: str, db: Db, who: Actor) -> dict:
     """Cancels the machine's jobs: those waiting are dropped, and the running one stops at its next
     check (within seconds). The machine is then marked failed, so it can be redeployed or destroyed."""
     m = get_machine(db, machine_id)
-    pending = db.scalars(
-        select(Job).where(Job.machine_id == m.id, Job.state.in_(("queued", "running")), Job.cancelled_by.is_(None))
-    ).all()
-    if not pending:
+    if not _cancel(db, m, who):
         raise HTTPException(409, f"{m.name} has nothing waiting or running to cancel.")
-    for job in pending:
-        job.cancelled_by = who
-    add_log(db, m, "Cancel requested" if who == ANYONE else f"Cancel requested by {who}", "muted")
     db.commit()
     db.refresh(m)
     return machine_out(m)
+
+
+def _cancel(db: Session, m: Machine, who: str) -> bool:
+    """Cancels the machine's jobs, and a lab machine's turn it's waiting for. False: nothing to cancel."""
+    pending = db.scalars(
+        select(Job).where(Job.machine_id == m.id, Job.state.in_(("queued", "running")), Job.cancelled_by.is_(None))
+    ).all()
+    if not pending and not m.pending:
+        return False
+    for job in pending:
+        job.cancelled_by = who
+    if m.pending:
+        add_log(db, m, f"{'Deploy' if m.pending == 'deploy' else m.pending.capitalize()} cancelled{'' if who == ANYONE else f' by {who}'} before its turn.", "warn")
+        m.pending, m.state = None, "error"
+    else:
+        add_log(db, m, "Cancel requested" if who == ANYONE else f"Cancel requested by {who}", "muted")
+    return True
 
 
 @router.post("/machines/{machine_id}/extend")
@@ -538,6 +561,199 @@ def _revive_or_save(db: Session, m: Machine, who: str) -> dict:
         db.commit()
     db.refresh(m)
     return machine_out(m)
+
+
+# Lab instances ----------------------------------------------------------------------------------------
+
+
+class InstanceRequest(BaseModel):
+    lab: str = Field(max_length=32)
+    owner: str = Field(max_length=64)
+    # None: keep permanently.
+    hours: int | None = Field(default=None, ge=1, le=MAX_HOURS)
+
+
+def new_instance_id(db: Session) -> str:
+    while True:
+        instance_id = f"i-{secrets.token_hex(2)}"
+        if db.scalar(select(Machine).where(Machine.instance_id == instance_id).limit(1)) is None:
+            return instance_id
+
+
+def instance_machines(db: Session, instance_id: str) -> list[Machine]:
+    """The instance's machines, in their lab's boot order."""
+    machines = db.scalars(select(Machine).where(Machine.instance_id == instance_id).order_by(Machine.created_at, Machine.id)).all()
+    if not machines:
+        raise HTTPException(404, "There's no lab instance with that id. It may have been destroyed.")
+    lab = labs.find(machines[0].lab or "")
+    order = {lm.name: lm.boot_order for lm in lab.machines} if lab else {}
+    return sorted(machines, key=lambda m: order.get(m.role or "", 1))
+
+
+def instance_state(machines: list[Machine]) -> str:
+    """The whole instance's state: busy while any machine is, then error, expired, stopped or running."""
+    states = [m.state for m in machines]
+    for s in states:
+        if s not in STABLE_STATES:
+            return s
+    for s in ("error", "expired"):
+        if s in states:
+            return s
+    return "stopped" if all(s == "stopped" for s in states) else "running"
+
+
+def instance_out(db: Session, instance_id: str) -> dict:
+    machines = instance_machines(db, instance_id)
+    everyone = db.scalars(select(Machine)).all()
+    first = machines[0]
+    lab = labs.find(first.lab or "")
+    return {
+        "id": instance_id,
+        "lab": first.lab,
+        "title": lab.title if lab else first.lab,
+        "owner": first.owner,
+        "state": instance_state(machines),
+        "createdAt": ms(min(m.created_at for m in machines)),
+        "expiresAt": ms(first.expires_at),
+        "machines": [machine_out(m, log=False, machines=everyone) for m in machines],
+    }
+
+
+@router.get("/instances")
+def list_instances(db: Db) -> list[dict]:
+    instance_ids = db.scalars(select(Machine.instance_id).where(Machine.instance_id.is_not(None)).group_by(Machine.instance_id).order_by(func.min(Machine.created_at))).all()
+    return [instance_out(db, i) for i in instance_ids]
+
+
+@router.get("/instances/{instance_id}")
+def read_instance(instance_id: str, db: Db) -> dict:
+    return instance_out(db, instance_id)
+
+
+@router.post("/instances", status_code=201)
+def deploy_instance(req: InstanceRequest, db: Db) -> dict:
+    """Deploys every machine of a lab as one instance. They're set up in the lab's boot order (the
+    domain controller before the members that join it): each waits its turn (`pending`), and
+    actions.advance_instance queues it once the machines before it are running."""
+    cfg = settings()
+    lab = labs.find(req.lab)
+    if lab is None or lab.planned:
+        raise HTTPException(422, f"The lab {req.lab} can't be deployed yet.")
+    owner = req.owner.strip().lower()
+    if not OWNER_RULE.match(owner):
+        raise HTTPException(422, OWNER_PROBLEM)
+    planned = []
+    try:
+        for lm in sorted(lab.machines, key=lambda lm: lm.boot_order):
+            tpl = catalogue.find(lm.template, lm.version)
+            if tpl is None:
+                raise HTTPException(409, f"{lab.title}'s {lm.name} comes from {lm.template} {lm.version}, which can't be deployed any more.")
+            planned.append((lm, tpl, resolve_extras(tpl, [{"id": i, "options": {}} for i in lm.extras], lm.name)))
+    except extras.ExtraError as e:
+        raise HTTPException(422, str(e)) from e
+    expired = db.scalar(select(func.count()).select_from(Machine).where(Machine.state == "expired"))
+    count = db.scalar(select(func.count()).select_from(Machine)) - expired
+    if count + len(planned) > cfg.max_machines:
+        raise HTTPException(
+            409, f"{lab.title} has {len(planned)} machines, and there can be {cfg.max_machines} at a time ({count} now). Destroy some to deploy it."
+        )
+    if req.hours is None:
+        permanent = db.scalar(select(func.count()).select_from(Machine).where(Machine.expires_at.is_(None)))
+        if permanent + len(planned) > cfg.max_permanent:
+            raise HTTPException(409, f"{cfg.max_permanent} machines can be kept permanently, and {lab.title} has {len(planned)}. Set an expiry instead.")
+    if not cfg.vcenter_configured:
+        raise HTTPException(503, "vCenter isn't configured yet, so nothing can be deployed.")
+    blocker = capacity_blocker(
+        db, sum(extras.memory_gb(tpl.memory_gb, chosen) for _, tpl, chosen in planned), sum(extras.disk_gb(chosen) for *_, chosen in planned)
+    )
+    if blocker:
+        raise HTTPException(409, blocker)
+    forget_capacity()
+
+    instance_id = new_instance_id(db)
+    expires_at = None if req.hours is None else utcnow() + timedelta(hours=req.hours)
+    first_turn = planned[0][0].boot_order
+    for lm, tpl, chosen in planned:
+        # "<instance>-<role>", e.g. "i3fa2-dc": unique, and within Windows' 15 characters (labs.NAME_RULE).
+        name = f"{instance_id.replace('-', '')}-{lm.name}"
+        machine_id = new_id(db)
+        m = Machine(
+            id=machine_id,
+            name=name,
+            template=tpl.template,
+            version=tpl.version,
+            family=tpl.family,
+            owner=owner,
+            state="deploying",
+            expires_at=expires_at,
+            vm_name=f"{owner}-{name}-{machine_id.removeprefix('m-')}",
+            username=tpl.username,
+            password=tpl.fixed_password or cloudinit.generate_password(cfg.password_length),
+            extras=chosen,
+            instance_id=instance_id,
+            lab=lab.slug,
+            role=lm.name,
+            pending="deploy",
+        )
+        db.add(m)
+        try:
+            db.flush()
+        except IntegrityError as e:  # a machine already has the name: a leftover of an instance with the same id
+            db.rollback()
+            raise HTTPException(409, f"There's already a machine called {name}. Try again.") from e
+        add_log(db, m, f"Deploy requested by {owner}: the {lm.role or lm.name} of {lab.title} ({'kept permanently' if req.hours is None else hours_label(req.hours)})", "muted")
+        if lm.boot_order > first_turn:
+            earlier = ", ".join(o.name for o, *_ in planned if o.boot_order < lm.boot_order)
+            add_log(db, m, f"Waits for {earlier} to be ready first", "muted")
+    db.commit()
+    try:
+        actions.advance_instance(instance_id, jobs.enqueue)
+    except Exception as e:
+        raise HTTPException(503, f"Couldn't queue the jobs: {e}") from e
+    return instance_out(db, instance_id)
+
+
+@router.post("/instances/{instance_id}/reset")
+def reset_instance(instance_id: str, db: Db, who: Actor) -> dict:
+    """Resets every machine of the instance to its snapshot "clean", in the lab's boot order."""
+    machines = instance_machines(db, instance_id)
+    for m in machines:
+        require_idle(m)
+        if m.state == "expired":
+            raise HTTPException(409, f"{m.name} has expired. Extend the lab to use it again.")
+    for m in machines:
+        m.state, m.pending = "resetting", "reset"
+        add_log(db, m, "Reset requested with the whole lab" if who == ANYONE else f"Reset requested with the whole lab, asked by {who}", "muted")
+    db.commit()
+    try:
+        actions.advance_instance(instance_id, jobs.enqueue)
+    except Exception as e:
+        raise HTTPException(503, f"Couldn't queue the jobs: {e}") from e
+    return instance_out(db, instance_id)
+
+
+@router.delete("/instances/{instance_id}")
+def destroy_instance(instance_id: str, db: Db, who: Actor) -> dict:
+    """Destroys every machine of the instance, all at once."""
+    machines = instance_machines(db, instance_id)
+    for m in machines:
+        require_idle(m)
+    out = instance_out(db, instance_id)
+    for m in machines:
+        m.state = "destroying"
+        add_log(db, m, "Destroy requested with the whole lab" if who == ANYONE else f"Destroy requested with the whole lab, asked by {who}", "muted")
+        queue(db, m, "destroy", who)
+    return {**out, "state": "destroying"}
+
+
+@router.post("/instances/{instance_id}/cancel")
+def cancel_instance(instance_id: str, db: Db, who: Actor) -> dict:
+    """Cancels every job of the instance's machines, and the turns they're waiting for."""
+    cancelled = [_cancel(db, m, who) for m in instance_machines(db, instance_id)]
+    if not any(cancelled):
+        raise HTTPException(409, "The lab has nothing waiting or running to cancel.")
+    db.commit()
+    return instance_out(db, instance_id)
 
 
 # Leftover VMs -------------------------------------------------------------------------------------
