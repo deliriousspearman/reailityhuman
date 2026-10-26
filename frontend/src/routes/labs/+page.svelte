@@ -45,6 +45,7 @@
 			level={lab.level}
 			image={design?.image}
 			href="/labs/{lab.slug}"
+			soon={lab.planned}
 			tags={[lab.domain ? 'Active Directory' : 'Standalone hosts', `${lab.machines.length} machines`, `${lab.flags.length} flags`]}
 			note={lab.planned ? 'Being built: not deployable yet' : `Needs about ${lab.memoryGB} GB of memory`}
 		/>

@@ -124,45 +124,50 @@
 			{/if}
 		</div>
 
-		<form class="summary panel" onsubmit={deploy}>
-			<h2>Deploy</h2>
-			<div class="field">
-				<label for="owner">Owner</label>
-				<input
-					id="owner"
-					class="input mono-input"
-					bind:value={owner}
-					autocomplete="username"
-					spellcheck="false"
-					placeholder="e.g. john"
-					aria-invalid={!!ownerProblem}
-					aria-describedby="owner-hint"
-				/>
-				<p id="owner-hint" class="hint" class:problem={ownerProblem}>{ownerProblem ?? 'Your name; remembered in this browser.'}</p>
+		{#if lab.planned}
+			<div class="summary panel">
+				<h2>Deploy <span class="soon-tag">Soon</span></h2>
+				<p class="hint">{blocker}</p>
 			</div>
-			<fieldset>
-				<legend>Keep it for</legend>
-				<div class="options">
-					{#each DURATIONS as h (h)}
-						<label class="option">
-							<input type="radio" name="hours" value={h} bind:group={hours} />
-							<span>{hoursLabel(h)}</span>
-						</label>
-					{/each}
+		{:else}
+			<form class="summary panel" onsubmit={deploy}>
+				<h2>Deploy</h2>
+				<div class="field">
+					<label for="owner">Owner</label>
+					<input
+						id="owner"
+						class="input mono-input"
+						bind:value={owner}
+						autocomplete="username"
+						spellcheck="false"
+						placeholder="e.g. john"
+						aria-invalid={!!ownerProblem}
+						aria-describedby="owner-hint"
+					/>
+					<p id="owner-hint" class="hint" class:problem={ownerProblem}>{ownerProblem ?? 'Your name; remembered in this browser.'}</p>
 				</div>
-				<p class="hint">
-					Powered off at {clock(store.now + hours * 3_600_000, store.now)} and deleted {inWords(store.grace)} later, unless you extend it.
-				</p>
-			</fieldset>
-			{#if !lab.planned}
+				<fieldset>
+					<legend>Keep it for</legend>
+					<div class="options">
+						{#each DURATIONS as h (h)}
+							<label class="option">
+								<input type="radio" name="hours" value={h} bind:group={hours} />
+								<span>{hoursLabel(h)}</span>
+							</label>
+						{/each}
+					</div>
+					<p class="hint">
+						Powered off at {clock(store.now + hours * 3_600_000, store.now)} and deleted {inWords(store.grace)} later, unless you extend it.
+					</p>
+				</fieldset>
 				<p class="hint">{lab.machines.length} machines, about {lab.memoryGB} GB of memory.</p>
-			{/if}
-			{#if blocker}<p class="hint problem">{blocker}</p>{/if}
-			{#if failure}<p class="hint problem" role="alert">{failure}</p>{/if}
-			<button class="btn btn-primary" type="submit" disabled={!!ownerProblem || !!blocker || submitting}>
-				<Icon name="plus" /> {submitting ? 'Deploying…' : `Deploy ${lab.title}`}
-			</button>
-		</form>
+				{#if blocker}<p class="hint problem">{blocker}</p>{/if}
+				{#if failure}<p class="hint problem" role="alert">{failure}</p>{/if}
+				<button class="btn btn-primary" type="submit" disabled={!!ownerProblem || !!blocker || submitting}>
+					<Icon name="plus" /> {submitting ? 'Deploying…' : `Deploy ${lab.title}`}
+				</button>
+			</form>
+		{/if}
 	</div>
 {/if}
 
@@ -191,6 +196,7 @@
 	}
 	.layout {
 		display: grid;
+		grid-template-columns: minmax(0, 1fr);
 		gap: 1.5rem;
 		align-items: start;
 		margin-top: 1.5rem;
@@ -251,6 +257,10 @@
 	}
 	.summary h2 {
 		font-size: 1.3rem;
+	}
+	.summary h2 .soon-tag {
+		vertical-align: middle;
+		font-size: 0.75rem;
 	}
 	.field {
 		display: grid;

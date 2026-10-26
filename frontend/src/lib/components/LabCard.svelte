@@ -1,6 +1,6 @@
 <script lang="ts">
-	// A lab on the Pro Labs page: one that can be deployed (a link to its page), or a planned one,
-	// greyed out with a "Soon" tag.
+	// A lab on the Pro Labs page: one with a page (`href`), or a planned design, greyed out. `soon`: not
+	// deployable yet, which a lab with a page can also be (its templates aren't built).
 	import type { Level } from '$lib/types';
 
 	let {
@@ -11,7 +11,8 @@
 		image,
 		href,
 		note,
-	}: { title: string; description: string; level: Level; tags: string[]; image?: string; href?: string; note: string } = $props();
+		soon = !href,
+	}: { title: string; description: string; level: Level; tags: string[]; image?: string; href?: string; note: string; soon?: boolean } = $props();
 </script>
 
 <article class="lab-card" class:soon={!href}>
@@ -20,7 +21,10 @@
 			{#if image}<img class="picture" src={image} alt="" width="56" height="56" />{/if}
 			<h2>{#if href}<a {href}>{title}</a>{:else}{title}{/if}</h2>
 		</div>
-		<span class="level-chip" data-level={level.toLowerCase()}>{level}</span>
+		<span class="chips">
+			{#if soon && href}<span class="soon-tag">Soon</span>{/if}
+			<span class="level-chip" data-level={level.toLowerCase()}>{level}</span>
+		</span>
 	</header>
 	<p>{description}</p>
 	<ul class="lab-tags">
@@ -57,6 +61,11 @@
 		align-items: center;
 		justify-content: space-between;
 		gap: 0.75rem;
+	}
+	.chips {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
 	}
 	.card-title {
 		display: flex;
