@@ -157,3 +157,33 @@ def test_the_machine_limit_counts_the_whole_lab(monkeypatch):
 
 def test_unknown_instance_is_404():
     assert client.get("/api/instances/i-0000").status_code == 404
+
+
+def test_config_lists_the_labs():
+    got = {lab["slug"]: lab for lab in client.get("/api/config").json()["labs"]}
+    assert got["demo"]["planned"] is False and got["later"]["planned"] is True
+    assert [m["name"] for m in got["demo"]["machines"]] == ["dc", "web", "ws"]
+    assert got["demo"]["memoryGB"] > 0
+
+
+def test_extend_restarts_an_expired_lab_in_boot_order(queued):
+    from datetime import timedelta
+
+    from app.db import session
+    from app.models import Machine, utcnow
+
+    i = deploy()
+    run_queued(queued)
+    with session() as s:
+        for m in s.query(Machine).filter(Machine.instance_id == i["id"]):
+            m.expires_at = utcnow() - timedelta(minutes=1)
+    actions.expiry_sweep(jobs.enqueue)
+    run_queued(queued)
+    assert client.get(f"/api/instances/{i['id']}").json()["state"] == "expired"
+
+    r = client.post(f"/api/instances/{i['id']}/extend", json={"hours": 2})
+    assert r.status_code == 200, r.text
+    assert [q["machine_id"] for q in queued] == [roles(i)["dc"]["id"]]
+    run_queued(queued)
+    i = client.get(f"/api/instances/{i['id']}").json()
+    assert i["state"] == "running" and i["expiresAt"] > utcnow().timestamp() * 1000

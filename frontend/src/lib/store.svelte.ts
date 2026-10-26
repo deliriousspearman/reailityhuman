@@ -1,9 +1,9 @@
-// Single machines, jobs and capacity from the API, kept fresh by polling. Actions call the API and
+// Single machines, lab instances, jobs and capacity from the API, kept fresh by polling. Actions call the API and
 // put the machine it returns straight into the list, so the page reacts before the next poll; the
 // worker's progress (log lines, state changes) arrives with the polls.
 // There's no sign-in yet, so every machine is everyone's.
 import { api, ApiError, setActor } from './api';
-import type { Capacity, ExtraChoice, Job, MachineTemplate, PanelConfig, SingleMachine } from './types';
+import type { Capacity, DeployableLab, ExtraChoice, Instance, Job, MachineTemplate, PanelConfig, SingleMachine } from './types';
 
 const SEC = 1000;
 const HOUR = 3600 * SEC;
@@ -20,6 +20,7 @@ export interface Notice {
 
 class PanelStore {
 	machines = $state<SingleMachine[]>([]);
+	instances = $state<Instance[]>([]);
 	jobs = $state<Job[]>([]);
 	config = $state<PanelConfig | null>(null);
 	capacity = $state<Capacity | null>(null);
@@ -70,14 +71,16 @@ class PanelStore {
 		this.#lastPoll = Date.now();
 		try {
 			const watched = this.#watched;
-			const [machines, jobs, detail] = await Promise.all([
+			const [machines, instances, jobs, detail] = await Promise.all([
 				api<SingleMachine[]>('/machines'),
+				api<Instance[]>('/instances'),
 				api<Job[]>('/jobs?limit=50'),
 				watched ? api<SingleMachine>(`/machines/${encodeURIComponent(watched)}`).catch(() => null) : null,
 			]);
 			// Keep logs already fetched until a newer one arrives, so the page doesn't flicker.
 			const before = new Map(this.machines.map((m) => [m.id, m.log]));
 			this.machines = machines.map((m) => (m.id === detail?.id ? detail : { ...m, log: before.get(m.id) }));
+			this.instances = instances;
 			this.jobs = jobs;
 			this.offline = null;
 			this.loaded = true;
@@ -150,6 +153,30 @@ class PanelStore {
 
 	get permanentCount() {
 		return this.machines.filter((m) => m.expiresAt === null).length;
+	}
+
+	/** Labs from the API (labs.yaml): deployable and planned. */
+	get labs(): DeployableLab[] {
+		return this.config?.labs ?? [];
+	}
+
+	lab(slug: string): DeployableLab | undefined {
+		return this.labs.find((l) => l.slug === slug);
+	}
+
+	instance(id: string): Instance | undefined {
+		return this.instances.find((i) => i.id === id);
+	}
+
+	/** Why this lab can't be deployed right now, or null if it can. */
+	labBlocker(lab: DeployableLab): string | null {
+		if (!this.config) return 'Loading…';
+		if (lab.planned) return `${lab.title} isn't available yet: its machines' templates aren't built.`;
+		if (!this.config.vcenterConfigured) return "vCenter isn't set up yet, so nothing can be deployed. An admin needs to configure it.";
+		if (this.machineCount + lab.machines.length > this.machineQuota) {
+			return `${lab.title} has ${lab.machines.length} machines, and there can be ${this.machineQuota} at a time (${this.machineCount} now). Destroy some to deploy it.`;
+		}
+		return null;
 	}
 
 	machine(id: string): SingleMachine | undefined {
@@ -322,6 +349,54 @@ class PanelStore {
 
 	destroyMachine(m: SingleMachine) {
 		return this.#act(m, '', { method: 'DELETE' });
+	}
+
+	// Lab instances -----------------------------------------------------------------------------------
+
+	#putInstance(i: Instance) {
+		const at = this.instances.findIndex((x) => x.id === i.id);
+		if (at === -1) this.instances.push(i);
+		else this.instances[at] = i;
+		for (const m of i.machines) this.#put({ ...m, log: this.machine(m.id)?.log });
+	}
+
+	/** Runs an action on a whole instance, as #act does for a machine. */
+	async #actInstance(i: Instance, path: string, init: { method?: string; body?: unknown } = { method: 'POST' }): Promise<boolean> {
+		let ok = true;
+		try {
+			this.#putInstance(await api<Instance>(`/instances/${i.id}${path}`, init));
+		} catch (e) {
+			this.say(e instanceof ApiError ? e.message : String(e));
+			ok = false;
+		}
+		void this.refresh();
+		return ok;
+	}
+
+	/** Deploys every machine of a lab as one instance. Throws ApiError with a message to show if the API refuses. */
+	async deployLab(lab: DeployableLab, hours: number | null, owner: string): Promise<Instance> {
+		this.setUser(owner);
+		const i = await api<Instance>('/instances', { method: 'POST', body: { lab: lab.slug, hours, owner: this.user } });
+		this.#putInstance(i);
+		void this.refresh();
+		return i;
+	}
+
+	/** Every machine back to its snapshot "clean", in the lab's boot order. */
+	resetInstance(i: Instance) {
+		return this.#actInstance(i, '/reset');
+	}
+
+	extendInstance(i: Instance, hours: number) {
+		return this.#actInstance(i, '/extend', { method: 'POST', body: { hours } });
+	}
+
+	cancelInstance(i: Instance) {
+		return this.#actInstance(i, '/cancel');
+	}
+
+	destroyInstance(i: Instance) {
+		return this.#actInstance(i, '', { method: 'DELETE' });
 	}
 }
 

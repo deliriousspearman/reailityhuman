@@ -5,8 +5,8 @@ export type Section = 'machines' | 'labs' | 'instances' | 'admin';
 /** `soon`: not built yet; shown greyed out, and its pages say it's coming. */
 export const sections: { id: Section; href: string; label: string; icon: IconName; soon?: boolean }[] = [
 	{ id: 'machines', href: '/machines', label: 'Machines', icon: 'console' },
-	{ id: 'labs', href: '/labs', label: 'Pro Labs', icon: 'labs', soon: true },
-	{ id: 'instances', href: '/instances', label: 'Instances', icon: 'instances', soon: true },
+	{ id: 'labs', href: '/labs', label: 'Pro Labs', icon: 'labs' },
+	{ id: 'instances', href: '/instances', label: 'Instances', icon: 'instances' },
 	{ id: 'admin', href: '/admin', label: 'Admin', icon: 'admin' },
 ];
 

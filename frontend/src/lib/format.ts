@@ -1,4 +1,4 @@
-import type { InstanceState, Job, JobState, MachineState, SingleMachineState } from './types';
+import type { Job, JobState, SingleMachineState } from './types';
 
 /**
  * "45 s", "12 min", "2 h 40 min", "3 d 4 h": the same style as LMS lesson lengths ("1 h 5 min").
@@ -34,24 +34,6 @@ export function logTime(at: number): string {
 
 /** Tone for a state: `up` (lime), `busy` (blue, animated), `warn`, `down` (grey), `error` (red). */
 export type Tone = 'up' | 'busy' | 'warn' | 'down' | 'error';
-
-export const machineStates: Record<MachineState, { label: string; tone: Tone }> = {
-	running: { label: 'Running', tone: 'up' },
-	booting: { label: 'Starting', tone: 'busy' },
-	resetting: { label: 'Resetting', tone: 'busy' },
-	stopped: { label: 'Off', tone: 'down' },
-	error: { label: 'Not responding', tone: 'error' },
-};
-
-export const instanceStates: Record<InstanceState, { label: string; tone: Tone }> = {
-	running: { label: 'Running', tone: 'up' },
-	deploying: { label: 'Starting', tone: 'busy' },
-	resetting: { label: 'Resetting', tone: 'busy' },
-	stopping: { label: 'Stopping', tone: 'busy' },
-	stopped: { label: 'Stopped', tone: 'down' },
-	destroying: { label: 'Destroying', tone: 'busy' },
-	error: { label: 'Error', tone: 'error' },
-};
 
 export const singleMachineStates: Record<SingleMachineState, { label: string; tone: Tone }> = {
 	deploying: { label: 'Starting', tone: 'busy' },

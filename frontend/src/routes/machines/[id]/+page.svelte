@@ -253,6 +253,15 @@
 			<dt>Template</dt>
 			<dd><code>{t.id}/{m.version}</code></dd>
 		</div>
+		{#if m.instanceId}
+			<div>
+				<dt>Lab</dt>
+				<dd>
+					<a href="/instances/{m.instanceId}">{store.lab(m.lab ?? '')?.title ?? m.lab}</a>
+					<span class="stat-note">{m.pending ? 'waiting for the machines before it' : `its ${m.role}`}</span>
+				</dd>
+			</div>
+		{/if}
 		{#if m.usedBy?.length}
 			<div>
 				<dt>Used by</dt>

@@ -177,6 +177,8 @@ def config() -> dict:
         # Every extra, with the templates that offer it (ready) or will (once built or rebuilt), for
         # choosing a service first and then where to run it.
         "services": [{**extra_out(x), "offeredBy": catalogue.offered_by(x.id)} for x in extras.extras().values() if not x.hidden],
+        # Pro Labs (labs.yaml): those that can be deployed, and those planned (their templates aren't built).
+        "labs": [lab_out(lab) for lab in labs.labs().values()],
         # Fills {fqdn} in option defaults: "<name>.<machineDomain>", or just the name when empty.
         "machineDomain": cfg.machine_domain.strip("."),
         "graceMs": cfg.grace_minutes * 60_000,
@@ -200,6 +202,25 @@ def config() -> dict:
                 "userProblem": cloudinit.WINDOWS_PASSWORD_USER_PROBLEM,
             },
         },
+    }
+
+
+def lab_out(lab: labs.Lab) -> dict:
+    return {
+        "slug": lab.slug,
+        "title": lab.title,
+        "description": lab.description,
+        "level": lab.level,
+        "domain": lab.domain,
+        "resetScope": lab.reset_scope,
+        "planned": lab.planned,
+        # What an instance needs (0 while planned: its templates aren't built to size it).
+        "memoryGB": labs.total_memory_gb(lab),
+        "machines": [
+            {"name": m.name, "template": m.template, "version": m.version, "role": m.role, "bootOrder": m.boot_order}
+            for m in sorted(lab.machines, key=lambda m: m.boot_order)
+        ],
+        "flags": [{"id": f.id, "where": f.where} for f in lab.flags],
     }
 
 
@@ -729,6 +750,34 @@ def reset_instance(instance_id: str, db: Db, who: Actor) -> dict:
         actions.advance_instance(instance_id, jobs.enqueue)
     except Exception as e:
         raise HTTPException(503, f"Couldn't queue the jobs: {e}") from e
+    return instance_out(db, instance_id)
+
+
+@router.post("/instances/{instance_id}/extend")
+def extend_instance(instance_id: str, req: Hours, db: Db, who: Actor) -> dict:
+    """Gives every machine of the instance more time; if they'd expired, they're started again, in the
+    lab's boot order."""
+    machines = instance_machines(db, instance_id)
+    if any(m.expires_at is None for m in machines):
+        raise HTTPException(409, "The lab is kept permanently, so there's nothing to extend.")
+    for m in machines:
+        require_idle(m)
+    expired = [m for m in machines if m.state == "expired"]
+    if expired:
+        if blocker := capacity_blocker(db, sum(extras.memory_gb(t.memory_gb, m.extras or []) for m in expired if (t := catalogue.find(m.template, m.version))), 0):
+            raise HTTPException(409, blocker)
+        forget_capacity()
+    for m in machines:
+        m.expires_at = max(m.expires_at, utcnow()) + timedelta(hours=req.hours)
+        add_log(db, m, f"Extended by {hours_label(req.hours)} with the whole lab" + ("" if who == ANYONE else f", asked by {who}"))
+        if m.state == "expired":
+            m.state, m.pending = "deploying", "start"
+    db.commit()
+    if expired:
+        try:
+            actions.advance_instance(instance_id, jobs.enqueue)
+        except Exception as e:
+            raise HTTPException(503, f"Couldn't queue the jobs: {e}") from e
     return instance_out(db, instance_id)
 
 

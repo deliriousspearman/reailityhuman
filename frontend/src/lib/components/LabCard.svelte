@@ -1,34 +1,35 @@
 <script lang="ts">
-	// A planned lab: the LMS lab card, greyed out until Pro Labs can be deployed.
-	import type { Lab } from '$lib/types';
+	// A lab on the Pro Labs page: one that can be deployed (a link to its page), or a planned one,
+	// greyed out with a "Soon" tag.
+	import type { Level } from '$lib/types';
 
-	let { lab }: { lab: Lab } = $props();
-
-	const osCounts = $derived(
-		Object.entries(
-			lab.machines.reduce<Record<string, number>>((acc, m) => ((acc[m.os] = (acc[m.os] ?? 0) + 1), acc), {}),
-		),
-	);
+	let {
+		title,
+		description,
+		level,
+		tags,
+		image,
+		href,
+		note,
+	}: { title: string; description: string; level: Level; tags: string[]; image?: string; href?: string; note: string } = $props();
 </script>
 
-<article class="lab-card soon">
+<article class="lab-card" class:soon={!href}>
 	<header>
 		<div class="card-title">
-			<img class="picture" src={lab.image} alt="" width="56" height="56" />
-			<h2>{lab.title}</h2>
+			{#if image}<img class="picture" src={image} alt="" width="56" height="56" />{/if}
+			<h2>{#if href}<a {href}>{title}</a>{:else}{title}{/if}</h2>
 		</div>
-		<span class="level-chip" data-level={lab.level.toLowerCase()}>{lab.level}</span>
+		<span class="level-chip" data-level={level.toLowerCase()}>{level}</span>
 	</header>
-	<p>{lab.description}</p>
+	<p>{description}</p>
 	<ul class="lab-tags">
-		<li class="tag tag-accent">{lab.environment === 'domain' ? 'Active Directory' : 'Standalone hosts'}</li>
-		<li class="tag">{lab.machines.length} machines</li>
-		{#each osCounts as [os, n] (os)}
-			<li class="tag">{n} {os}</li>
+		{#each tags as tag, i (tag)}
+			<li class="tag" class:tag-accent={i === 0}>{tag}</li>
 		{/each}
 	</ul>
 	<footer>
-		<div class="footer-row"><span class="soon-tag">Soon</span> <span>Not available to deploy yet</span></div>
+		<div class="footer-row">{#if !href}<span class="soon-tag">Soon</span>{/if} <span>{note}</span></div>
 	</footer>
 </article>
 
@@ -73,6 +74,20 @@
 	}
 	h2 {
 		font-size: 1.3rem;
+	}
+	/* The whole card is the link's target. */
+	h2 a {
+		color: inherit;
+		text-decoration: none;
+	}
+	h2 a::after {
+		content: '';
+		position: absolute;
+		inset: 0;
+		border-radius: inherit;
+	}
+	.lab-card:not(.soon):hover {
+		border-color: var(--lms-lime);
 	}
 	.lab-card > p {
 		flex: 1;

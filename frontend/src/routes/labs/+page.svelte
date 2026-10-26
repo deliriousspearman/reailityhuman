@@ -1,31 +1,63 @@
 <script lang="ts">
 	import LabCard from '$lib/components/LabCard.svelte';
-	import { labs } from '$lib/labs';
+	import { labs as designs } from '$lib/labs';
+	import { store } from '$lib/store.svelte';
+	import type { Lab } from '$lib/types';
+
+	// The LMS's labs not in labs.yaml yet: designs, shown as planned.
+	const planned = $derived(designs.filter((d) => !store.lab(d.slug)));
+
+	function osTags(lab: Lab): string[] {
+		const counts = lab.machines.reduce<Record<string, number>>((acc, m) => ((acc[m.os] = (acc[m.os] ?? 0) + 1), acc), {});
+		return Object.entries(counts).map(([os, n]) => `${n} ${os}`);
+	}
 </script>
 
 <svelte:head><title>Pro Labs · Codex Labs</title></svelte:head>
 
 <section class="hero">
 	<div class="hero-text">
-		<h1>Pro Labs <span class="soon-tag">Soon</span></h1>
+		<h1>Pro Labs</h1>
 		<p>
-			Realistic networks of vulnerable machines, shared or your own copy, reached over a VPN. They're not built yet:
-			these are the labs that are planned. For now, <a href="/machines">deploy a single machine</a>.
+			Networks of vulnerable machines, deployed together as one instance and set up in order. Find the flags, then
+			reset the whole lab and start again.
 		</p>
 	</div>
-	<div class="terminal hero-terminal" role="img" aria-label="Pro Labs aren't available yet">
+	<div class="terminal hero-terminal" role="img" aria-label="Pro Labs status">
 		<div class="terminal-bar"><span>labs: ~</span></div>
 		<div class="terminal-body">
 			<p><span class="prompt">$</span> labs status</p>
-			<p class="t-note">labs: not available yet. Coming after single machines.</p>
+			<p class="t-note">
+				{store.labs.filter((l) => !l.planned).length} ready, {store.labs.filter((l) => l.planned).length + planned.length} planned,
+				{store.instances.length} running
+			</p>
 			<p><span class="prompt">$</span> <span class="cursor"></span></p>
 		</div>
 	</div>
 </section>
 
 <div class="lab-list">
-	{#each labs as lab (lab.slug)}
-		<LabCard {lab} />
+	{#each store.labs as lab (lab.slug)}
+		{@const design = designs.find((d) => d.slug === lab.slug)}
+		<LabCard
+			title={lab.title}
+			description={lab.description}
+			level={lab.level}
+			image={design?.image}
+			href="/labs/{lab.slug}"
+			tags={[lab.domain ? 'Active Directory' : 'Standalone hosts', `${lab.machines.length} machines`, `${lab.flags.length} flags`]}
+			note={lab.planned ? 'Being built: not deployable yet' : `Needs about ${lab.memoryGB} GB of memory`}
+		/>
+	{/each}
+	{#each planned as lab (lab.slug)}
+		<LabCard
+			title={lab.title}
+			description={lab.description}
+			level={lab.level}
+			image={lab.image}
+			tags={[lab.environment === 'domain' ? 'Active Directory' : 'Standalone hosts', `${lab.machines.length} machines`, ...osTags(lab)]}
+			note="Not available to deploy yet"
+		/>
 	{/each}
 </div>
 
@@ -60,11 +92,6 @@
 	.hero-terminal .terminal-body {
 		font-size: 0.8rem;
 		white-space: normal;
-	}
-	h1 .soon-tag {
-		vertical-align: middle;
-		font-size: 0.9rem;
-		line-height: 1.5rem;
 	}
 	.prompt {
 		color: #9fef00;

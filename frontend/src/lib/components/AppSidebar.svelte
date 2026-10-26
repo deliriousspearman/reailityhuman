@@ -59,14 +59,32 @@
 				{/each}
 			</ul>
 		{:else if section === 'labs'}
-			<p class="sub">Coming soon</p>
+			<p class="sub">Labs</p>
 			<ul>
+				{#each store.labs as lab (lab.slug)}
+					<li><a href="/labs/{lab.slug}" aria-current={current(`/labs/${lab.slug}`)} onclick={onnavigate}>{lab.title}</a></li>
+				{/each}
 				{#each labs as lab (lab.slug)}
 					<li class="none">{lab.title}</li>
 				{/each}
 			</ul>
 		{:else if section === 'instances'}
-			<p class="sub">Coming with Pro Labs</p>
+			<p class="sub">Instances</p>
+			<ul>
+				{#each store.instances as i (i.id)}
+					{@const state = singleMachineStates[i.state]}
+					<li>
+						<a href="/instances/{i.id}" aria-current={current(`/instances/${i.id}`)} onclick={onnavigate}>
+							<span class="dot" data-tone={state.tone} title={state.label}></span>
+							<span class="visually-hidden">{state.label}:</span>
+							<span class="machine-name">{i.title}</span>
+							<span class="kind">{i.expiresAt === null ? 'kept' : i.state === 'expired' ? 'expired' : duration(i.expiresAt - store.now, true)}</span>
+						</a>
+					</li>
+				{:else}
+					<li class="none">{store.loaded ? 'None yet' : 'Loading…'}</li>
+				{/each}
+			</ul>
 		{:else if section === 'admin'}
 			<ul>
 				{#each adminSections as a (a.id)}

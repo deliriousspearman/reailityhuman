@@ -423,7 +423,7 @@ def advance_instance(instance_id: str, enqueue: Callable[[str, str, str], None])
             return  # still on their way
         if failed := [m.role or m.name for m in before if m.state != "running"]:
             for m in waiting:
-                verb = "deployed" if m.pending == "deploy" else m.pending
+                verb = {"deploy": "deployed", "start": "started"}.get(m.pending, m.pending)
                 m.pending, m.state = None, "error"
                 s.add(LogLine(machine_id=m.id, text=f"Not {verb}: {', '.join(failed)} isn't running, and this machine needs it first.", tone="error"))
             return

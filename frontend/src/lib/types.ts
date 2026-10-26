@@ -1,6 +1,7 @@
-// Shapes the panel works with. Single machines and jobs come from the API (backend/app/api.py) in
-// these shapes; labs and instances are still only designs. Lab fields mirror the LMS lab frontmatter (lms/src/content.config.ts), plus what's
-// needed to deploy: networks, IPs, boot order and resources.
+// Shapes the panel works with. Single machines, lab instances and jobs come from the API
+// (backend/app/api.py) in these shapes. `Lab` is the design of an LMS lab not built yet: its fields
+// mirror the LMS lab frontmatter (lms/src/content.config.ts), plus what's needed to deploy: networks,
+// IPs, boot order and resources.
 
 export type OS = 'Windows' | 'Linux' | 'FreeBSD' | 'Other';
 export type Level = 'Beginner' | 'Intermediate' | 'Advanced';
@@ -45,30 +46,45 @@ export interface Lab {
 	resetSchedule?: string;
 }
 
-export type MachineState = 'running' | 'booting' | 'resetting' | 'stopped' | 'error';
-export type InstanceState = 'running' | 'deploying' | 'resetting' | 'stopping' | 'stopped' | 'destroying' | 'error';
-
 export interface LogLine {
 	at: number;
 	text: string;
 	tone?: 'ok' | 'warn' | 'error' | 'muted';
 }
 
+/** A Pro Lab that can be deployed, or is planned (backend/labs.yaml, via GET /api/config). */
+export interface DeployableLab {
+	slug: string;
+	title: string;
+	description: string;
+	level: Level;
+	/** The AD domain, for a domain lab; empty for standalone hosts. */
+	domain: string;
+	/** `lab`: the whole instance resets together. */
+	resetScope: 'lab' | 'machine';
+	/** Its templates aren't built yet, so it can't be deployed. */
+	planned: boolean;
+	/** What an instance needs; 0 while planned. */
+	memoryGB: number;
+	/** In boot order. */
+	machines: { name: string; template: string; version: string; role: string; bootOrder: number }[];
+	/** Planted per instance, for learners to find. */
+	flags: { id: string; where: string }[];
+}
+
+/** A deployed copy of a lab: its machines, set up together in the lab's boot order (GET /api/instances). */
 export interface Instance {
 	id: string;
 	lab: string;
-	kind: 'shared' | 'dedicated';
-	owner?: string;
-	state: InstanceState;
-	startedAt: number;
-	expiresAt?: number;
-	nextResetAt?: number;
-	lastResetAt?: number;
-	connected: number;
-	/** WireGuard endpoint on the lab-access network. */
-	endpoint: string;
-	machines: Record<string, MachineState>;
-	log: LogLine[];
+	title: string;
+	owner: string;
+	/** Busy while any machine is (its state), then error, expired, stopped or running. */
+	state: SingleMachineState;
+	createdAt: number;
+	/** null: kept permanently. */
+	expiresAt: number | null;
+	/** In boot order, without their logs. */
+	machines: SingleMachine[];
 }
 
 export type JobState = 'queued' | 'running' | 'done' | 'failed';
@@ -190,6 +206,12 @@ export interface SingleMachine {
 	extras: { id: string; name: string; options: Record<string, string>; links: string[]; notes: string[] }[];
 	/** Machines whose extras point at this one, e.g. the agents of a Wazuh server. */
 	usedBy?: { id: string; name: string }[];
+	/** Pro Labs: the instance it's part of, its lab and its role there; empty for a machine on its own. */
+	instanceId?: string;
+	lab?: string;
+	role?: string;
+	/** What it waits to do (deploy, reset or start) until the machines before it in the lab's boot order are ready. */
+	pending?: string;
 	/** Only from GET /machines/{id}: the list leaves it out. */
 	log?: LogLine[];
 }
@@ -268,6 +290,8 @@ export interface PanelConfig {
 	}[];
 	/** Every extra, and where it runs, for choosing a service first. */
 	services: Service[];
+	/** Pro Labs, deployable and planned. */
+	labs?: DeployableLab[];
 	/** Domain for default names ({fqdn} in option defaults); empty: just the machine's name. */
 	machineDomain: string;
 	/** How long an expired machine is kept before it's deleted. */
