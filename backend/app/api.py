@@ -213,7 +213,9 @@ def lab_out(lab: labs.Lab) -> dict:
         "level": lab.level,
         "domain": lab.domain,
         "resetScope": lab.reset_scope,
-        "planned": lab.planned,
+        # "planned" to the frontend means "can't be deployed yet", whether it's marked planned or its
+        # templates aren't built/don't offer its extras.
+        "planned": bool(labs.unavailable_reason(lab)),
         # What an instance needs (0 while planned: its templates aren't built to size it).
         "memoryGB": labs.total_memory_gb(lab),
         "machines": [
@@ -671,8 +673,10 @@ def deploy_instance(req: InstanceRequest, db: Db) -> dict:
     actions.advance_instance queues it once the machines before it are running."""
     cfg = settings()
     lab = labs.find(req.lab)
-    if lab is None or lab.planned:
-        raise HTTPException(422, f"The lab {req.lab} can't be deployed yet.")
+    if lab is None:
+        raise HTTPException(422, f"There's no lab called {req.lab}.")
+    if reason := labs.unavailable_reason(lab):
+        raise HTTPException(422, f"{lab.title} can't be deployed yet: {reason}.")
     owner = req.owner.strip().lower()
     if not OWNER_RULE.match(owner):
         raise HTTPException(422, OWNER_PROBLEM)

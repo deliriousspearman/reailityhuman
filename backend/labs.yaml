@@ -19,33 +19,44 @@
 # Brookfield Logistics: a small company's Active Directory domain with the common misconfigurations,
 # for practising a domain compromise end to end. Deployed from golden templates built once (the
 # domain, Exchange with mailboxes and sample mail, and a joined workstation), so an instance comes up
-# in minutes. Its weaknesses are seeded by the scripts in the vuln-ad project.
+# in minutes. Its weaknesses are seeded at deploy by the brookfield-dc and brookfield-member extras
+# (extras.yaml), adapted from the vuln-ad project, on top of the Active Directory and Exchange extras.
+# The members join the instance's own domain controller through "@dc" (the panel wires it up). Exchange
+# makes a Brookfield instance take a few hours to deploy; it's a long-lived, one-at-a-time lab.
 - slug: brookfield
   title: Brookfield Logistics
   description: A small company's Windows domain — a controller, a mail server and a staff workstation — set up with the usual Active Directory weaknesses to find and chain.
   level: Intermediate
   domain: brookfield.local
   resetScope: lab
-  planned: true
   machines:
     - name: dc
-      template: brookfield-dc
-      version: "1"
+      template: windows-server
+      version: "2025"
       role: Domain controller
       bootOrder: 1
+      extras:
+        - {domain-controller: {domain: brookfield.local, netbios: BROOKFIELD}}
+        - brookfield-dc
     - name: mail
-      template: brookfield-mail
-      version: "1"
+      template: exchange
+      version: SE
       role: Exchange mail server
       bootOrder: 2
+      extras:
+        - {exchange: {dc: "@dc", organization: Brookfield Logistics}}
+        - {brookfield-member: {role: mail, dc: "@dc"}}
     - name: ws
-      template: brookfield-ws
-      version: "1"
+      template: windows
+      version: "11"
       role: Staff workstation
-      bootOrder: 3
+      bootOrder: 2
+      extras:
+        - {join-domain: {dc: "@dc"}}
+        - {brookfield-member: {role: ws, dc: "@dc"}}
   # Planted fresh in every instance (actions.plant_flags), once each machine is running. file: the
   # flag's value is written there; run: the program is run with the value as its last argument. The
-  # golden templates (step 5) make these paths and the share, and bake in the mail script.
+  # seeding extras make these paths and the share, and write the mail script.
   flags:
     - id: user
       where: the staff workstation, on the signed-in user's desktop (user.txt)

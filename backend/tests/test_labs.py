@@ -38,11 +38,15 @@ def test_the_real_labs_yaml_loads():
     all_labs = labs.labs()
     assert "brookfield" in all_labs
     lab = all_labs["brookfield"]
-    assert lab.planned is True
     assert [m.name for m in lab.machines] == ["dc", "mail", "ws"]
-    assert [m.boot_order for m in lab.machines] == [1, 2, 3]
+    assert [m.boot_order for m in lab.machines] == [1, 2, 2]
     assert {f.id for f in lab.flags} == {"user", "share", "mail", "root"}
     assert lab.domain == "brookfield.local"
+    # Its members wire their extras to the instance's own domain controller.
+    ws = next(m for m in lab.machines if m.name == "ws")
+    assert dict(next(x for x in ws.extras if x.id == "join-domain").options) == {"dc": "@dc"}
+    # Against the real catalogue it's deployable (its templates are built and offer its extras).
+    assert labs.unavailable_reason(lab) == ""
 
 
 def test_a_planned_lab_doesnt_need_built_templates(load):
@@ -77,9 +81,12 @@ def test_a_lab_needs_machines(load):
         load("- {slug: empty, title: Empty, description: x, planned: true, machines: []}\n")
 
 
-def test_a_deployable_lab_needs_real_templates(load):
-    with pytest.raises(ValueError, match="isn't a template that can be deployed"):
-        load(PLANNED.replace("planned: true", "planned: false"))
+def test_a_lab_on_an_unbuilt_template_is_unavailable_not_an_error(load):
+    # It loads (no crash), but isn't deployable: its template isn't built.
+    all_labs = load(PLANNED.replace("planned: true", "planned: false"))
+    lab = all_labs["demo"]
+    assert "isn't a template that can be deployed" in labs.unavailable_reason(lab)
+    assert "demo" not in labs.deployable()
 
 
 def test_total_memory_sums_the_machines(monkeypatch):

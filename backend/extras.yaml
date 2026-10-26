@@ -1672,3 +1672,171 @@
       if ($code -ne 0) { throw "Making $dc_username's mailbox failed: see $logs\exchange-mailbox.log." }
       # Exchange asks for a restart after setup.
       exit 3010
+
+# Brookfield Pro Lab seeding (labs.yaml: brookfield). Two extras, applied on top of the Active
+# Directory and Exchange extras, that turn a plain domain into the lab: users and groups, a bounded
+# set of the usual Active Directory weaknesses (adapted from the vuln-ad project), a file share, sample
+# mail, and the places the panel plants the instance's flags (actions.plant_flags). They run no
+# packages — just built-in AD and Exchange cmdlets — so any Windows template can offer them without a
+# rebuild. Not meant to be picked by hand: they belong to the lab.
+- id: brookfield-dc
+  name: Brookfield lab (domain)
+  category: Pro Labs
+  description: Seeds the Brookfield Pro Lab's domain controller — users, groups, deliberate weaknesses, a file share and the flag targets. For the Brookfield lab, not for a machine on its own.
+  setupMinutes: 10
+  windows:
+    script: |
+      # Runs on the domain controller after it's promoted (the machine's user is a domain admin).
+      Import-Module ActiveDirectory
+      $deadline = (Get-Date).AddMinutes(15)
+      while ($true) {
+        try { $domain = Get-ADDomain; break } catch { if ((Get-Date) -gt $deadline) { throw "Active Directory didn't come up." }; Start-Sleep -Seconds 10 }
+      }
+      $dn = $domain.DistinguishedName
+      function Try-Step([string]$What, [scriptblock]$Do) {
+        try { & $Do } catch { Write-Output "skipped $What : $($_.Exception.Message)" }
+      }
+      function New-Pwd { -join ((48..57) + (65..90) + (97..122) | Get-Random -Count 16 | ForEach-Object { [char]$_ }) + 'aA1!' }
+
+      # People. Named so the lab feels real; each enabled with a strong random password.
+      $people = @('olivia.bennett','liam.carter','sophia.walsh','noah.fisher','emma.doyle','james.holt','ava.reid','lucas.frost','mia.chapman','ethan.park')
+      foreach ($sam in $people) {
+        Try-Step "user $sam" {
+          if (-not (Get-ADUser -Filter "SamAccountName -eq '$sam'")) {
+            $given, $sur = $sam.Split('.')
+            New-ADUser -Name "$given $sur" -GivenName $given -Surname $sur -SamAccountName $sam `
+              -UserPrincipalName "$sam@$($domain.DNSRoot)" -AccountPassword (ConvertTo-SecureString (New-Pwd) -AsPlainText -Force) `
+              -Enabled $true -ErrorAction Stop
+          }
+        }
+      }
+      # Groups, with some members.
+      foreach ($g in 'IT Admins','Finance','HR','Helpdesk') {
+        Try-Step "group $g" { if (-not (Get-ADGroup -Filter "Name -eq '$g'")) { New-ADGroup -Name $g -GroupScope Global } }
+      }
+      Try-Step 'group members' {
+        Add-ADGroupMember -Identity 'IT Admins' -Members 'liam.carter','james.holt' -ErrorAction SilentlyContinue
+        Add-ADGroupMember -Identity 'Finance' -Members 'olivia.bennett','ava.reid','mia.chapman' -ErrorAction SilentlyContinue
+        Add-ADGroupMember -Identity 'Helpdesk' -Members 'noah.fisher','lucas.frost' -ErrorAction SilentlyContinue
+      }
+
+      # --- Deliberate weaknesses (a bounded, representative set; see the vuln-ad project) ---
+      # Kerberoasting: an ordinary account with a service principal name and a weak password.
+      Try-Step 'kerberoastable service account' {
+        if (-not (Get-ADUser -Filter "SamAccountName -eq 'svc_sql'")) {
+          New-ADUser -Name 'svc_sql' -SamAccountName 'svc_sql' -UserPrincipalName "svc_sql@$($domain.DNSRoot)" `
+            -AccountPassword (ConvertTo-SecureString 'Summer2024' -AsPlainText -Force) -Enabled $true -PasswordNeverExpires $true
+        }
+        Set-ADUser -Identity 'svc_sql' -ServicePrincipalNames @{Replace="MSSQLSvc/sql.$($domain.DNSRoot):1433"}
+      }
+      # AS-REP roasting: a user that doesn't require Kerberos pre-authentication.
+      Try-Step 'as-rep roastable user' { Set-ADAccountControl -Identity 'ethan.park' -DoesNotRequirePreAuth $true }
+      # A password left in a user's description.
+      Try-Step 'password in description' {
+        Set-ADAccountPassword -Identity 'sophia.walsh' -Reset -NewPassword (ConvertTo-SecureString 'Autumn2023!' -AsPlainText -Force)
+        Set-ADUser -Identity 'sophia.walsh' -Description 'Temp account, password Autumn2023!'
+      }
+      # A password shared across several accounts (password spraying).
+      Try-Step 'shared weak password' {
+        foreach ($u in 'emma.doyle','noah.fisher','mia.chapman') {
+          Set-ADAccountPassword -Identity $u -Reset -NewPassword (ConvertTo-SecureString 'Welcome1' -AsPlainText -Force)
+        }
+      }
+      # A default password a new starter must change.
+      Try-Step 'default password' {
+        Set-ADAccountPassword -Identity 'lucas.frost' -Reset -NewPassword (ConvertTo-SecureString 'Changeme123!' -AsPlainText -Force)
+        Set-ADUser -Identity 'lucas.frost' -ChangePasswordAtLogon $true -Description 'New starter, default password'
+      }
+      # A weak ACL: Domain Users can fully control the Helpdesk group.
+      Try-Step 'weak acl on Helpdesk' {
+        $helpdesk = [ADSI]("LDAP://" + (Get-ADGroup 'Helpdesk').DistinguishedName)
+        $everyone = (Get-ADGroup 'Domain Users').SID
+        $ace = New-Object DirectoryServices.ActiveDirectoryAccessRule($everyone, 'GenericAll', 'Allow', 'All')
+        $helpdesk.psbase.ObjectSecurity.AddAccessRule($ace); $helpdesk.psbase.CommitChanges()
+      }
+      Try-Step 'smb signing off' { Set-SmbServerConfiguration -RequireSecuritySignature $false -EnableSecuritySignature $false -Force -Confirm:$false }
+      Try-Step 'admin password never expires' { Set-ADUser -Identity 'Administrator' -PasswordNeverExpires $true }
+
+      # The Finance file share (the 'share' flag goes in it); a decoy document for colour.
+      Try-Step 'finance share' {
+        New-Item -ItemType Directory -Force -Path 'C:\Shares\Finance' | Out-Null
+        Set-Content -Path 'C:\Shares\Finance\Q3-budget-DRAFT.txt' -Value "Draft figures. Do not circulate.`r`nShared drive password: Welcome1" -ErrorAction SilentlyContinue
+        if (-not (Get-SmbShare -Name 'Finance' -ErrorAction SilentlyContinue)) {
+          New-SmbShare -Name 'Finance' -Path 'C:\Shares\Finance' -ChangeAccess 'Everyone' | Out-Null
+        }
+      }
+      # Where the panel plants the flags: the Finance share, and the Administrator's desktop (root.txt).
+      New-Item -ItemType Directory -Force -Path 'C:\Shares\Finance' | Out-Null
+      New-Item -ItemType Directory -Force -Path 'C:\Users\Administrator\Desktop' | Out-Null
+      exit 0
+
+- id: brookfield-member
+  name: Brookfield lab (member)
+  category: Pro Labs
+  description: Seeds a Brookfield Pro Lab member — the staff workstation (weakened, with the user flag target) or the mail server (sample mail and the mail flag script). For the Brookfield lab, not for a machine on its own.
+  setupMinutes: 10
+  options:
+    - id: role
+      label: Role in the lab
+      type: choice
+      default: ws
+      choices:
+        - {value: ws, label: Staff workstation}
+        - {value: mail, label: Mail server}
+      help: Which Brookfield machine this is.
+    - id: dc
+      label: Domain controller
+      type: machine
+      extra: domain-controller
+      help: The lab's domain controller (the panel wires this to the instance's own).
+  windows:
+    script: |
+      function Try-Step([string]$What, [scriptblock]$Do) {
+        try { & $Do } catch { Write-Output "skipped $What : $($_.Exception.Message)" }
+      }
+      if ($role -eq 'ws') {
+        # The staff workstation. The 'user' flag goes on the public desktop (every user sees it).
+        New-Item -ItemType Directory -Force -Path 'C:\Users\Public\Desktop' | Out-Null
+        # A bounded set of workstation weaknesses (see the vuln-ad project).
+        Try-Step 'wdigest plaintext creds' {
+          New-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\WDigest' -Name 'UseLogonCredential' -Value 1 -PropertyType DWord -Force | Out-Null
+        }
+        Try-Step 'smb signing off' { Set-SmbClientConfiguration -RequireSecuritySignature $false -EnableSecuritySignature $false -Force -Confirm:$false }
+        # A domain user who is a local administrator here.
+        Try-Step 'domain user in local admins' { Add-LocalGroupMember -Group (Get-LocalGroup -SID 'S-1-5-32-544') -Member "$($dc_netbios.ToUpper())\olivia.bennett" -ErrorAction SilentlyContinue }
+        exit 0
+      }
+
+      # The mail server. Exchange is installed (the Exchange extra ran first) and the domain
+      # controller's user already has a mailbox. Populate it and leave the flag script.
+      $logs = 'C:\ProgramData\lab-deploy\logs'
+      New-Item -ItemType Directory -Force -Path $logs | Out-Null
+      $admin = "$($dc_netbios.ToUpper())\$dc_username"
+      $me = "$dc_username@$dc_domain"
+      # Mailbox-enable a couple of staff (best-effort), as the domain admin.
+      Try-Step 'mailboxes for staff' {
+        $action = New-ScheduledTaskAction -Execute 'cmd.exe' -Argument ("/c `"powershell.exe -NoProfile -Command `"`"Add-PSSnapin Microsoft.Exchange.Management.PowerShell.SnapIn; foreach (`$u in 'olivia.bennett','liam.carter') { if (-not (Get-Mailbox -Identity `$u -ErrorAction SilentlyContinue)) { Enable-Mailbox -Identity `$u } }`"`" > `"$logs\brookfield-mailboxes.log`" 2>&1`"")
+        Register-ScheduledTask -TaskName 'BrookfieldMailboxes' -Action $action -User $admin -Password $dc_password -RunLevel Highest -Force | Out-Null
+        Start-ScheduledTask -TaskName 'BrookfieldMailboxes'
+        $wait = (Get-Date).AddMinutes(10)
+        while ((Get-ScheduledTask -TaskName 'BrookfieldMailboxes').State -eq 'Running') { if ((Get-Date) -gt $wait) { break }; Start-Sleep -Seconds 15 }
+        Unregister-ScheduledTask -TaskName 'BrookfieldMailboxes' -Confirm:$false
+      }
+      # Sample mail, so Outlook on the web isn't empty. Internal SMTP submission to the server itself.
+      $subjects = @('Q3 budget review','Password reset policy','Welcome to Brookfield','Re: shared drive access','VPN details')
+      $bodies = @('Please review the attached figures before Friday.','Reminder: choose a strong password and do not reuse it.','Your account is ready. Temporary password: Welcome1','The Finance share is on the domain controller.','VPN uses the same credentials as your account.')
+      Try-Step 'sample mail' {
+        for ($i = 0; $i -lt 6; $i++) {
+          Send-MailMessage -SmtpServer 'localhost' -From $me -To $me -Subject ($subjects | Get-Random) -Body ($bodies | Get-Random) -ErrorAction SilentlyContinue
+        }
+      }
+      # The flag script the panel runs to drop the instance's 'mail' flag into the mailbox. Built as
+      # lines (not a here-string, whose terminator can't be indented inside this YAML); $me is filled
+      # in now, `$Flag stays for the script's own parameter.
+      New-Item -ItemType Directory -Force -Path 'C:\lab' | Out-Null
+      $planter = @(
+        'param([string]$Flag)',
+        "Send-MailMessage -SmtpServer 'localhost' -From '$me' -To '$me' -Subject 'Internal: credentials rotation' -Body `"Recovery token for this quarter: `$Flag. Keep it safe.`""
+      )
+      Set-Content -Path 'C:\lab\plant-mail-flag.ps1' -Value ($planter -join [Environment]::NewLine) -Encoding UTF8
+      exit 0

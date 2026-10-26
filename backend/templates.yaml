@@ -161,7 +161,7 @@
   username: labadmin
   family: windows
   access: [rdp, ssh, console]
-  extras: [iis, mssql, outlook, domain-controller, join-domain]   # SQL Server and Outlook: built with prepare.ps1 -SqlServer and -Office
+  extras: [iis, mssql, outlook, domain-controller, join-domain, brookfield-dc]   # SQL Server and Outlook: built with prepare.ps1 -SqlServer and -Office
 - template: windows-server
   version: "2022"
   # Built by Packer (packer/build.sh windows-server -var version=2022) on 2026-10-18, with Office's and
@@ -213,7 +213,7 @@
   username: labuser
   family: windows
   access: [rdp, ssh, console]
-  extras: [iis, mssql, outlook, join-domain]
+  extras: [iis, mssql, outlook, join-domain, brookfield-member]
 
 # pfSense CE: a firewall (packer/pfsense). 2.7.2 is the last release with an offline installer. No
 # cloud-init: scripts/template/pfsense/lab-firstboot sets admin's password, SSH key and the host name
@@ -277,7 +277,7 @@
   adminGroup: Administrators
   access: [web, rdp, ssh, console]
   webUrl: "https://{ip}/owa"
-  extras: [exchange]
+  extras: [exchange, brookfield-member]
 
 # Zimbra: Ubuntu 20.04 with Zimbra 8.8.15 installed but not configured (packer/build.sh ubuntu
 # -var zimbra=true: scripts/template/zimbra). Its one extra, Zimbra, configures it as the machine

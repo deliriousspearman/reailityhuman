@@ -184,15 +184,9 @@ def _load() -> list[Lab]:
                             raise ValueError(f"labs.yaml: {slug}/{m.name}: '{lx.id}.{opt_id}' points at @{target}, which must boot before it (give @{target} a lower bootOrder)")
                     elif o.type == "machine":
                         raise ValueError(f"labs.yaml: {slug}/{m.name}: machine option '{lx.id}.{opt_id}' must be set to another machine as '@role'")
-            # The template a machine comes from must exist (unless the whole lab is still planned),
-            # and any extras it applies must be offered by that template.
-            if not planned:
-                t = catalogue.find(m.template, m.version)
-                if t is None:
-                    raise ValueError(f"labs.yaml: {slug}/{m.name} uses {m.template} {m.version}, which isn't a template that can be deployed (mark the lab planned until it's built)")
-                for lx in m.extras:
-                    if lx.id not in t.extras:
-                        raise ValueError(f"labs.yaml: {slug}/{m.name}: {m.template} {m.version} doesn't offer the extra '{lx.id}'")
+        # Whether its machines' templates exist and offer its extras is checked in unavailable_reason,
+        # not here: a lab that references a template not built yet (or retired) is listed as "coming
+        # soon" rather than crashing the panel, the same as a template that's planned.
         out.append(lab)
     if len({lab.slug for lab in out}) != len(out):
         raise ValueError("labs.yaml: two labs share a slug")
@@ -209,9 +203,26 @@ def find(slug: str) -> Lab | None:
     return labs().get(slug)
 
 
+def unavailable_reason(lab: Lab) -> str:
+    """Why this lab can't be deployed right now, or "" if it can: a machine's template isn't built (or
+    was retired), or doesn't offer an extra the lab applies. Checked here rather than at load, so a lab
+    waiting on a template is listed as "coming soon" instead of crashing the panel. A `planned` lab is
+    always unavailable."""
+    if lab.planned:
+        return f"{lab.title} isn't built yet"
+    for m in lab.machines:
+        t = catalogue.find(m.template, m.version)
+        if t is None:
+            return f"{m.name} needs {m.template} {m.version}, which isn't a template that can be deployed"
+        for lx in m.extras:
+            if lx.id not in t.extras:
+                return f"{m.template} {m.version} doesn't offer the '{lx.id}' extra {m.name} needs"
+    return ""
+
+
 def deployable() -> dict[str, Lab]:
-    """Labs whose machines can be deployed now (their golden templates are built)."""
-    return {slug: lab for slug, lab in labs().items() if not lab.planned}
+    """Labs whose machines can all be deployed now (their templates are built and offer their extras)."""
+    return {slug: lab for slug, lab in labs().items() if not unavailable_reason(lab)}
 
 
 def total_memory_gb(lab: Lab) -> int:
