@@ -76,7 +76,7 @@ and mouse in the browser.
 
 ## Next, in order
 
-### 1. ProLabs: the first multi-machine lab (large, in progress)
+### 1. ProLabs: the first multi-machine lab (large, nearly done)
 
 **Goal.** A lab of several machines deployed together as one instance, as the LMS's Pro Lab pages
 describe.
@@ -95,9 +95,14 @@ pass-the-ticket, SMB signing off. Plus file shares, users and sample emails.
 **Decisions:**
 - **Deploying:** one click on the lab's page makes all three machines, in boot order (the domain
   controller first). Reset and destroy act on the whole lab.
+- **Build approach (changed 2026-10-26):** the machines **reuse the base templates** (`windows-server
+  2025` + `exchange SE` + `windows 11`) with extras, rather than pre-built golden templates. This saves
+  about 90 GB and keeps them current, at the cost of a long deploy (Exchange is about 2.5 hours). The
+  members join the instance's own domain controller through `@dc` (cross-machine extra wiring).
 - **Network:** the LAN with DHCP for now; members use the domain controller for DNS. A network per
   instance comes with "Networks" (see "Later").
-- **Size:** about 18 GB of memory, so one instance at a time.
+- **Size:** about 18 GB of memory, so one instance at a time. **Disk:** about 75 GB while it deploys
+  (Exchange's install growth), which is more than the lab's datastore has free — see the blocker below.
 - **Flags:** random `LAB{...}` flags planted per instance (the workstation user's `user.txt`, a share,
   an email, the domain Administrator's `root.txt`), new on each deploy and reset, with a checklist on
   the lab's page.
@@ -106,12 +111,29 @@ pass-the-ticket, SMB signing off. Plus file shares, users and sample emails.
 
 | Step | What | State |
 |---|---|---|
-| 1 | Lab definitions: `backend/labs.yaml` and `app/labs.py`, validated like `templates.yaml`; Brookfield defined, marked `planned` | Done 2026-10-24 |
-| 2 | Orchestration: `POST /api/instances` deploys a lab's machines in boot order through the existing job pipeline (each waits its turn in `machines.pending`; `actions.advance_instance` queues it, or fails it if a machine before it failed); reset (in boot order), destroy and cancel act on the whole instance | Done 2026-10-26 |
-| 3 | The Pro Labs pages from `labs.yaml` (machines in boot order, flags, a Deploy form); the Instances list and each instance's page, with Reset lab, Cancel jobs, Destroy lab and extending the whole lab (`POST /api/instances/{id}/extend`, which starts an expired lab again in boot order) | Done 2026-10-26 |
-| 4 | Flags: random per instance, and the checklist | Next |
-| 5 | The golden set: build the lab once (Exchange takes about 2.5 hours), save its three machines as templates, and mark Brookfield live | — |
-| 6 | End-to-end test of a whole instance | — |
+| 1 | Lab definitions: `backend/labs.yaml` and `app/labs.py` | Done 2026-10-24 |
+| 2 | Orchestration: `POST /api/instances` deploys a lab's machines in boot order; reset, destroy and cancel act on the whole instance | Done 2026-10-26 |
+| 3 | The Pro Labs and Instances pages (machines in boot order, flags, Deploy, Reset, Destroy, Cancel, extend) | Done 2026-10-26 |
+| 4 | Flags: random per instance, planted via VMware Tools once each machine is up, with the checklist | Done 2026-10-26 |
+| 5 | Brookfield live by reusing the base templates: cross-machine extra wiring (`@dc`), the `brookfield-dc` and `brookfield-member` seeding extras, Brookfield redefined and marked live | Done 2026-10-26 |
+| 6 | End-to-end test of a whole instance | Partly done 2026-10-26 — see below |
+
+**Step 6 result (2026-10-26).** A real Brookfield instance was deployed through the panel. The domain
+controller and the workstation came up (`running`): promotion, the join, and the `brookfield-dc` and
+`brookfield-member` (workstation) seeding all ran. Exchange ran for about 3 hours and then **filled the
+datastore** and was paused; the instance was torn down and the datastore fully recovered (no other VMs
+were affected). Two blockers remain before step 6 can pass green:
+
+1. **Datastore space.** Brookfield needs about 75 GB free while it deploys (Exchange's install growth),
+   but the lab datastore has about 42 GB usable above its reserve. A deploy now also correctly *refuses*
+   rather than filling the datastore (the `exchange` extra declares `diskGB: 45`, fixed 2026-10-26).
+   **Needs:** free about 35 GB (retire a few templates — e.g. Windows Server 2019 and 2022 — and rebuild
+   them later), or extend the datastore.
+2. **Flag planting privileges.** The live panel's vCenter account lacks `GuestOperations.Modify` and
+   `.Execute` (added to `setup_vcenter.py`), so flags won't plant until `setup_vcenter.py` is re-run
+   against vCenter with admin credentials. Flag planting fails gracefully (a warning) until then.
+
+Once both are resolved, re-run the instance to confirm Exchange finishes and all four flags plant.
 
 ### 2. The install script: clear outcomes, colours and full errors — done 2026-10-26
 
