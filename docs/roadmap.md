@@ -113,12 +113,12 @@ pass-the-ticket, SMB signing off. Plus file shares, users and sample emails.
 | 5 | The golden set: build the lab once (Exchange takes about 2.5 hours), save its three machines as templates, and mark Brookfield live | — |
 | 6 | End-to-end test of a whole instance | — |
 
-### 2. The install script: clear outcomes, colours and full errors (small to medium)
+### 2. The install script: clear outcomes, colours and full errors — done 2026-10-26
 
-Asked 2026-10-26. The offline install (`deploy/install.sh` and `deploy/install/labinstall`, see
-[offline-install.md](offline-install.md)) prints plain text today. The bash part prints `==> step` lines, and
-the Python part prints `[ok]`, `[warn]` and `[FAIL]` in its check report and `FAILED` after a build. Some
-errors are a single line pointing at a log ("Docker didn't install: see …/docker-install.log").
+Asked 2026-10-26, done the same day. The offline install (`deploy/install.sh` and
+`deploy/install/labinstall`, see [offline-install.md](offline-install.md)) now marks every step and
+check, in colour, with verbose failures. A shared `labinstall/out.py` holds the Python side; `install.sh`
+mirrors it in bash (an `ERR` trap turns any stray failure into the same form). What was built:
 
 **Outcomes.** Every step and check ends in one of three, marked the same way in both parts:
 - **Success** (green `✔ OK`): what was done, e.g. "Docker 27.3 installed from the bundle".
@@ -145,9 +145,9 @@ log and a readable summary on screen, never a bare traceback alone.
 **Also:** the final summary gives a count of each outcome and lists every warning and failure with its fix.
 `--verbose` keeps its meaning (every build's output as it runs).
 
-**Tests.** Unit tests for the output helpers (colours on and off, `NO_COLOR`, not a terminal); a forced
-failure in each part (a damaged bundle file, a wrong vCenter password, a missing ISO) shows the full error;
-shellcheck passes on `install.sh`.
+**Tests.** Unit tests for the output helpers (`labinstall/test_out.py`: colours on and off, `NO_COLOR`,
+not a terminal, a verbose failure, the summary); shellcheck passes on `install.sh`. Not yet exercised: a
+full offline install run on a server — the changes are output only, so the install's behaviour is unchanged.
 
 ### 3. A batch of services (medium, each)
 
