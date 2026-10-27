@@ -67,10 +67,10 @@ def test_offered_by_says_what_is_ready(monkeypatch, a_planned_template):
     assert {"template": "ubuntu", "version": "26.04", "ready": True} in nginx
     assert {"template": "kali", "version": "2027.1", "ready": False} in nginx
     assert {"template": "ubuntu", "version": "26.04", "ready": False} in catalogue.offered_by("ftp")
+    # `a_planned_template` stubs planned() with one fake template, so only the deployable iis
+    # templates show here (Windows Server 2019 and 2022 are retired, and planned() is stubbed anyway).
     assert catalogue.offered_by("iis") == [
         {"template": "windows-server", "version": "2025", "ready": True},
-        {"template": "windows-server", "version": "2022", "ready": True},
-        {"template": "windows-server", "version": "2019", "ready": True},
         {"template": "windows-server", "version": "2025 Core", "ready": True},
         {"template": "windows", "version": "11", "ready": True},
     ]
