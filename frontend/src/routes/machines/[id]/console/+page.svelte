@@ -210,22 +210,6 @@
 		}
 	}
 
-	/** Moves the console to a new browser tab (e.g. to keep it beside the machine's page), and closes
-	 * it here so the two don't both drive the machine; Reconnect takes it back. */
-	function openInNewTab() {
-		const tab = window.open(location.href, '_blank');
-		if (!tab) {
-			flash('Your browser blocked the new tab: allow pop-ups for the panel');
-			return;
-		}
-		tab.opener = null;
-		if (document.fullscreenElement) void document.exitFullscreen();
-		clearTimeout(retryTimer);
-		close();
-		status = 'closed';
-		message = 'The console is open in another tab.';
-	}
-
 	function fullScreen() {
 		if (document.fullscreenElement) void document.exitFullscreen();
 		else void frame.requestFullscreen();
@@ -313,7 +297,6 @@
 					</div>
 					<button class="item" type="button" onclick={screenshot}><Icon name="download" /> Screenshot</button>
 					<button class="item" type="button" onclick={fullScreen}><Icon name="expand" /> Full screen</button>
-					<button class="item" type="button" title="Moves the console to a new browser tab" onclick={openInNewTab}><Icon name="external" /> Open in new tab</button>
 
 					<div class="group-label">Position</div>
 					<div class="corners">
@@ -330,7 +313,6 @@
 <p class="hint">
 	Click the screen to type into it. Combinations like Ctrl+Alt+Del and Alt+Tab stay with your own computer — use the Send keys
 	buttons. Paste types your clipboard in (copying out isn't supported by these consoles). A dropped console reconnects itself.
-	Open in new tab moves the console to a tab of its own; Reconnect here takes it back.
 </p>
 
 <style>
