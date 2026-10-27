@@ -76,7 +76,7 @@ and mouse in the browser.
 
 ## Next, in order
 
-### 1. ProLabs: the first multi-machine lab (large, nearly done)
+### 1. ProLabs: the first multi-machine lab (large) — done 2026-10-27
 
 **Goal.** A lab of several machines deployed together as one instance, as the LMS's Pro Lab pages
 describe.
@@ -116,24 +116,19 @@ pass-the-ticket, SMB signing off. Plus file shares, users and sample emails.
 | 3 | The Pro Labs and Instances pages (machines in boot order, flags, Deploy, Reset, Destroy, Cancel, extend) | Done 2026-10-26 |
 | 4 | Flags: random per instance, planted via VMware Tools once each machine is up, with the checklist | Done 2026-10-26 |
 | 5 | Brookfield live by reusing the base templates: cross-machine extra wiring (`@dc`), the `brookfield-dc` and `brookfield-member` seeding extras, Brookfield redefined and marked live | Done 2026-10-26 |
-| 6 | End-to-end test of a whole instance | Partly done 2026-10-26 — see below |
+| 6 | End-to-end test of a whole instance | Done 2026-10-27 |
 
-**Step 6 result (2026-10-26).** A real Brookfield instance was deployed through the panel. The domain
-controller and the workstation came up (`running`): promotion, the join, and the `brookfield-dc` and
-`brookfield-member` (workstation) seeding all ran. Exchange ran for about 3 hours and then **filled the
-datastore** and was paused; the instance was torn down and the datastore fully recovered (no other VMs
-were affected). Two blockers remain before step 6 can pass green:
+**Step 6 result.** A Brookfield instance was deployed end to end through the panel (instance `i-9547`,
+2026-10-27). All three machines came up clean (no warnings): the domain controller promoted
+`brookfield.local`, the Exchange server joined and installed (about an hour), and the Windows 11
+workstation joined. The `brookfield-dc` and `brookfield-member` seeding ran, and **all four flags
+planted** (`user.txt`, the Finance share, the mailbox message, `root.txt`) once the two guest-operation
+privileges were granted. The earlier run (2026-10-26) had filled the datastore; freeing ~46 GB (retiring
+three templates) and declaring the `exchange` extra's `diskGB: 45` fixed that, and this run had room.
 
-1. **Datastore space — resolved 2026-10-27.** Brookfield needs about 75 GB free while it deploys
-   (Exchange's install growth). Windows Server 2019, Windows Server 2022 and Metasploitable 3 (Windows)
-   were retired (marked planned, their template VMs deleted), freeing ~46 GB — the datastore is now at
-   about 119 GB free. Rebuild those three when they're needed again. A deploy now also correctly
-   *refuses* rather than filling the datastore (the `exchange` extra declares `diskGB: 45`).
-2. **Flag planting privileges.** The live panel's vCenter account lacks `GuestOperations.Modify` and
-   `.Execute` (added to `setup_vcenter.py`), so flags won't plant until `setup_vcenter.py` is re-run
-   against vCenter with admin credentials. Flag planting fails gracefully (a warning) until then.
-
-Once both are resolved, re-run the instance to confirm Exchange finishes and all four flags plant.
+**Pro Labs is done.** Brookfield is live and deploys as one instance with flags. Follow-ons, if wanted:
+a network per instance (VLAN/port group, with a VPN — see "Later"); a second lab; and rebuilding the
+three templates retired to make room (Windows Server 2019/2022, Metasploitable 3 Windows).
 
 ### 2. The install script: clear outcomes, colours and full errors — done 2026-10-26
 
