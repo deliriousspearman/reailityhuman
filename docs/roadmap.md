@@ -1,6 +1,6 @@
 # Roadmap
 
-Where lab-deploy stands and what comes next. Last updated 2026-10-26. The original design is in
+Where lab-deploy stands and what comes next. Last updated 2026-10-27. The original design is in
 [plan.md](plan.md); building templates is in [build-templates.md](build-templates.md).
 
 ## Where things stand
@@ -18,6 +18,8 @@ deployed by CI.
 | Ubuntu Desktop | 26.04, 24.04, 22.04 (GNOME over Remote Desktop) |
 | Debian | 13, 12; 11, 10, 9, 8 (legacy) |
 | Enterprise Linux | Rocky 10, 9 and 8; AlmaLinux 10, 9 and 8; CentOS Stream 9; CentOS 8, 7, 6 (legacy) |
+| Fedora | Server 44 (with Cockpit), Workstation 44 (GNOME over Remote Desktop) |
+| Arch-based | CachyOS (rolling; KDE Plasma on the console) |
 | Windows Server | 2025 (desktop and Core), 2022, 2019 |
 | Windows | 11 Enterprise (90-day evaluation; TPM checks skipped) |
 | Security | Kali 2026.2, Parrot 7.4 |
