@@ -25,6 +25,20 @@
 	let controlsShown = $state(true);
 	/** A short note after an action (e.g. "Pasted", or why it couldn't). */
 	let note = $state('');
+	/** Which corner the control dock sits in; remembered in this browser. */
+	type Corner = 'tr' | 'tl' | 'br' | 'bl';
+	let pos = $state<Corner>('tr');
+	const POS_KEY = 'lab-deploy:console-dock';
+
+	function setPos(p: Corner) {
+		pos = p;
+		try {
+			localStorage.setItem(POS_KEY, p);
+		} catch {
+			// a browser without storage (private window): the choice just isn't remembered
+		}
+		wakeControls();
+	}
 
 	// Auto-reconnect: a dropped console is retried a few times before giving up, so a brief blip (or a
 	// machine still settling) doesn't need a manual reconnect.
@@ -199,6 +213,12 @@
 	}
 
 	onMount(() => {
+		try {
+			const saved = localStorage.getItem(POS_KEY);
+			if (saved === 'tr' || saved === 'tl' || saved === 'br' || saved === 'bl') pos = saved;
+		} catch {
+			// no stored preference
+		}
 		void open();
 		wakeControls();
 		return () => {
@@ -232,8 +252,9 @@
 <div class="frame" bind:this={frame} onmousemove={wakeControls} role="presentation">
 	<div class="screen" bind:this={screen} class:actual={!fit}></div>
 
+	{#if note}<div class="note" class:top={pos === 'br' || pos === 'bl'} role="status">{note}</div>{/if}
 	{#if status === 'connected'}
-		<div class="dock" class:shown={controlsShown}>
+		<div class="dock" data-pos={pos} class:shown={controlsShown}>
 			<button
 				class="tab"
 				type="button"
@@ -271,9 +292,16 @@
 					</div>
 					<button class="item" type="button" onclick={screenshot}><Icon name="download" /> Screenshot</button>
 					<button class="item" type="button" onclick={fullScreen}><Icon name="expand" /> Full screen</button>
+
+					<div class="group-label">Position</div>
+					<div class="corners">
+						<button type="button" class:on={pos === 'tl'} title="Top left" aria-label="Move controls to the top left" onclick={() => setPos('tl')}>↖</button>
+						<button type="button" class:on={pos === 'tr'} title="Top right" aria-label="Move controls to the top right" onclick={() => setPos('tr')}>↗</button>
+						<button type="button" class:on={pos === 'bl'} title="Bottom left" aria-label="Move controls to the bottom left" onclick={() => setPos('bl')}>↙</button>
+						<button type="button" class:on={pos === 'br'} title="Bottom right" aria-label="Move controls to the bottom right" onclick={() => setPos('br')}>↘</button>
+					</div>
 				</div>
 			{/if}
-			{#if note}<span class="note" role="status">{note}</span>{/if}
 		</div>
 	{/if}
 </div>
@@ -341,11 +369,10 @@
 		overflow: auto;
 	}
 
-	/* The control dock: a tab plus a panel, top-right, over the screen. Fades when the mouse is still. */
+	/* The control dock: a tab plus a panel, in a chosen corner, over the screen. Fades when the mouse
+	   is still. The note is separate (below), so showing it never shifts these controls. */
 	.dock {
 		position: absolute;
-		top: 0.6rem;
-		right: 0.6rem;
 		z-index: 2;
 		display: flex;
 		align-items: flex-start;
@@ -353,6 +380,33 @@
 		opacity: 0;
 		transition: opacity 0.2s ease;
 		pointer-events: none;
+	}
+	.dock[data-pos='tr'] {
+		top: 0.6rem;
+		right: 0.6rem;
+	}
+	.dock[data-pos='tl'] {
+		top: 0.6rem;
+		left: 0.6rem;
+	}
+	.dock[data-pos='br'] {
+		bottom: 0.6rem;
+		right: 0.6rem;
+		align-items: flex-end;
+	}
+	.dock[data-pos='bl'] {
+		bottom: 0.6rem;
+		left: 0.6rem;
+		align-items: flex-end;
+	}
+	/* The panel opens into the screen: left of the tab on the right, right of the tab on the left. */
+	.dock[data-pos='tr'] .panel,
+	.dock[data-pos='br'] .panel {
+		order: -1;
+	}
+	.dock[data-pos='tl'] .panel,
+	.dock[data-pos='bl'] .panel {
+		order: 1;
 	}
 	.dock.shown {
 		opacity: 1;
@@ -375,7 +429,6 @@
 		border-color: var(--lms-gray-3);
 	}
 	.panel {
-		order: -1; /* panel to the left of the tab */
 		display: grid;
 		gap: 0.3rem;
 		width: 11.5rem;
@@ -439,14 +492,51 @@
 		color: var(--lms-lime-text);
 		background: var(--lms-accent-low);
 	}
+	.corners {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 0.25rem;
+	}
+	.corners button {
+		padding: 0.25rem;
+		border: var(--lms-border-width) solid var(--lms-gray-5);
+		border-radius: var(--lms-radius-xs);
+		background: var(--lms-panel-2);
+		color: var(--lms-gray-1);
+		font-size: 0.9rem;
+		line-height: 1;
+		cursor: pointer;
+	}
+	.corners button:hover {
+		border-color: var(--lms-gray-3);
+		color: var(--lms-white);
+	}
+	.corners button.on {
+		border-color: var(--lms-lime);
+		color: var(--lms-lime-text);
+		background: var(--lms-accent-low);
+	}
+	/* The action note: fixed at the bottom centre of the screen, independent of the dock, so it never
+	   moves the controls. Shows even when the dock has faded. */
 	.note {
-		align-self: center;
-		padding: 0.3rem 0.5rem;
+		position: absolute;
+		bottom: 0.8rem;
+		left: 50%;
+		transform: translateX(-50%);
+		z-index: 3;
+		padding: 0.35rem 0.7rem;
 		border-radius: var(--lms-radius-sm);
 		background: color-mix(in srgb, var(--lms-panel) 92%, transparent);
-		font-size: 0.78rem;
+		box-shadow: 0 0.3rem 1rem -0.4rem rgb(0 0 0 / 0.6);
+		font-size: 0.8rem;
 		color: var(--lms-lime-text);
 		white-space: nowrap;
+		pointer-events: none;
+	}
+	/* When the dock is along the bottom, show the note at the top instead, so they don't overlap. */
+	.note.top {
+		bottom: auto;
+		top: 0.8rem;
 	}
 	.hint {
 		margin-top: 0.6rem;
