@@ -124,7 +124,7 @@ def main() -> int:
         step("The panel's catalogue")
         ready, planned = catalogue.write(manifest, state, cfg.get("vcenter", "template_folder"), ROOT)
         out.ok(f"{ready} template(s) deployable, {planned} shown as coming soon.")
-        compose("up", "-d", "--no-build", "--force-recreate", "api", "worker")
+        compose("up", "-d", "--no-build", "--force-recreate", "api", "worker", "sweeper")
         wait_for_panel(panel)
 
         step("Tests")

@@ -24,6 +24,9 @@ services:
   worker:
     volumes:
       - ./templates.yaml:/app/templates.yaml:ro
+  sweeper:
+    volumes:
+      - ./templates.yaml:/app/templates.yaml:ro
 """
 
 

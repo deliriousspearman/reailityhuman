@@ -67,6 +67,19 @@ services:
       api:
         condition: service_healthy
 
+  # The per-minute sweep (expiry, lost jobs, a lab's next machines) and quick actions (start, stop,
+  # reboot, destroy), on their own queue, so they still run while long deploys fill the worker
+  # (app/jobs.py). The worker takes them too when it has room.
+  sweeper:
+    <<: *backend
+    command: ['procrastinate', '--app=app.jobs.app', 'worker', '--queues=quick', '--concurrency=3']
+    pull_policy: never
+    # Its jobs take seconds, a destroy a minute or two.
+    stop_grace_period: 3m
+    depends_on:
+      api:
+        condition: service_healthy
+
   # A dump of the database on start and then daily, in /srv/lab-deploy/backups, kept for 14 days. It
   # holds every machine's password and settings: without it, a lost database leaves VMs in vCenter
   # that the panel knows nothing about. Restoring: README.md, "Backups".

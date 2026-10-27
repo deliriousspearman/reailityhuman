@@ -518,3 +518,28 @@ def test_a_running_job_stops_when_cancelled(queued, monkeypatch):
     assert client.delete(f"/api/machines/{machine_id}").status_code == 200
     run_queued(queued)
     assert client.get(f"/api/machines/{machine_id}").status_code == 404
+
+
+def test_quick_jobs_and_the_sweep_have_their_own_queue(monkeypatch):
+    """Long jobs (deploys, resets) can fill the worker for hours; the sweep and quick power actions go
+    on the "quick" queue, which a second worker serves, so they still run meanwhile."""
+    configured = []
+
+    class Deferrer:
+        def defer(self, **_):
+            pass
+
+    class RecordingTask:
+        def configure(self, **kwargs):
+            configured.append(kwargs)
+            return Deferrer()
+
+    monkeypatch.setattr(jobs, "machine_action", RecordingTask())
+    for action in ("deploy", "redeploy", "reset", "start", "stop", "reboot", "expire", "destroy"):
+        jobs.enqueue("m-none", action, "jo")
+    assert [c["queue"] for c in configured] == ["default"] * 3 + ["quick"] * 5
+    # Still one job at a time per machine, across both queues.
+    assert {c["lock"] for c in configured} == {"m-none"}
+    assert jobs.sweep.queue == "quick"
+    with session() as s:
+        s.execute(Job.__table__.delete().where(Job.machine_id == "m-none"))

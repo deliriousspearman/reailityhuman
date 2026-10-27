@@ -252,7 +252,8 @@ If something fails, the machine's **Activity** log and **Jobs** (on its page, an
 show vCenter's error message. **Redeploy** on the machine's page tries again with the same settings.
 A deploy that failed partway can leave a VM no machine owns; **Admin → Leftover VMs** lists those
 and deletes them.
-The worker's own log has the rest: `docker compose -f /srv/lab-deploy/compose.yaml logs worker`.
+The workers' own logs have the rest: `docker compose -f /srv/lab-deploy/compose.yaml logs worker sweeper`
+(`worker` runs deploys and resets; `sweeper` the per-minute sweep and quick actions such as Stop).
 
 ## 5. Windows Server templates
 

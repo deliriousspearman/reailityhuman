@@ -75,13 +75,13 @@ The `backup` service dumps the database when it starts and then once a day, to
 database holds every machine's password and settings; without it, the panel no longer knows the VMs
 in vCenter. Copy the folder somewhere else as well, if you can.
 
-To restore one (it replaces what's in the database), with the worker stopped so no job runs:
+To restore one (it replaces what's in the database), with the workers stopped so no job runs:
 
 ```sh
 cd /srv/lab-deploy
-docker compose stop worker
+docker compose stop worker sweeper
 gunzip -c backups/labdeploy-<date>-<time>.sql.gz | docker compose exec -T postgres psql -q -U labdeploy labdeploy
-docker compose start worker
+docker compose start worker sweeper
 ```
 
 ## Templates and testing
