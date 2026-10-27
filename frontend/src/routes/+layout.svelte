@@ -8,12 +8,18 @@
 	import AppHeader from '$lib/components/AppHeader.svelte';
 	import AppSidebar from '$lib/components/AppSidebar.svelte';
 	import ExpiryWarning from '$lib/components/ExpiryWarning.svelte';
+	import { page } from '$app/state';
 	import { store } from '$lib/store.svelte';
 
 	let { children } = $props();
 	let menuOpen = $state(false);
+	// A console opened in a tab of its own (?view=tab): just its screen, without the panel around it.
+	const bare = $derived(page.route.id === '/machines/[id]/console' && page.url.searchParams.get('view') === 'tab');
 </script>
 
+{#if bare}
+	{@render children()}
+{:else}
 <div class="shell">
 	<AppHeader bind:menuOpen />
 	<div class="body">
@@ -40,6 +46,7 @@
 		{/if}
 	</div>
 </div>
+{/if}
 
 <style>
 	.body {

@@ -11,6 +11,9 @@
 
 	const id = page.params.id ?? '';
 	const m = $derived(store.machine(id));
+	/** Opened in a tab of its own (?view=tab): the screen fills the tab, with no panel around it (the
+	 * layout leaves out its header and sidebar too). */
+	const tabView = page.url.searchParams.get('view') === 'tab';
 	// In full, for its password (Type password): the lists leave it out.
 	$effect(() => {
 		store.watch(id);
@@ -210,6 +213,22 @@
 		}
 	}
 
+	/** Opens just the screen in a new browser tab, full size, and closes the console here so the two
+	 * don't both drive the machine; Reconnect takes it back. */
+	function openInTab() {
+		const tab = window.open(`/machines/${encodeURIComponent(id)}/console?view=tab`, '_blank');
+		if (!tab) {
+			flash('Your browser blocked the new tab: allow pop-ups for the panel');
+			return;
+		}
+		tab.opener = null;
+		if (document.fullscreenElement) void document.exitFullscreen();
+		clearTimeout(retryTimer);
+		close();
+		status = 'closed';
+		message = 'The console is open in another tab.';
+	}
+
 	function fullScreen() {
 		if (document.fullscreenElement) void document.exitFullscreen();
 		else void frame.requestFullscreen();
@@ -237,25 +256,31 @@
 
 <svelte:head><title>{m?.name ?? 'Machine'} console · Codex Labs</title></svelte:head>
 
-<nav class="breadcrumbs" aria-label="Breadcrumbs">
-	<a href="/machines">Machines</a> <span aria-hidden="true">›</span>
-	<a href="/machines/{id}">{m?.name ?? id}</a> <span aria-hidden="true">›</span>
-	<span aria-current="page">Console</span>
-</nav>
-
-<div class="toolbar">
+{#snippet state()}
 	<p class="state" data-status={status} role="status">
 		{#if status === 'connecting'}{message || 'Connecting…'}{:else if status === 'connected'}Connected{:else}{message}{/if}
 	</p>
 	{#if status === 'closed'}
 		<button class="btn btn-sm btn-primary" type="button" onclick={reconnect}><Icon name="reboot" /> Reconnect</button>
 	{/if}
-</div>
+{/snippet}
+
+{#if !tabView}
+	<nav class="breadcrumbs" aria-label="Breadcrumbs">
+		<a href="/machines">Machines</a> <span aria-hidden="true">›</span>
+		<a href="/machines/{id}">{m?.name ?? id}</a> <span aria-hidden="true">›</span>
+		<span aria-current="page">Console</span>
+	</nav>
+
+	<div class="toolbar">{@render state()}</div>
+{/if}
 
 <!-- The sidebar sits inside the frame (what goes full screen), so its controls stay reachable there.
      It fades out when the mouse is still and returns on movement. -->
-<div class="frame" bind:this={frame} onmousemove={wakeControls} role="presentation">
+<div class="frame" class:whole={tabView} bind:this={frame} onmousemove={wakeControls} role="presentation">
 	<div class="screen" bind:this={screen} class:actual={!fit}></div>
+	<!-- In a tab of its own there's no toolbar: connecting, closed and Reconnect show over the screen. -->
+	{#if tabView && status !== 'connected'}<div class="overlay">{@render state()}</div>{/if}
 
 	{#if note}<div class="note" class:top={pos === 'br' || pos === 'bl'} role="status">{note}</div>{/if}
 	{#if status === 'connected'}
@@ -297,6 +322,9 @@
 					</div>
 					<button class="item" type="button" onclick={screenshot}><Icon name="download" /> Screenshot</button>
 					<button class="item" type="button" onclick={fullScreen}><Icon name="expand" /> Full screen</button>
+					{#if !tabView}
+						<button class="item" type="button" title="Just the screen, full size, in a new browser tab" onclick={openInTab}><Icon name="external" /> Open in new tab</button>
+					{/if}
 
 					<div class="group-label">Position</div>
 					<div class="corners">
@@ -310,10 +338,12 @@
 		</div>
 	{/if}
 </div>
+{#if !tabView}
 <p class="hint">
 	Click the screen to type into it. Combinations like Ctrl+Alt+Del and Alt+Tab stay with your own computer — use the Send keys
 	buttons. Paste types your clipboard in (copying out isn't supported by these consoles). A dropped console reconnects itself.
 </p>
+{/if}
 
 <style>
 	.breadcrumbs {
@@ -364,6 +394,25 @@
 	.frame:fullscreen {
 		height: 100%;
 		border-radius: 0;
+	}
+	/* In a tab of its own: the whole tab. */
+	.frame.whole {
+		position: fixed;
+		inset: 0;
+		height: auto;
+		min-height: 0;
+		border-radius: 0;
+	}
+	.overlay {
+		position: absolute;
+		inset: 0;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		gap: 0.75rem;
+		text-align: center;
+		padding: 1rem;
 	}
 	.screen {
 		width: 100%;

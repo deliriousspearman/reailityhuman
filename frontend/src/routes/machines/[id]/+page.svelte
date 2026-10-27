@@ -351,6 +351,9 @@
 					<button class="btn btn-sm" type="button" disabled title="Start the machine first"><Icon name="console" /> Open console</button>
 				{:else}
 					<a class="btn btn-sm" href="/machines/{m.id}/console"><Icon name="console" /> Open console</a>
+					<a class="btn btn-quiet btn-sm" href="/machines/{m.id}/console?view=tab" target="_blank" rel="noopener" title="Just the screen, full size, in a new browser tab">
+						<Icon name="external" /> New tab
+					</a>
 				{/if}
 			</li>
 		{/if}
