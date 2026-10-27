@@ -60,6 +60,10 @@ and mouse in the browser.
 **Also done:**
 - OS and distribution logos on the catalogue, the deploy page, the machines list and machine pages.
 - The offline install: [offline-install.md](offline-install.md).
+- **Long jobs can't hold up the sweep** (2026-10-27). Deploys, redeploys and resets run on the worker's
+  `default` queue; the per-minute sweep and quick actions (start, stop, reboot, expire, destroy) on a
+  `quick` queue, served by a second worker, `sweeper`. Before, four long deploys (Exchange takes about an
+  hour) filled every slot, and expiry, lost-job recovery and a lab's next machines waited for them.
 - The [project review of 2026-10-23](review-2026-10-23.md): its five top priorities (a datastore
   reserve, machines that depend on each other, cancelling a stuck job, expired machines out of the
   quota, capacity on the deploy form). The rest is kept for later.
@@ -173,28 +177,24 @@ full offline install run on a server — the changes are output only, so the ins
 Asked 2026-10-23, each with an option for example data: GitLab CE, Jenkins, Prometheus, FreeBSD,
 Alpine, FreeIPA (on Rocky), ELK, Graylog, k3s, Redis, MongoDB and Tomcat.
 
-### 4. Keep a vCenter session open in the API (small)
+### 4. Keep a vCenter session open in the API — not needed (checked 2026-10-27)
 
-**Why.** The panel signs in to vCenter for each request, and on this vCenter that takes 14 to 20
-seconds. Opening a console therefore takes about 25 seconds, and the health and capacity checks are
-just as slow.
+This was planned because signing in to vCenter took 14 to 20 seconds, which made opening a console
+take about 25 seconds. Timed again on 2026-10-27 from the panel's API container, sign-in is fast now:
 
-**How.**
-- The API keeps one signed-in session and shares it between requests.
-- It signs in again when the session has expired (vCenter's default idle limit is 30 minutes) or
-  vCenter has restarted.
-- A lock keeps two requests from signing in at once.
-- The job worker keeps signing in per job: jobs take minutes, so it matters less there.
+| Stage | Median of 5 |
+|---|---|
+| TCP and TLS to vCenter | 0.01 s |
+| Service content (before signing in) | 0.02 s |
+| Login | 0.04 s |
+| Sign-in as the panel does it (`SmartConnect`) | 0.07 s |
 
-**Tests.** With vcsim:
-- the session is reused;
-- an expired session is replaced;
-- a vCenter restart is survived.
-
-**Done when:** opening a console takes a few seconds, and `/api/health` answers in under a second.
-
-**Separately:** find out why sign-in is slow on this vCenter. DNS lookups inside the appliance or
-single sign-on are the usual causes. Production may not have the problem.
+`/api/health` and `/api/leftovers`, which sign in and query vCenter, answer in about 0.1 s. Nothing
+was changed on vCenter for this, so whatever slowed sign-in earlier has since gone (DNS lookups inside
+the appliance and single sign-on are the usual causes). Sharing a session would now save a few
+hundredths of a second per call, at the cost of handling expired sessions and threads, so it's
+dropped. If sign-in gets slow again (or production is slow), time it the same way first: stage by
+stage, from inside the `api` container.
 
 ### 5. Console on the other systems (small)
 
