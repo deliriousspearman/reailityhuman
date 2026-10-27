@@ -124,11 +124,11 @@ controller and the workstation came up (`running`): promotion, the join, and the
 datastore** and was paused; the instance was torn down and the datastore fully recovered (no other VMs
 were affected). Two blockers remain before step 6 can pass green:
 
-1. **Datastore space.** Brookfield needs about 75 GB free while it deploys (Exchange's install growth),
-   but the lab datastore has about 42 GB usable above its reserve. A deploy now also correctly *refuses*
-   rather than filling the datastore (the `exchange` extra declares `diskGB: 45`, fixed 2026-10-26).
-   **Needs:** free about 35 GB (retire a few templates — e.g. Windows Server 2019 and 2022 — and rebuild
-   them later), or extend the datastore.
+1. **Datastore space — resolved 2026-10-27.** Brookfield needs about 75 GB free while it deploys
+   (Exchange's install growth). Windows Server 2019, Windows Server 2022 and Metasploitable 3 (Windows)
+   were retired (marked planned, their template VMs deleted), freeing ~46 GB — the datastore is now at
+   about 119 GB free. Rebuild those three when they're needed again. A deploy now also correctly
+   *refuses* rather than filling the datastore (the `exchange` extra declares `diskGB: 45`).
 2. **Flag planting privileges.** The live panel's vCenter account lacks `GuestOperations.Modify` and
    `.Execute` (added to `setup_vcenter.py`), so flags won't plant until `setup_vcenter.py` is re-run
    against vCenter with admin credentials. Flag planting fails gracefully (a warning) until then.
