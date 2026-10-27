@@ -3,7 +3,7 @@
 // worker's progress (log lines, state changes) arrives with the polls.
 // There's no sign-in yet, so every machine is everyone's.
 import { api, ApiError, setActor } from './api';
-import type { Capacity, DeployableLab, ExtraChoice, Instance, Job, MachineTemplate, PanelConfig, SingleMachine } from './types';
+import type { Capacity, DeployableLab, ExtraChoice, Instance, Job, LogLine, MachineTemplate, PanelConfig, PanelState, SingleMachine } from './types';
 
 const SEC = 1000;
 const HOUR = 3600 * SEC;
@@ -38,8 +38,15 @@ class PanelStore {
 	user = $state('');
 
 	#lastPoll = 0;
-	/** The machine whose page is open: polled in full, with its log, which the list leaves out. */
+	/** The machine whose page is open: polled in full, with its password and log, which the list
+	 * leaves out. */
 	#watched: string | null = null;
+	/** How many open pages show the job list (needJobs); it's only polled while one does. */
+	#jobPages = 0;
+	/** Polls and actions in the order they started, and the latest whose answer was used: a poll that
+	 * started before an action answered would put back the machine's state from before it. */
+	#seq = 0;
+	#applied = 0;
 	#noticeTimer: ReturnType<typeof setTimeout> | undefined;
 
 	constructor() {
@@ -69,19 +76,28 @@ class PanelStore {
 
 	async refresh() {
 		this.#lastPoll = Date.now();
+		const seq = ++this.#seq;
 		try {
 			const watched = this.#watched;
-			const [machines, instances, jobs, detail] = await Promise.all([
-				api<SingleMachine[]>('/machines'),
-				api<Instance[]>('/instances'),
-				api<Job[]>('/jobs?limit=50'),
-				watched ? api<SingleMachine>(`/machines/${encodeURIComponent(watched)}`).catch(() => null) : null,
+			// Only the log lines since the last one we have.
+			const last = watched ? this.machine(watched)?.log?.at(-1)?.id : undefined;
+			const [state, detail] = await Promise.all([
+				api<PanelState>(this.#jobPages ? '/state?jobs=1' : '/state'),
+				watched
+					? api<SingleMachine>(`/machines/${encodeURIComponent(watched)}${last === undefined ? '' : `?after=${last}`}`).catch(() => null)
+					: null,
 			]);
-			// Keep logs already fetched until a newer one arrives, so the page doesn't flicker.
-			const before = new Map(this.machines.map((m) => [m.id, m.log]));
-			this.machines = machines.map((m) => (m.id === detail?.id ? detail : { ...m, log: before.get(m.id) }));
-			this.instances = instances;
-			this.jobs = jobs;
+			if (seq < this.#applied) return; // something newer has answered meanwhile
+			this.#applied = seq;
+			// The lists leave out passwords and logs: keep those already fetched.
+			const before = new Map(this.machines.map((m) => [m.id, m]));
+			this.machines = state.machines.map((m) => {
+				const had = before.get(m.id);
+				if (m.id !== detail?.id) return { ...m, password: had?.password, log: had?.log };
+				return { ...detail, log: mergeLog(had?.log, detail) };
+			});
+			this.instances = state.instances;
+			if (state.jobs) this.jobs = state.jobs;
 			this.offline = null;
 			this.loaded = true;
 			if (!this.config) void this.loadConfig();
@@ -99,10 +115,21 @@ class PanelStore {
 		}
 	}
 
-	/** Follows this machine in full (with its log) from now on, or none; polls it straight away. */
+	/** Follows this machine in full (with its password and log) from now on, or none; polls it
+	 * straight away. */
 	watch(id: string | null) {
 		this.#watched = id;
 		if (id) void this.refresh();
+	}
+
+	/** Polls the job list too while a page shows it; call the returned function when it closes
+	 * (e.g. return it from an $effect). */
+	needJobs(): () => void {
+		this.#jobPages += 1;
+		void this.refresh();
+		return () => {
+			this.#jobPages -= 1;
+		};
 	}
 
 	/** Remembers who you are in this browser. */
@@ -267,7 +294,9 @@ class PanelStore {
 
 	// Actions -----------------------------------------------------------------------------------------
 
+	/** Puts in a machine an action just answered with; polls that started before it are then ignored. */
 	#put(m: SingleMachine) {
+		this.#applied = ++this.#seq;
 		const i = this.machines.findIndex((x) => x.id === m.id);
 		if (i === -1) this.machines.push(m);
 		else this.machines[i] = m;
@@ -357,7 +386,10 @@ class PanelStore {
 		const at = this.instances.findIndex((x) => x.id === i.id);
 		if (at === -1) this.instances.push(i);
 		else this.instances[at] = i;
-		for (const m of i.machines) this.#put({ ...m, log: this.machine(m.id)?.log });
+		for (const m of i.machines) {
+			const had = this.machine(m.id);
+			this.#put({ ...m, password: had?.password, log: had?.log });
+		}
 	}
 
 	/** Runs an action on a whole instance, as #act does for a machine. */
@@ -398,6 +430,16 @@ class PanelStore {
 	destroyInstance(i: Instance) {
 		return this.#actInstance(i, '', { method: 'DELETE' });
 	}
+}
+
+/** A machine's log after a poll: the full log as sent, or (`logAfter`) the lines we had plus those
+ * after them, each once. Lines after one we don't have can't be placed: left for the next full fetch. */
+function mergeLog(had: LogLine[] | undefined, detail: SingleMachine): LogLine[] | undefined {
+	if (detail.logAfter === undefined) return detail.log;
+	if (!had) return undefined;
+	const last = had.at(-1)?.id ?? -1;
+	const added = (detail.log ?? []).filter((line) => line.id > last);
+	return added.length ? [...had, ...added] : had;
 }
 
 export const store = new PanelStore();

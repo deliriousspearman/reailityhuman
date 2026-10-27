@@ -299,7 +299,8 @@
 			<button class="btn btn-quiet btn-sm" type="button" onclick={() => (showPassword = !showPassword)}>
 				<Icon name="eye" />{showPassword ? 'Hide' : 'Show'}
 			</button>
-			<button class="btn btn-quiet btn-sm" type="button" onclick={() => copy(m.password)}>
+			<!-- The password comes with the machine's own poll, a moment after the list. -->
+			<button class="btn btn-quiet btn-sm" type="button" disabled={!m.password} onclick={() => copy(m.password ?? '')}>
 				<Icon name="copy" />{copied === m.password ? 'Copied' : 'Copy password'}
 			</button>
 		</li>

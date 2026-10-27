@@ -8,7 +8,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, FastAPI, HTTPException
+from fastapi import APIRouter, FastAPI, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select, text
 from sqlalchemy.exc import IntegrityError
@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session, object_session
 from . import actions, catalogue, cloudinit, console, extras, jobs, labs
 from .config import settings
 from .deps import ANYONE, OWNER_RULE, Actor, Db, add_log, get_machine
-from .models import STABLE_STATES, InstanceFlag, Job, Machine, utcnow
+from .models import STABLE_STATES, InstanceFlag, Job, LogLine, Machine, utcnow
 from .vsphere import Capacity, VSphereError, connect
 
 # A hostname label: starts with a letter, doesn't end with a hyphen; 15 at most, Windows' limit.
@@ -35,12 +35,20 @@ def ms(t: datetime | None) -> int | None:
     return None if t is None else int(t.timestamp() * 1000)
 
 
-def machine_out(m: Machine, log: bool = True, machines: list[Machine] | None = None) -> dict:
-    """`log`: with its activity log (left out of the list, which the panel polls every few seconds).
-    `machines`: every machine, to find those that depend on this one; read here if not given."""
+def machine_out(m: Machine, log: bool = True, machines: list[Machine] | None = None, after: int | None = None) -> dict:
+    """`log`: the machine on its own, with its password and activity log (both left out of the lists,
+    which every open page polls every few seconds). `after`: only the log lines after that one's id
+    (the panel has the rest). `machines`: every machine, to find those that depend on this one; read
+    here if not given."""
+    db = object_session(m)
     if machines is None:
-        db = object_session(m)
         machines = db.scalars(select(Machine)).all() if db else []
+    if not log:
+        lines = None
+    elif after is None:
+        lines = m.log
+    else:
+        lines = db.scalars(select(LogLine).where(LogLine.machine_id == m.id, LogLine.id > after).order_by(LogLine.id)).all()
     return {
         "id": m.id,
         "name": m.name,
@@ -53,7 +61,7 @@ def machine_out(m: Machine, log: bool = True, machines: list[Machine] | None = N
         "ip": m.ip or "",
         "vmName": m.vm_name,
         "username": m.username,
-        "password": m.password,
+        **({"password": m.password} if log else {}),
         # Its memory: the template's, or more where an extra needed it (None: the template's gone).
         "memoryGB": extras.memory_gb(tpl.memory_gb, m.extras or []) if (tpl := catalogue.find(m.template, m.version)) else None,
         "cpu": extras.cpu(tpl.cpu, m.extras or []) if tpl else None,
@@ -75,10 +83,12 @@ def machine_out(m: Machine, log: bool = True, machines: list[Machine] | None = N
         "role": m.role or "",
         **({"pending": m.pending} if m.pending else {}),
         **(
-            {"log": [{"at": ms(line.at), "text": line.text, **({"tone": line.tone} if line.tone else {})} for line in m.log]}
-            if log
+            {"log": [{"id": line.id, "at": ms(line.at), "text": line.text, **({"tone": line.tone} if line.tone else {})} for line in lines]}
+            if lines is not None
             else {}
         ),
+        # The log above is only what came after this line: add it to what the panel has.
+        **({"logAfter": after} if log and after is not None else {}),
     }
 
 
@@ -302,16 +312,35 @@ class Hours(BaseModel):
     hours: int = Field(ge=1, le=MAX_HOURS)
 
 
+def all_machines(db: Session) -> list[Machine]:
+    return db.scalars(select(Machine).order_by(Machine.created_at, Machine.id)).all()
+
+
 @router.get("/machines")
 def list_machines(db: Db) -> list[dict]:
-    """Every machine, without its log (GET /machines/{id} has it)."""
-    machines = db.scalars(select(Machine).order_by(Machine.created_at)).all()
+    """Every machine, without its password or log (GET /machines/{id} has them)."""
+    machines = all_machines(db)
     return [machine_out(m, log=False, machines=machines) for m in machines]
 
 
 @router.get("/machines/{machine_id}")
-def read_machine(machine_id: str, db: Db) -> dict:
-    return machine_out(get_machine(db, machine_id))
+def read_machine(machine_id: str, db: Db, after: int | None = None) -> dict:
+    """`after`: only the log lines after that line's id (`logAfter` in the answer says so)."""
+    return machine_out(get_machine(db, machine_id), after=after)
+
+
+@router.get("/state")
+def panel_state(db: Db, with_jobs: bool = Query(False, alias="jobs")) -> dict:
+    """What every open page polls, in one request: the machines and lab instances (as GET /machines
+    and GET /instances), and the latest jobs (as GET /jobs) only when asked (`jobs=1`)."""
+    machines = all_machines(db)
+    out = {
+        "machines": [machine_out(m, log=False, machines=machines) for m in machines],
+        "instances": instances_out(db, machines),
+    }
+    if with_jobs:
+        out["jobs"] = list_jobs(db)
+    return out
 
 
 @router.post("/machines", status_code=201)
@@ -605,9 +634,13 @@ def new_instance_id(db: Session) -> str:
             return instance_id
 
 
-def instance_machines(db: Session, instance_id: str) -> list[Machine]:
-    """The instance's machines, in their lab's boot order."""
-    machines = db.scalars(select(Machine).where(Machine.instance_id == instance_id).order_by(Machine.created_at, Machine.id)).all()
+def instance_machines(db: Session, instance_id: str, everyone: list[Machine] | None = None) -> list[Machine]:
+    """The instance's machines, in their lab's boot order. `everyone`: every machine (all_machines),
+    to pick them from instead of reading them again."""
+    if everyone is None:
+        machines = db.scalars(select(Machine).where(Machine.instance_id == instance_id).order_by(Machine.created_at, Machine.id)).all()
+    else:
+        machines = [m for m in everyone if m.instance_id == instance_id]
     if not machines:
         raise HTTPException(404, "There's no lab instance with that id. It may have been destroyed.")
     lab = labs.find(machines[0].lab or "")
@@ -627,9 +660,11 @@ def instance_state(machines: list[Machine]) -> str:
     return "stopped" if all(s == "stopped" for s in states) else "running"
 
 
-def instance_out(db: Session, instance_id: str) -> dict:
-    machines = instance_machines(db, instance_id)
-    everyone = db.scalars(select(Machine)).all()
+def instance_out(db: Session, instance_id: str, everyone: list[Machine] | None = None) -> dict:
+    """`everyone`: every machine (all_machines), read here if not given."""
+    if everyone is None:
+        everyone = all_machines(db)
+    machines = instance_machines(db, instance_id, everyone)
     first = machines[0]
     lab = labs.find(first.lab or "")
     planted = {f.flag_id: f for f in db.scalars(select(InstanceFlag).where(InstanceFlag.instance_id == instance_id))}
@@ -655,10 +690,15 @@ def instance_out(db: Session, instance_id: str) -> dict:
     }
 
 
+def instances_out(db: Session, machines: list[Machine]) -> list[dict]:
+    """Every lab instance, oldest first. `machines`: every machine (all_machines), oldest first."""
+    instance_ids = list(dict.fromkeys(m.instance_id for m in machines if m.instance_id))
+    return [instance_out(db, i, machines) for i in instance_ids]
+
+
 @router.get("/instances")
 def list_instances(db: Db) -> list[dict]:
-    instance_ids = db.scalars(select(Machine.instance_id).where(Machine.instance_id.is_not(None)).group_by(Machine.instance_id).order_by(func.min(Machine.created_at))).all()
-    return [instance_out(db, i) for i in instance_ids]
+    return instances_out(db, all_machines(db))
 
 
 @router.get("/instances/{instance_id}")

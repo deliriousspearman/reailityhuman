@@ -543,3 +543,26 @@ def test_quick_jobs_and_the_sweep_have_their_own_queue(monkeypatch):
     assert jobs.sweep.queue == "quick"
     with session() as s:
         s.execute(Job.__table__.delete().where(Job.machine_id == "m-none"))
+
+
+def test_polls_leave_out_passwords_and_send_only_new_log_lines(queued):
+    """Every open page polls the lists every few seconds: no passwords there, only on the machine's own
+    page, and its log comes in full once, then only the lines since."""
+    m = deploy(queued, name="poll01")
+    listed = next(x for x in client.get("/api/machines").json() if x["id"] == m["id"])
+    assert "password" not in listed and "log" not in listed
+    assert len(m["password"]) == 16 and "logAfter" not in m
+    ids = [line["id"] for line in m["log"]]
+    assert ids == sorted(ids)
+    # Nothing new since the last line; then one more.
+    assert client.get(f"/api/machines/{m['id']}?after={ids[-1]}").json()["log"] == []
+    client.post(f"/api/machines/{m['id']}/extend", json={"hours": 2})
+    later = client.get(f"/api/machines/{m['id']}?after={ids[-1]}").json()
+    assert later["logAfter"] == ids[-1] and [line["text"] for line in later["log"]] == ["Extended by 2 h"]
+    assert later["password"] == m["password"]
+    # The panel's one poll: the lists as their own endpoints give them, and jobs only when asked for.
+    state = client.get("/api/state").json()
+    assert state["machines"] == client.get("/api/machines").json()
+    assert state["instances"] == client.get("/api/instances").json()
+    assert "jobs" not in state
+    assert client.get("/api/state?jobs=1").json()["jobs"] == client.get("/api/jobs").json()

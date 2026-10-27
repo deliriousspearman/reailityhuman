@@ -11,6 +11,11 @@
 
 	const id = page.params.id ?? '';
 	const m = $derived(store.machine(id));
+	// In full, for its password (Type password): the lists leave it out.
+	$effect(() => {
+		store.watch(id);
+		return () => store.watch(null);
+	});
 
 	let frame: HTMLDivElement;
 	let screen: HTMLDivElement;
@@ -269,7 +274,7 @@
 					<button class="item" type="button" onclick={() => rfb?.sendCtrlAltDel()}><Icon name="keyboard" /> Ctrl+Alt+Del</button>
 					<button class="item" type="button" title="Pastes your clipboard by typing it in" onclick={paste}><Icon name="copy" /> Paste</button>
 					{#if m?.password}
-						<button class="item" type="button" title="Types the machine's password" onclick={() => sendText(m.password)}><Icon name="key" /> Type password</button>
+						<button class="item" type="button" title="Types the machine's password" onclick={() => sendText(m.password ?? '')}><Icon name="key" /> Type password</button>
 					{/if}
 
 					<div class="group-label">Send keys</div>

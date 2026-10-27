@@ -47,6 +47,8 @@ export interface Lab {
 }
 
 export interface LogLine {
+	/** Increasing: GET /machines/{id}?after=<id> sends only the lines after one. */
+	id: number;
 	at: number;
 	text: string;
 	tone?: 'ok' | 'warn' | 'error' | 'muted';
@@ -194,9 +196,10 @@ export interface SingleMachine {
 	ip: string;
 	/** The VM's name in vCenter. */
 	vmName: string;
-	/** Account made on first boot, and its generated password. */
+	/** Account made on first boot, and its generated password (only from GET /machines/{id}: the
+	 * lists leave it out). */
 	username: string;
-	password: string;
+	password?: string;
 	/** Its memory: the template's, or more where an extra needed it (e.g. a Wazuh server's 4 GB). */
 	memoryGB?: number | null;
 	/** Its vCPUs: the template's, or more where an extra needed them. */
@@ -216,6 +219,16 @@ export interface SingleMachine {
 	pending?: string;
 	/** Only from GET /machines/{id}: the list leaves it out. */
 	log?: LogLine[];
+	/** With GET /machines/{id}?after=<id>: `log` is only the lines after that one. */
+	logAfter?: number;
+}
+
+/** GET /state: what every open page polls, in one request. */
+export interface PanelState {
+	machines: SingleMachine[];
+	instances: Instance[];
+	/** Only when asked for (?jobs=1). */
+	jobs?: Job[];
 }
 
 /** A setting on an extra, e.g. the domain name a certificate is for. */

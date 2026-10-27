@@ -15,6 +15,8 @@
 		const timer = setInterval(() => store.refreshCapacity(), 30_000);
 		return () => clearInterval(timer);
 	});
+	// The job list is only polled while a page shows it.
+	$effect(() => store.needJobs());
 
 	const cap = $derived(store.capacity);
 	// How many more of the biggest machine fit in the free memory.
