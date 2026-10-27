@@ -32,6 +32,7 @@ parrot = "http://mirror.lab.example/parrot"                 # as deb.parrot.sh/p
 rocky = "http://mirror.lab.example/rocky"                   # as dl.rockylinux.org/pub/rocky
 alma = "http://mirror.lab.example/almalinux"                # as repo.almalinux.org/almalinux
 centos_stream = "http://mirror.lab.example/centos-stream"   # as mirror.stream.centos.org
+fedora = "http://mirror.lab.example/fedora"                 # as dl.fedoraproject.org/pub/fedora/linux (releases/44, updates/44)
 centos_vault = "http://mirror.lab.example/centos-vault"     # as vault.centos.org (CentOS 6, 7, 8)
 epel_archive = "http://mirror.lab.example/epel-archive"     # as archives.fedoraproject.org/pub/archive/epel (CentOS 6)
 proxmox = "http://mirror.lab.example/proxmox"               # as download.proxmox.com/debian

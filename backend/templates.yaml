@@ -5,13 +5,14 @@
 #               "clean" (machines are linked clones of it), cloud-init and open-vm-tools. How to
 #               build one: docs/setup-vsphere.md and scripts/template/.
 #   username    the account cloud-init creates; its password is generated for each machine.
-#   family      debian (Debian, Ubuntu; the default), rhel (CentOS Stream, Rocky, Alma), windows
-#               (sysprepped with Cloudbase-Init: scripts/template/prepare.ps1 and clean.ps1), legacy
+#   family      debian (Debian, Ubuntu; the default), rhel (CentOS Stream, Rocky, Alma, Fedora), arch
+#               (CachyOS), windows (sysprepped with Cloudbase-Init: scripts/template/prepare.ps1 and
+#               clean.ps1), legacy
 #               (no usable cloud-init: lab-firstboot reads the machine's settings through VMware Tools;
 #               old Linux, and OPNsense with its own lab-firstboot) or vyos (VyOS's cloud-init, which
 #               takes configuration commands).
 #   adminGroup  optional: the group that gives that account sudo. Default: "sudo" for the debian
-#               family, "wheel" for rhel. (Windows users always go in Administrators.)
+#               family, "wheel" for rhel and arch. (Windows users always go in Administrators.)
 #   extras      optional: extras (extras.yaml) people can tick at deploy. Only list those whose
 #               packages are in the template, i.e. it was built with scripts/template/prepare.sh
 #               from after extras existed; older templates list none.
@@ -564,6 +565,43 @@
   username: labuser
   family: rhel
   extras: [nginx, apache, apache-https]
+
+# Fedora (packer/fedora, kickstart from a netinst ISO): the RHEL family. Server with Cockpit (its web
+# console, port 9090) and the RHEL family's web extras; Workstation with GNOME, which has no Xorg
+# session, so GNOME's own Remote Login on every machine (always), as Ubuntu Desktop 26.04.
+- template: fedora
+  version: "44"
+  # Built by Packer (packer/build.sh fedora) on 2026-10-27, from Fedora 44 (1.7).
+  vsphere: Labs/Templates/tpl-fedora-server-44-20261027
+  cpu: 2
+  memoryGB: 2
+  diskGB: 20
+  username: labuser
+  family: rhel
+  extras: [nginx, apache, apache-https]
+- template: fedora-workstation
+  version: "44"
+  # Built by Packer (packer/build.sh fedora -var edition=workstation) on 2026-10-27, from Fedora 44 (1.7).
+  vsphere: Labs/Templates/tpl-fedora-workstation-44-20261027
+  cpu: 2
+  memoryGB: 4
+  diskGB: 40
+  username: labuser
+  family: rhel
+  access: [ssh, rdp, console]
+  always: [gnome-remote-login]
+
+# CachyOS (packer/cachyos, CachyOS's own installer unattended): Arch-based, the arch family. Its KDE
+# Plasma desktop is reached on the console (Wayland only, and no xrdp in its repositories). No extras
+# yet. Rolling: the comment says when it was built.
+- template: cachyos
+  version: Rolling
+  planned: true
+  cpu: 2
+  memoryGB: 4
+  diskGB: 40
+  username: labuser
+  family: arch
 - template: ubuntu
   version: "20.04"
   # Built by Packer (packer/build.sh ubuntu -var version=20.04 …) on 2026-10-17.

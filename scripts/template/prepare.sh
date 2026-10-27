@@ -27,8 +27,9 @@
 #      each clone's first boot, and stops them sleeping. (The desktop extra is for servers.)
 #      Ubuntu with --desktop: installs Ubuntu's own desktop (GNOME) first, for the Ubuntu Desktop
 #      templates. Where GNOME still has an Xorg session (22.04, 24.04), Remote Desktop is xrdp, as on
-#      Kali; where it's Wayland only (26.04), it's GNOME's own Remote Login, which the
-#      gnome-remote-login extra sets up on each machine's first boot (it needs the password).
+#      Kali; where it's Wayland only (26.04, and Fedora Workstation), it's GNOME's own Remote Login,
+#      which the gnome-remote-login extra sets up on each machine's first boot (it needs the password).
+#      Any desktop (CachyOS's KDE Plasma too, reached on the console only) is kept from sleeping.
 #   7. Labels the template in /etc/lab-template (OS, version, date, extras).
 #
 # The VM keeps its network and your user, so you can still install more afterwards. When you're
@@ -38,7 +39,8 @@ set -euo pipefail
 # Oldest version of each OS this is written and tested for. cloud-init 21.3+ is the real limit;
 # older releases (Ubuntu 18.04, Debian 11, CentOS 7) don't ship it. Kali and Parrot: their releases
 # on Debian 13's packages (Dovecot 2.4, PHP 8.4), which the extras are written for.
-declare -A MIN_VERSION=([ubuntu]=18.04 [debian]=12 [kali]=2025.3 [parrot]=7 [centos]=9 [rocky]=8 [almalinux]=8)
+# CachyOS is rolling, with no version: any.
+declare -A MIN_VERSION=([ubuntu]=18.04 [debian]=12 [kali]=2025.3 [parrot]=7 [centos]=9 [rocky]=8 [almalinux]=8 [fedora]=44 [cachyos]=0)
 MIN_CLOUD_INIT=21.3
 
 # >>> extras: everything the panel's extras need in a template. Keep this in step with
@@ -91,7 +93,12 @@ declare -A EXTRA_PACKAGES_RHEL=(
 	[nginx]="nginx"
 	[apache]="httpd"
 	[apache-https]="httpd mod_ssl openssl"
+	# Fedora Workstation (Wayland only): GNOME's Remote Login, set up at first boot.
+	[gnome-remote-login]="gnome-remote-desktop openssl"
 )
+# CachyOS (Arch's packages): no extras yet.
+# shellcheck disable=SC2034 # used through EXTRA_PACKAGES, a reference to the family's list
+declare -A EXTRA_PACKAGES_ARCH=()
 # Extras whose packages go in without their "recommended" ones: the desktop's would bring a login
 # screen and a full X server.
 EXTRA_NO_RECOMMENDS=(desktop)
@@ -531,7 +538,8 @@ RDP_DESKTOP=0
 case $ID in
 ubuntu | debian) FAMILY=debian ;;
 kali | parrot) FAMILY=debian RDP_DESKTOP=1 ;;
-centos | rocky | almalinux) FAMILY=rhel ;;
+centos | rocky | almalinux | fedora) FAMILY=rhel ;;
+cachyos) FAMILY=arch ;;
 *)
 	echo "$PRETTY_NAME isn't supported (yet). Supported: ${!MIN_VERSION[*]}; see scripts/template/README.md." >&2
 	exit 1
@@ -541,15 +549,20 @@ if ! version_ge "${VERSION_ID:-0}" "${MIN_VERSION[$ID]}"; then
 	echo "$PRETTY_NAME is too old: the oldest $ID supported is ${MIN_VERSION[$ID]} (it needs cloud-init $MIN_CLOUD_INIT+)." >&2
 	exit 1
 fi
+# GNOME, maybe without an Xorg session for xrdp (then its own Remote Login: section 6).
+GNOME_DESKTOP=0
 if ((UBUNTU_DESKTOP)); then
 	if [[ $ID != ubuntu ]]; then
 		echo "--desktop is for Ubuntu (the Ubuntu Desktop templates)." >&2
 		exit 1
 	fi
-	RDP_DESKTOP=1
+	RDP_DESKTOP=1 GNOME_DESKTOP=1
 fi
+# Fedora Workstation: its kickstart installed GNOME.
+if [[ $ID == fedora && ${VARIANT_ID:-} == workstation ]]; then RDP_DESKTOP=1 GNOME_DESKTOP=1; fi
 echo "==> $PRETTY_NAME ($FAMILY family)$( ((UBUNTU_DESKTOP)) && echo ", with Ubuntu's desktop")"
-if ((RDP_DESKTOP && !UBUNTU_DESKTOP)) && ! compgen -G '/usr/share/xsessions/*.desktop' >/dev/null; then
+if ((RDP_DESKTOP && !UBUNTU_DESKTOP)) && ! compgen -G '/usr/share/xsessions/*.desktop' >/dev/null &&
+	! compgen -G '/usr/share/wayland-sessions/*.desktop' >/dev/null; then
 	echo "$PRETTY_NAME has no desktop installed, and its machines are reached over Remote Desktop." >&2
 	echo "Reinstall with a desktop, or install one, e.g. apt install kali-desktop-xfce (or parrot-desktop-kde)." >&2
 	exit 1
@@ -573,10 +586,12 @@ if [[ $WANT_EXTRAS == all ]]; then
 	if [[ $ID != ubuntu ]]; then mapfile -t CHOSEN < <(printf '%s\n' "${CHOSEN[@]}" | grep -vx mysql); fi
 	if ! ((IREDMAIL_HERE)); then mapfile -t CHOSEN < <(printf '%s\n' "${CHOSEN[@]}" | grep -vx iredmail); fi
 	mapfile -t CHOSEN < <(printf '%s\n' "${CHOSEN[@]}" | grep -vx zimbra)
-	if ! ((UBUNTU_DESKTOP)); then mapfile -t CHOSEN < <(printf '%s\n' "${CHOSEN[@]}" | grep -vx gnome-remote-login); fi
+	if ! ((GNOME_DESKTOP)); then mapfile -t CHOSEN < <(printf '%s\n' "${CHOSEN[@]}" | grep -vx gnome-remote-login); fi
 	if ! ((WAZUH_HERE)); then mapfile -t CHOSEN < <(printf '%s\n' "${CHOSEN[@]}" | grep -vx wazuh); fi
 	# Zabbix's server: not on Kali or Parrot (see preseed_zabbix).
 	if [[ $ID == kali || $ID == parrot ]]; then mapfile -t CHOSEN < <(printf '%s\n' "${CHOSEN[@]}" | grep -vx zabbix); fi
+	# A family with no extras (CachyOS) leaves one empty line.
+	mapfile -t CHOSEN < <(printf '%s\n' "${CHOSEN[@]}" | grep .)
 else
 	IFS=, read -ra CHOSEN <<<"$WANT_EXTRAS"
 fi
@@ -622,7 +637,8 @@ fi
 
 # A desktop distribution's VM shouldn't suspend when nobody's using it: switched off first, as its
 # desktop would otherwise suspend it about 30 minutes into this (Parrot's did, dropping the build).
-if ((RDP_DESKTOP)); then
+# Any system starting a desktop too (CachyOS's KDE Plasma suspends after 15 minutes).
+if ((RDP_DESKTOP)) || [[ $(systemctl get-default) == graphical.target ]]; then
 	systemctl mask sleep.target suspend.target hibernate.target hybrid-sleep.target >/dev/null 2>&1
 fi
 
@@ -670,7 +686,24 @@ debian)
 rhel)
 	dnf -y -q upgrade
 	dnf -y -q install open-vm-tools cloud-init
+	# With a desktop (Fedora Workstation): copy and paste, and the console's screen size follows its window.
+	if ((RDP_DESKTOP)); then dnf -y -q install open-vm-tools-desktop; fi
 	dnf -y -q autoremove
+	;;
+arch)
+	pacman -Syu --noconfirm
+	pacman -S --needed --noconfirm open-vm-tools cloud-init
+	# cloud-init's Arch default renders the network for netctl or systemd-networkd; CachyOS runs
+	# NetworkManager, which takes the panel's match on e* as on the RHEL family.
+	printf '%s\n' '# Written by the lab panel'"'"'s prepare.sh: CachyOS'"'"'s network is NetworkManager.' \
+		'system_info:' '  network:' '    renderers: [network-manager]' >/etc/cloud/cloud.cfg.d/90-lab-network.cfg
+	# Limine (CachyOS's boot loader) boots its first kernel by default, not the last one booted: that's
+	# an EFI variable a clone hasn't got, and without it Limine waits at its menu. As
+	# packer/cachyos/install.sh set it, again in case the upgrade rewrote the file.
+	if [[ -f /boot/limine.conf ]]; then
+		sed -i -e '/^remember_last_entry:/d' -e '/^default_entry:/d' -e '/^timeout:/a default_entry: 2' /boot/limine.conf
+		echo "  Limine: $(grep -E '^(timeout|default_entry):' /boot/limine.conf | paste -sd' ')"
+	fi
 	;;
 esac
 
@@ -728,7 +761,7 @@ done
 cloud-init schema --system 2>&1 | tail -1 | sed 's/^/  /' || true
 
 echo "==> VMware Tools"
-# The service is open-vm-tools on Debian and Ubuntu, vmtoolsd on the RHEL family.
+# The service is open-vm-tools on Debian and Ubuntu, vmtoolsd on the RHEL family and CachyOS.
 for unit in open-vm-tools vmtoolsd; do
 	if systemctl list-unit-files --no-legend "$unit.service" | grep -q .; then
 		systemctl enable --now "$unit" >/dev/null 2>&1
@@ -746,6 +779,7 @@ echo "==> SSH"
 case $FAMILY in
 debian) apt-get install -yq openssh-server >/dev/null ;;
 rhel) dnf -y -q install openssh-server ;;
+arch) pacman -S --needed --noconfirm openssh ;;
 esac
 cat >/etc/systemd/system/lab-ssh-hostkeys.service <<'UNIT'
 [Unit]
@@ -772,6 +806,13 @@ for unit in ssh.socket ssh.service sshd.service; do
 		break
 	fi
 done
+# CachyOS's firewall (ufw, which its installer switches on): on, with SSH let in.
+if [[ $FAMILY == arch ]] && command -v ufw >/dev/null; then
+	ufw allow 22/tcp >/dev/null
+	ufw --force enable >/dev/null
+	systemctl enable -q ufw.service
+	echo "  ufw: on, SSH allowed"
+fi
 
 # --- 5. Extras -------------------------------------------------------------------------------------
 
@@ -801,6 +842,9 @@ if ((${#CHOSEN[@]})); then
 		rhel)
 			dnf -y -q install "${PACKAGES[@]}"
 			;;
+		arch)
+			pacman -S --needed --noconfirm "${PACKAGES[@]}"
+			;;
 		esac
 	fi
 	for id in "${CHOSEN[@]}"; do
@@ -822,12 +866,13 @@ if ((${#CHOSEN[@]})); then
 	done
 fi
 
-# --- 6. Remote Desktop (Kali, Parrot, Ubuntu Desktop) ----------------------------------------------
+# --- 6. Remote Desktop (Kali, Parrot, Ubuntu Desktop, Fedora Workstation) --------------------------
 
-# GNOME without an Xorg session (Ubuntu 26.04) can't be reached over xrdp: its own Remote Login
-# instead, set up on each machine's first boot by the gnome-remote-login extra.
+# GNOME without an Xorg session (Ubuntu 26.04, Fedora Workstation) can't be reached over xrdp: its
+# own Remote Login instead, set up on each machine's first boot by the gnome-remote-login extra.
 RDP_GNOME=0
-if ((UBUNTU_DESKTOP)) && ! compgen -G '/usr/share/xsessions/*.desktop' >/dev/null; then
+# (xrdp is set up from Debian's packages: elsewhere, always Remote Login.)
+if ((GNOME_DESKTOP)) && { [[ $FAMILY != debian ]] || ! compgen -G '/usr/share/xsessions/*.desktop' >/dev/null; }; then
 	RDP_GNOME=1
 	echo "==> Remote Desktop: GNOME's Remote Login (no Xorg session for xrdp)"
 	if [[ " ${CHOSEN[*]} " != *" gnome-remote-login "* ]]; then

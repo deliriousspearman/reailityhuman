@@ -32,6 +32,14 @@ rocky-10         https://download.rockylinux.org/pub/rocky/10/isos/x86_64/Rocky-
 rocky-8          https://download.rockylinux.org/pub/rocky/8/isos/x86_64/Rocky-8.10-x86_64-boot.iso    https://download.rockylinux.org/pub/rocky/8/isos/x86_64/CHECKSUM
 alma-10          https://repo.almalinux.org/almalinux/10/isos/x86_64/AlmaLinux-10.2-x86_64-boot.iso    https://repo.almalinux.org/almalinux/10/isos/x86_64/CHECKSUM
 alma-8           https://repo.almalinux.org/almalinux/8/isos/x86_64/AlmaLinux-8.10-x86_64-boot.iso    https://repo.almalinux.org/almalinux/8/isos/x86_64/CHECKSUM
+# Fedora (packer/fedora, kickstart like the RHEL family): Server's netinst for Fedora Server, and the
+# Everything netinst for Workstation (its Live ISO can't install from a kickstart). Both install their
+# packages from Fedora's repositories.
+fedora-server-44      https://download.fedoraproject.org/pub/fedora/linux/releases/44/Server/x86_64/iso/Fedora-Server-netinst-x86_64-44-1.7.iso    https://download.fedoraproject.org/pub/fedora/linux/releases/44/Server/x86_64/iso/Fedora-Server-44-1.7-x86_64-CHECKSUM
+fedora-everything-44  https://download.fedoraproject.org/pub/fedora/linux/releases/44/Everything/x86_64/iso/Fedora-Everything-netinst-x86_64-44-1.7.iso    https://download.fedoraproject.org/pub/fedora/linux/releases/44/Everything/x86_64/iso/Fedora-Everything-44-1.7-x86_64-CHECKSUM
+# CachyOS (packer/cachyos): its desktop live ISO, whose own installer (cachyos-installer) installs
+# unattended. Rolling: a new dated ISO every month or two; the build updates to that day's packages.
+cachyos-260809   https://cdn77.cachyos.org/ISO/desktop/260809/cachyos-desktop-linux-260809.iso    https://cdn77.cachyos.org/ISO/desktop/260809/cachyos-desktop-linux-260809.iso.sha256
 # Older Ubuntu (legacy practice targets): 20.04's live server (autoinstall, as packer/ubuntu), and
 # 18.04's "alternative" server ISO, the debian-installer one, as its live server can't install
 # unattended (packer/ubuntu-di, with a preseed).

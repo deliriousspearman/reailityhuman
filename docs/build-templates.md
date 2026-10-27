@@ -41,6 +41,9 @@ as building by hand ([setup-vsphere.md](setup-vsphere.md), parts 2, 5 and 6), wh
 | AlmaLinux 9 | `packer/build.sh rhel -var distro=alma` | ~15 min |
 | Rocky Linux, AlmaLinux 10 and 8 | `packer/build.sh rhel -var distro=rocky -var version=10 -var iso=Rocky-10.2-x86_64-boot.iso` (and alike) | ~15 min |
 | CentOS Stream 9 | `packer/build.sh rhel -var distro=centos-stream` | ~15 min |
+| Fedora Server 44 | `packer/build.sh fedora` | ~10 min |
+| Fedora Workstation 44 | `packer/build.sh fedora -var edition=workstation` | ~18 min |
+| CachyOS (rolling) | `packer/build.sh cachyos` | ~25 min |
 | Ubuntu 20.04 (legacy) | `packer/build.sh ubuntu -var version=20.04 -var iso=ubuntu-20.04.6-live-server-amd64.iso -var extras=…` | ~9 min |
 | Ubuntu 18.04 (legacy) | `packer/build.sh ubuntu-di -var extras=…` | ~13 min |
 | Ubuntu 16.04 (legacy) | `packer/build.sh ubuntu-di -var version=16.04 -var iso=ubuntu-16.04.7-server-amd64.iso -var legacy=true` | ~6 min |
@@ -156,6 +159,28 @@ the 2 GB build VM), or offline into the media folder. **Python** (an extra) keep
 template: 3.x as python-build-standalone's builds, 2.7 built there from source with OpenSSL 1.1.1.
 **iRedMail** (an extra on Ubuntu 24.04 and 26.04, Debian 12 and 13) keeps its installer and the packages
 it installs in the template, and installs at first boot from those alone.
+
+**Fedora** (Server and Workstation) installs from a netinst ISO with a kickstart, as the RHEL family
+does, and is that family in the panel (its `wheel` group, `dnf`, firewalld). Server comes from Server's
+own netinst, with its defaults (LVM, which `prepare.sh` grows to the whole disk, and Cockpit, the web
+console on port 9090, signed in to as the machine's user) and the RHEL family's web extras.
+Workstation installs Workstation's package set from the Everything netinst (Fedora's Live ISO can't
+take a kickstart), with Btrfs and without GNOME's first-sign-in wizard; its GNOME has no Xorg session,
+so Remote Desktop is GNOME's own Remote Login, as on Ubuntu Desktop 26.04 (the `gnome-remote-login`
+extra, on every machine). `prepare.sh` knows Workstation by `VARIANT_ID=workstation` in os-release.
+
+**CachyOS** has no kickstart-style installer, but CachyOS's own command-line installer
+(`cachyos-installer`, on its live ISO) has an unattended mode. The build boots the live ISO without
+its desktop and with the build's SSH key for root (a systemd credential on the kernel command line,
+typed at its GRUB menu), and `packer/cachyos/install.sh` runs the installer: CachyOS's KDE Plasma
+desktop, Btrfs with its subvolumes, and its Limine boot loader, which it also puts on the EFI fallback
+path. The repositories are the generic x86-64 ones, as on the live ISO, not the x86-64-v3/v4 builds
+CachyOS's graphical installer picks for newer CPUs, so machines run on any host. The script then turns
+on SSH and VMware Tools in the new system, and turns its firewall (ufw) off until `prepare.sh` turns it
+back on with SSH let in. It's the panel's `arch` family (cloud-init, which CachyOS gets from Arch;
+`prepare.sh` tells it to write NetworkManager's configuration), with no extras yet, and its desktop is
+reached on the console in the browser: KDE Plasma there is Wayland only, and xrdp isn't in CachyOS's
+repositories. CachyOS is rolling, so each build is CachyOS as of that day; the ISO only has to boot.
 
 **Wazuh** (server and agent extras) and **Zabbix** (the same): Wazuh 4.14's server bundle (its installer's
 `--download-wazuh`, about 1 GB) goes only into Ubuntu 22.04 and 24.04 and Debian 12, which Wazuh supports;
@@ -315,7 +340,9 @@ Then, offline:
 - **Linux builds:** add `-var media_url=http://<server>/lab-media` and the mirror:
   `-var apt_mirror=http://<mirror>/ubuntu` (Ubuntu), `-var kali_mirror_host=<mirror> -var kali_mirror_dir=/kali`
   (Kali), `-var repo_mirror=http://<mirror>/rocky/9` (RHEL family: the folder holding BaseOS/ and
-  AppStream/), `-var vault=http://<mirror>/centos/7.9.2009` (CentOS 7). Parrot's mirror goes in the
+  AppStream/), `-var repo_mirror=http://<mirror>/fedora/linux` (Fedora: the folder holding releases/
+  and updates/), `-var vault=http://<mirror>/centos/7.9.2009` (CentOS 7). CachyOS's build has no
+  mirror option yet: it needs CachyOS's and Arch's repositories. Parrot's mirror goes in the
   base VM's `/etc/apt/sources.list.d/parrot.list` before building.
   Leave out the Nextcloud snap (it needs the Snap Store): e.g. `-var extras=nginx,apache,apache-https,wordpress,nextcloud,postgresql,mariadb,mysql,sqlite,mail,ftp,desktop`,
   and list the same in `templates.yaml`.
@@ -341,6 +368,8 @@ packer/build.sh kali
 packer/parrot/import-base.sh ~/Parrot-security-7.4_amd64.ova --credentials ~/.config/lab-deploy/vcenter-build
 packer/build.sh parrot
 packer/build.sh rhel -var distro=rocky                # or alma, centos-stream
+packer/build.sh fedora                                # Server; -var edition=workstation for Workstation
+packer/build.sh cachyos
 packer/build.sh ubuntu -var version=20.04 -var iso=ubuntu-20.04.6-live-server-amd64.iso \
     -var extras=nginx,apache,apache-https,wordpress,postgresql,mariadb,sqlite,ftp
 packer/build.sh ubuntu-di -var extras=nginx,apache,apache-https,wordpress,postgresql,mariadb,sqlite,ftp
@@ -361,7 +390,8 @@ Each template is named with its date, e.g. `tpl-ubuntu-26.04-20261016`, so rebui
 template machines still use. `packer/output/<template>.json` records the name.
 
 What each build does, in order: creates the VM; installs the OS unattended (Ubuntu's autoinstall,
-Windows' `autounattend.xml`, Kali's preseed), or for Parrot clones the base VM; signs in (SSH, or
+Windows' `autounattend.xml`, Kali's preseed, the RHEL family's and Fedora's kickstart, CachyOS's own
+installer), or for Parrot clones the base VM; signs in (SSH, or
 WinRM for Windows) as a temporary build user; runs `prepare.sh` / `prepare.ps1`; runs `clean.sh` /
 `clean.ps1` as its shutdown, which removes the build user (and, for Parrot, the image's own user and
 its automatic sign-in); then takes the `clean` snapshot and converts the VM to a template.

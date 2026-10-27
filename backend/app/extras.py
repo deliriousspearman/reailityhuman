@@ -19,7 +19,8 @@ from .config import settings
 import base64
 
 # "legacy": old Linux practice targets, set up by lab-firstboot rather than cloud-init (no extras).
-FAMILIES = ("debian", "rhel", "windows", "legacy", "vyos", "image")
+# "arch": Arch-based (CachyOS), cloud-init like debian and rhel.
+FAMILIES = ("debian", "rhel", "arch", "windows", "legacy", "vyos", "image")
 DIR = "/var/lib/lab-deploy"
 STATUS_FILE = f"{DIR}/extras.status"
 LOG_DIR = "/var/log/lab-deploy"

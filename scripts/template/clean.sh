@@ -14,8 +14,8 @@
 #   2. Empties the machine-id. Without this, clones can end up sharing one DHCP lease.
 #   3. Deletes the SSH host keys, any TLS certificates and xrdp's keys (each clone makes its own),
 #      and the installer's network config, so cloud-init writes a fresh one: netplan on Ubuntu,
-#      /etc/network/interfaces on Debian, NetworkManager connections on Kali, Parrot and the RHEL
-#      family.
+#      /etc/network/interfaces on Debian, NetworkManager connections on Kali, Parrot, the RHEL
+#      family (Fedora too) and CachyOS.
 #   4. Clears the package cache, logs and shell histories.
 #   5. Deletes the build user, its home and its sudoers file.
 #   6. Powers off. Your SSH session ends, and there's no way back in: snapshot and convert it next.
@@ -24,7 +24,7 @@
 set -euo pipefail
 
 # Accounts the panel creates on clones (backend/templates.yaml, username): never the build user.
-RESERVED_USERS=(ubuntu debian kali labuser cloud-user centos rocky almalinux)
+RESERVED_USERS=(ubuntu debian kali labuser cloud-user centos rocky almalinux fedora)
 
 if [[ $EUID -ne 0 ]]; then
 	echo "Run this with sudo: sudo bash clean.sh --yes" >&2
@@ -35,7 +35,8 @@ fi
 . /etc/os-release
 case $ID in
 ubuntu | debian | kali | parrot) FAMILY=debian ;;
-centos | rocky | almalinux) FAMILY=rhel ;;
+centos | rocky | almalinux | fedora) FAMILY=rhel ;;
+cachyos) FAMILY=arch ;;
 *)
 	echo "$PRETTY_NAME isn't supported (yet); see scripts/template/README.md." >&2
 	exit 1
@@ -104,12 +105,16 @@ rhel)
 	# The installer's connections (e.g. ens192.nmconnection); cloud-init writes its own.
 	rm -fv /etc/NetworkManager/system-connections/*.nmconnection /etc/sysconfig/network-scripts/ifcfg-e*
 	;;
+arch)
+	rm -fv /etc/NetworkManager/system-connections/*.nmconnection
+	;;
 esac
 
 echo "==> Caches, logs, histories"
 case $FAMILY in
 debian) apt-get clean ;;
 rhel) dnf clean all -q ;;
+arch) pacman -Scc --noconfirm >/dev/null ;;
 esac
 { journalctl --rotate && journalctl --vacuum-time=1s; } >/dev/null 2>&1 || true
 rm -f /root/.bash_history

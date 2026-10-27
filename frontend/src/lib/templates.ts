@@ -270,6 +270,41 @@ export const templates: MachineTemplate[] = [
 		access: ['ssh', 'console'],
 		credentials: 'labuser / set on first deploy',
 	},
+	{
+		id: 'fedora',
+		name: 'Fedora Server',
+		category: 'Linux',
+		os: 'Linux',
+		description: "Fedora's server edition: the newest packages ahead of Red Hat Enterprise Linux, with Cockpit, its web console.",
+		versions: [{ version: '44' }],
+		resources: { cpu: 2, memoryGB: 2, diskGB: 20 },
+		access: ['ssh', 'web', 'console'],
+		webUrl: 'https://{ip}:9090/',
+		credentials: 'labuser / set on first deploy',
+	},
+	{
+		id: 'fedora-workstation',
+		name: 'Fedora Workstation',
+		category: 'Linux',
+		os: 'Linux',
+		description: "Fedora with its GNOME desktop, reached over Remote Desktop through GNOME's own Remote Login.",
+		versions: [{ version: '44' }],
+		resources: { cpu: 2, memoryGB: 4, diskGB: 40 },
+		access: ['ssh', 'rdp', 'console'],
+		credentials: 'labuser / set on first deploy',
+	},
+	// Linux: Arch-based
+	{
+		id: 'cachyos',
+		name: 'CachyOS',
+		category: 'Linux',
+		os: 'Linux',
+		description: 'Arch-based rolling release with its KDE Plasma desktop and tuned kernels. The desktop is on the console in the browser.',
+		versions: [{ version: 'Rolling' }],
+		resources: { cpu: 2, memoryGB: 4, diskGB: 40 },
+		access: ['ssh', 'console'],
+		credentials: 'labuser / set on first deploy',
+	},
 
 	// Firewalls and routers
 	{

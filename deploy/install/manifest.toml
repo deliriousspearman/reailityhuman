@@ -204,6 +204,32 @@ isos = ["centos-stream-9"]
 mirrors = ["centos_stream:9-stream/BaseOS/x86_64/os/repodata/repomd.xml"]
 extras = true
 
+# Fedora (kickstart from a netinst ISO, like the RHEL family)
+[[template]]
+id = "fedora-44"
+catalogue = "fedora 44"
+build = "packer/build.sh fedora"
+vars = ["repo_mirror={mirror.fedora}", "media_url={media}"]
+isos = ["fedora-server-44"]
+mirrors = ["fedora:releases/44/Everything/x86_64/os/repodata/repomd.xml"]
+extras = true
+
+[[template]]
+id = "fedora-workstation-44"
+catalogue = "fedora-workstation 44"
+build = "packer/build.sh fedora"
+vars = ["edition=workstation", "repo_mirror={mirror.fedora}", "media_url={media}"]
+isos = ["fedora-everything-44"]
+mirrors = ["fedora:releases/44/Everything/x86_64/os/repodata/repomd.xml"]
+
+# CachyOS (its own installer, unattended, from the live ISO)
+[[template]]
+id = "cachyos-rolling"
+catalogue = "cachyos Rolling"
+build = "packer/build.sh cachyos"
+isos = ["cachyos-260809"]
+internet = "CachyOS's installer downloads from CachyOS's and Arch's repositories, which have no mirror option yet"
+
 # CentOS 8, 7, 6 (legacy, from the vault)
 [[template]]
 id = "centos-8"

@@ -208,6 +208,7 @@ What each mirror must hold, by template. The install checks each one for the fil
 | `parrot` | deb.parrot.sh/parrot | Parrot | `dists/echo/Release` |
 | `rocky`, `alma` | dl.rockylinux.org/pub/rocky, repo.almalinux.org/almalinux | Rocky, AlmaLinux 8–10 | `<version>/BaseOS/x86_64/os/repodata/repomd.xml` |
 | `centos_stream` | mirror.stream.centos.org | CentOS Stream 9 | `9-stream/BaseOS/…` |
+| `fedora` | dl.fedoraproject.org/pub/fedora/linux (`releases/44` and `updates/44`) | Fedora Server and Workstation 44 | `releases/44/Everything/x86_64/os/repodata/repomd.xml` |
 | `centos_vault` | vault.centos.org | CentOS 6–8, XCP-ng (its VMware Tools) | `<release>/…/repodata/repomd.xml` |
 | `epel_archive` | archives.fedoraproject.org/pub/archive/epel | CentOS 6 | `6/x86_64/repodata/repomd.xml` |
 | `proxmox` | download.proxmox.com/debian | Proxmox VE 7–9 | `pve/dists/<codename>/Release` |

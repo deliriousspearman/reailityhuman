@@ -24,12 +24,12 @@ class LiveTemplate:
     memory_gb: int
     disk_gb: int
     username: str
-    # OS family: "debian" (Debian, Ubuntu), "rhel" (CentOS Stream, Rocky, Alma), "windows", "legacy"
+    # OS family: "debian" (Debian, Ubuntu), "rhel" (CentOS Stream, Rocky, Alma, Fedora), "arch" (CachyOS), "windows", "legacy"
     # (old Linux and OPNsense, set up by lab-firstboot: give adminGroup), "vyos" (VyOS's own
     # cloud-init: configuration commands), or "image" (a complete image deployed as it is, e.g. a
     # practice target: nothing is set up on it, and its own sign-in is fixed_password).
     family: str = "debian"
-    # The group that gives the user sudo. Default: "sudo" for the debian family, "wheel" for rhel.
+    # The group that gives the user sudo. Default: "sudo" for the debian family, "wheel" for rhel and arch.
     admin_group: str = "sudo"
     # Extras (extras.yaml) whose packages are in this template, so they can be chosen at deploy.
     extras: tuple[str, ...] = ()
@@ -74,7 +74,7 @@ def _load() -> list[LiveTemplate]:
             disk_gb=int(e["diskGB"]),
             username=e["username"],
             family=family,
-            admin_group=e.get("adminGroup", {"rhel": "wheel", "windows": "Administrators"}.get(family, "sudo")),  # legacy: set it per entry
+            admin_group=e.get("adminGroup", {"rhel": "wheel", "arch": "wheel", "windows": "Administrators"}.get(family, "sudo")),  # legacy: set it per entry
             extras=tuple(e.get("extras", [])),
             access=tuple(e.get("access", [])),
             web_url=e.get("webUrl", ""),

@@ -832,21 +832,21 @@
         lab_open 5901/tcp
       fi
 
-# Set up by the Ubuntu Desktop 26.04 template on every machine (templates.yaml, `always`), never chosen:
-# GNOME there has no Xorg session for xrdp, so Remote Desktop is GNOME's own Remote Login, whose
-# credentials are the machine's user and password.
+# Set up by the Ubuntu Desktop 26.04 and Fedora Workstation templates on every machine (templates.yaml,
+# `always`), never chosen: GNOME there has no Xorg session for xrdp, so Remote Desktop is GNOME's own
+# Remote Login, whose credentials are the machine's user and password.
 - id: gnome-remote-login
   name: Remote Login (GNOME)
   category: Remote desktop
-  description: Remote Desktop to Ubuntu's login screen, through GNOME's own Remote Login.
+  description: Remote Desktop to GNOME's login screen, through GNOME's own Remote Login.
   hidden: true
   ports: [3389]
   password: true
   notes:
-    - "Remote Desktop: connect to {ip} as {username}, with the machine's password; then sign in again on Ubuntu's login screen."
+    - "Remote Desktop: connect to {ip} as {username}, with the machine's password; then sign in again on the login screen."
   debian:
     packages: [gnome-remote-desktop, openssl]
-    script: |
+    script: &gnome_remote_login |
       # Its own certificate, made here so no two machines share one.
       home=$(getent passwd gnome-remote-desktop | cut -d: -f6)
       install -d -o gnome-remote-desktop -g gnome-remote-desktop -m 700 "$home"
@@ -861,6 +861,9 @@
       systemctl enable -q gnome-remote-desktop.service
       systemctl restart gnome-remote-desktop.service
       lab_open 3389/tcp
+  rhel:
+    packages: [gnome-remote-desktop, openssl]
+    script: *gnome_remote_login
 
 # Container apps: Docker images already in the template (prepare.sh's DOCKER_IMAGES, pinned), each run
 # by lab_docker as the machine's whole website, so they work offline. Debian family.
