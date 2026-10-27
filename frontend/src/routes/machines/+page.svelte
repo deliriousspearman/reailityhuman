@@ -3,11 +3,11 @@
 	import { page } from '$app/state';
 	import MachineTable from '$lib/components/MachineTable.svelte';
 	import { store } from '$lib/store.svelte';
-	import { categories, findTemplate, flagNotes, templates } from '$lib/templates';
+	import { categories, findTemplate, flagNotes, isServiceTemplate, templates } from '$lib/templates';
 	import OsLogo from '$lib/components/OsLogo.svelte';
 	import { categorySlug } from '$lib/nav';
 	import { withPlanned } from '$lib/services';
-	import type { Service } from '$lib/types';
+	import type { MachineTemplate, Service } from '$lib/types';
 
 	let query = $state('');
 	let category = $state<string>('All');
@@ -15,8 +15,10 @@
 	let whose = $state<'mine' | 'all'>('mine');
 	const listed = $derived(whose === 'mine' && store.user ? store.myMachines : store.machines);
 
+	// Templates that are a service (Exchange, Zimbra) are listed under "By service" instead.
+	const osTemplates = templates.filter((t) => !isServiceTemplate(t));
 	const shown = $derived(
-		templates.filter((t) => {
+		osTemplates.filter((t) => {
 			if (category !== 'All' && t.category !== category) return false;
 			const q = query.trim().toLowerCase();
 			if (!q) return true;
@@ -29,7 +31,7 @@
 	// Unfiltered, what can be deployed today is also listed first, so it isn't lost among the "soon" cards.
 	const groups = $derived([
 		...(category === 'All' && !query.trim()
-			? [{ category: 'Available now', items: templates.filter((t) => store.isLive(t.id)) }]
+			? [{ category: 'Available now', items: osTemplates.filter((t) => store.isLive(t.id)) }]
 			: []),
 		...categories.map((c) => ({
 			category: c as string,
@@ -47,25 +49,35 @@
 		goto(service ? '?by=service' : page.url.pathname, { keepFocus: true, noScroll: true });
 	}
 
+	/** Services that are whole templates rather than extras, shown with their template's card. */
+	const serviceTemplates = templates.filter(isServiceTemplate);
 	/** The API's services, then those planned but not built (lib/services.ts), greyed out as "soon". */
 	const services = $derived(store.config ? withPlanned(store.config.services) : []);
-	/** Service categories, in the order extras.yaml first uses them, then the planned ones'. */
-	const serviceCategories = $derived([...new Set(services.map((x) => x.category))]);
+	/** Service categories, in the order extras.yaml first uses them, then the planned ones', then the templates'. */
+	const serviceCategories = $derived([
+		...new Set([...services.map((x) => x.category), ...serviceTemplates.map((t) => t.category as string)]),
+	]);
 	/** "Ubuntu Server 26.04": a template version as people know it. */
 	const osName = (template: string, version: string) => `${findTemplate(template)?.name ?? template} ${version}`;
 	const ready = (x: Service) => x.offeredBy.some((o) => o.ready);
+	type ServiceItem = { kind: 'extra'; x: Service } | { kind: 'template'; t: MachineTemplate };
+	const itemReady = (i: ServiceItem) => (i.kind === 'extra' ? ready(i.x) : store.isLive(i.t.id));
 	const serviceGroups = $derived.by(() => {
 		const q = query.trim().toLowerCase();
-		const shown = services.filter((x) => {
-			if (category !== 'All' && x.category !== category) return false;
-			if (!q) return true;
-			const oses = x.offeredBy.map((o) => osName(o.template, o.version));
-			return [x.name, x.category, x.description, ...oses].join(' ').toLowerCase().includes(q);
-		});
+		const matches = (c: string, words: string[]) =>
+			(category === 'All' || c === category) && (!q || words.join(' ').toLowerCase().includes(q));
+		const items: (ServiceItem & { category: string })[] = [
+			...services
+				.filter((x) => matches(x.category, [x.name, x.category, x.description, ...x.offeredBy.map((o) => osName(o.template, o.version))]))
+				.map((x) => ({ kind: 'extra' as const, x, category: x.category })),
+			...serviceTemplates
+				.filter((t) => matches(t.category, [t.name, t.category, t.os, t.description, ...t.versions.map((v) => v.version)]))
+				.map((t) => ({ kind: 'template' as const, t, category: t.category as string })),
+		];
 		return serviceCategories
 			.map((c) => ({
 				category: c,
-				items: shown.filter((x) => x.category === c).sort((a, b) => Number(ready(b)) - Number(ready(a))),
+				items: items.filter((i) => i.category === c).sort((a, b) => Number(itemReady(b)) - Number(itemReady(a))),
 			}))
 			.filter((g) => g.items.length);
 	});
@@ -81,6 +93,35 @@
 		return names.length > 3 ? `${names.slice(0, 3).join(', ')} and ${names.length - 3} more` : names.join(', ');
 	}
 </script>
+
+{#snippet templateCard(t: MachineTemplate)}
+	{@const live = store.isLive(t.id)}
+	{@const r = store.asDeployed(t).resources}
+	<article class="template" class:soon={!live}>
+		<header>
+			<div class="title">
+				<OsLogo id={t.id} name={t.name} />
+				<h4>{#if live}<a href="/machines/new/{t.id}">{t.name}</a>{:else}{t.name}{/if}</h4>
+			</div>
+			<span class="os" data-os={t.os.toLowerCase()}>{t.os}</span>
+		</header>
+		<p>{t.description}</p>
+		<p class="versions">
+			{live ? versionSummary(t.versions.filter((v) => store.isLive(t.id, v.version))) : versionSummary(t.versions)}
+		</p>
+		{#if t.flags?.length}
+			<ul class="flags">
+				{#each t.flags as f (f)}
+					<li class="tag" title={flagNotes[f].note}>{flagNotes[f].label}</li>
+				{/each}
+			</ul>
+		{/if}
+		<footer>
+			<span>{r.cpu} vCPU, {r.memoryGB} GB</span>
+			{#if live}<span class="deploy">Deploy</span>{:else}<span class="soon-tag">Soon</span>{/if}
+		</footer>
+	</article>
+{/snippet}
 
 <svelte:head><title>Machines · Codex Labs</title></svelte:head>
 
@@ -148,30 +189,35 @@
 		<section class="group" aria-labelledby={slug}>
 			<h3 id={slug}>{group.category} <span>{group.items.length}</span></h3>
 			<div class="templates">
-				{#each group.items as x (x.id)}
-					<article class="template service" class:soon={!ready(x)}>
-						<header>
-							<h4>{x.name}</h4>
-							{#if x.ports.length}<span class="ports">{portSummary(x.ports)}</span>{/if}
-						</header>
-						<p>{x.description}</p>
-						<ul class="oses" aria-label="Runs on">
-							{#each x.offeredBy as o (`${o.template} ${o.version}`)}
-								<li>
-									{#if o.ready}
-										<a href={deployHref(x, o)}>{osName(o.template, o.version)}</a>
-										<span class="deploy">Deploy</span>
-									{:else}
-										<span class="planned">{osName(o.template, o.version)}</span>
-										<span class="soon-tag">Soon</span>
-									{/if}
-								</li>
-							{:else}
-								<li><span class="planned">Planned</span> <span class="soon-tag">Soon</span></li>
-							{/each}
-						</ul>
-						{#if x.minMemoryGB}<footer><span>Needs {x.minMemoryGB} GB of memory</span></footer>{/if}
-					</article>
+				{#each group.items as item (item.kind === 'extra' ? item.x.id : `template-${item.t.id}`)}
+					{#if item.kind === 'template'}
+						{@render templateCard(item.t)}
+					{:else}
+						{@const x = item.x}
+						<article class="template service" class:soon={!ready(x)}>
+							<header>
+								<h4>{x.name}</h4>
+								{#if x.ports.length}<span class="ports">{portSummary(x.ports)}</span>{/if}
+							</header>
+							<p>{x.description}</p>
+							<ul class="oses" aria-label="Runs on">
+								{#each x.offeredBy as o (`${o.template} ${o.version}`)}
+									<li>
+										{#if o.ready}
+											<a href={deployHref(x, o)}>{osName(o.template, o.version)}</a>
+											<span class="deploy">Deploy</span>
+										{:else}
+											<span class="planned">{osName(o.template, o.version)}</span>
+											<span class="soon-tag">Soon</span>
+										{/if}
+									</li>
+								{:else}
+									<li><span class="planned">Planned</span> <span class="soon-tag">Soon</span></li>
+								{/each}
+							</ul>
+							{#if x.minMemoryGB}<footer><span>Needs {x.minMemoryGB} GB of memory</span></footer>{/if}
+						</article>
+					{/if}
 				{/each}
 			</div>
 		</section>
@@ -185,32 +231,7 @@
 			<h3 id={slug}>{group.category} <span>{group.items.length}</span></h3>
 			<div class="templates">
 				{#each group.items as t (t.id)}
-					{@const live = store.isLive(t.id)}
-					{@const r = store.asDeployed(t).resources}
-					<article class="template" class:soon={!live}>
-						<header>
-							<div class="title">
-								<OsLogo id={t.id} name={t.name} />
-								<h4>{#if live}<a href="/machines/new/{t.id}">{t.name}</a>{:else}{t.name}{/if}</h4>
-							</div>
-							<span class="os" data-os={t.os.toLowerCase()}>{t.os}</span>
-						</header>
-						<p>{t.description}</p>
-						<p class="versions">
-							{live ? versionSummary(t.versions.filter((v) => store.isLive(t.id, v.version))) : versionSummary(t.versions)}
-						</p>
-						{#if t.flags?.length}
-							<ul class="flags">
-								{#each t.flags as f (f)}
-									<li class="tag" title={flagNotes[f].note}>{flagNotes[f].label}</li>
-								{/each}
-							</ul>
-						{/if}
-						<footer>
-							<span>{r.cpu} vCPU, {r.memoryGB} GB</span>
-							{#if live}<span class="deploy">Deploy</span>{:else}<span class="soon-tag">Soon</span>{/if}
-						</footer>
-					</article>
+					{@render templateCard(t)}
 				{/each}
 			</div>
 		</section>

@@ -348,18 +348,22 @@ export function templateFor(id: string): MachineTemplate {
 	);
 }
 
-/** Categories in the order the catalogue shows them. */
+/** Categories in the order the catalogue shows them ("By OS"). */
 export const categories: MachineTemplate['category'][] = [
 	'Firewalls and routers',
 	'Linux',
 	'Windows',
 	'Windows Server',
 	'Hypervisors',
-	'Mail',
 	'Storage',
 	'Security',
 	'Practice targets',
 ];
+
+/** Template categories that are services rather than systems: their templates are listed under
+ * "By service", in the service category of the same name, instead of "By OS". */
+export const serviceTemplateCategories: MachineTemplate['category'][] = ['Mail'];
+export const isServiceTemplate = (t: MachineTemplate) => serviceTemplateCategories.includes(t.category);
 
 /** What each flag means for the person deploying, in their words. */
 export const flagNotes: Record<NonNullable<MachineTemplate['flags']>[number], { label: string; note: string }> = {
