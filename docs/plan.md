@@ -231,6 +231,87 @@ Added after the first design pass. Alongside Pro Labs, people can deploy **one m
 - **The expiry sweep is a scheduled worker job.** It powers off expired machines, deletes those past the grace period, and warns owners. Browser notifications are an option; email only if the offline network has a mail relay.
 - **Capacity:** machines share the ProLabs resource pool with lab instances and appear in the admin meters.
 
+## 10. Exercises
+
+Added 2026-10-27. Pro Labs are open-ended: find the weaknesses and capture flags. **Exercises** are
+the guided counterpart: a short list of tasks on one to three machines, with the panel checking each
+task when the learner asks. Example: "lock this web server down with iptables". Most are about
+building, configuring, fixing or investigating rather than attacking, so they cover the defensive and
+sysadmin skills the Pro Labs don't.
+
+### How it works
+- **An exercise is a kind of lab.** It goes in `backend/labs.yaml` with `kind: exercise`, so it reuses
+  the instance machinery as it is: deploy in boot order, extras for setup, reset, destroy, expiry and
+  quotas. Exercises get their own Exercises page next to Pro Labs.
+- **Tasks replace (or sit beside) flags.** Each task has an id, a title, short instructions, optional
+  hints and one check. The instance page shows the tasks as a checklist with a **Check my work**
+  button. Each result is a pass or fail plus a message saying what was found, e.g. "port 3306 still
+  answers from the client".
+- **Kinds of check:**
+  - `run`: a script runs inside a machine through VMware Tools guest operations, the same path that
+    plants flags (`vc.run_guest_program`). An exit code of 0 is a pass and its output is the message.
+    This needs one addition: waiting for the program and reading its exit code and output
+    (`ListProcessesInGuest`, with output redirected to a file read back with the existing guest-file
+    calls).
+  - `probe`: a `run` check on a *different* machine in the exercise, e.g. the client tries
+    `nc -z server 22`. Firewall tasks have to be checked from outside: the server's own view of its
+    rules isn't proof they work.
+  - `answer`: the learner types an answer, e.g. "the IP that brute-forced SSH". Only a hash of the
+    expected answer is stored, and the comparison is lenient (case and spacing).
+  - `flag`: as in Pro Labs, for exercises that end in finding something.
+- **Checks can't be firewalled off.** Guest operations go through VMware Tools, not the network, so
+  a learner who blocks everything (a common iptables mistake) can still be checked and told why.
+  Checks run as a separate guest account that setup creates, so a learner who changes their own
+  password doesn't break them.
+- **Randomised per instance**, like flags: ports, user names, the attacker's IP in planted logs. This
+  keeps one learner's answers from working for another. The values are stored with the instance and
+  passed to setup and to the checks.
+- **Reset** puts the machines back to the start (the clean snapshot plus setup), and the task results
+  are cleared.
+- **Checks are jobs.** A check takes seconds (guest operations plus vCenter's slow sign-in, roadmap
+  item 4), so it runs on the worker and the page polls, as deploys do. Checks are rate-limited per
+  instance.
+- **The instructions live in the LMS.** The panel shows each task's one-line title and check result,
+  and the LMS has the full walk-through, with matching slugs as Pro Labs have. The LMS page's "Start
+  exercise" button links to the panel.
+
+### Catalogue
+Grouped into tracks. **Network** says whether it fits the shared LAN today or needs a private network
+per instance (see "Networks" in the roadmap's "Later").
+
+| Track | Exercises | Machines | Checks | Network |
+|---|---|---|---|---|
+| **Linux firewalls (iptables)** | 1. First rules: default-deny inbound, allow SSH and HTTP only. 2. Stateful rules: `ESTABLISHED,RELATED`, loopback, ICMP. 3. Restrict by source: SSH from the admin box only. 4. Logging: `LOG` with a prefix, then find the dropped traffic. 5. Rate-limit SSH (`recent`/`hashlimit`). 6. Make the rules survive a reboot. 7. Fix a broken rule set (seeded with a rule-order bug). 8. Rewrite it in nftables. | Ubuntu server, Ubuntu client (2 for 3: a second client) | `probe` from each client; `run` for logs and the nftables rule set; 6 reboots the server, then probes | LAN |
+| **Firewall front ends** | The same tasks with `ufw` (Ubuntu) and `firewalld` zones (Rocky) | as above | as above | LAN |
+| **Routing and NAT** | A Linux router with two NICs: forwarding, masquerade, a port forward (DNAT) to an inside web server | router, inside server, outside client | `probe` across the router | Private network |
+| **Network appliances** | pfSense or OPNsense: interfaces, rules, a port forward, a VLAN; VyOS or MikroTik static routes | appliance plus two Linux machines | `probe` | Private network |
+| **Linux hardening** | SSH (keys only, no root login), fail2ban, sudoers, find and fix SUID binaries and world-writable files, find and remove a backdoor (cron, `authorized_keys`, a systemd unit) | Ubuntu or Rocky (plus a client for SSH probes) | `run`, `probe` | LAN |
+| **Linux administration** | Users and groups, a systemd service, cron and logrotate, extend a disk with LVM, nginx as a reverse proxy with TLS from a small CA, BIND DNS, a DHCP server | 1–2 Linux | `run`, `probe` | LAN (DHCP: private network) |
+| **Windows and AD administration** | OUs, users and groups; GPOs (password policy, Windows Firewall, disable LLMNR); a file share with the right permissions | DC + member (the domain-controller and join-domain extras) | `run` (PowerShell on the DC) | LAN |
+| **Defend Brookfield** | The blue-team mirror of the Pro Lab: remove the SPN on the privileged account, require pre-auth, fix the weak ACLs, take users out of DNSAdmins, turn SMB signing on, clean the passwords out of descriptions | Brookfield without Exchange (DC + workstation) | `run`: each check is the matching vuln-ad weakness, tested the other way round | LAN |
+| **Log analysis and detection** | Seeded `auth.log`, web and Windows event logs: answer who, when, from where; then the same with Wazuh or Graylog, with a scripted attack replayed | target + Wazuh or Graylog server | `answer` | LAN |
+| **Traffic analysis** | tcpdump and Wireshark: a machine replays FTP, HTTP and DNS traffic; find the credentials, the exfiltrated file, the beaconing host | 2 Linux (or a capture file) | `answer` | LAN |
+| **Incident response** | A "compromised" server: find the persistence, the dropped tool and the first entry, then clean it up | 1 Linux or Windows | `answer`, then `run` to confirm it's gone | LAN |
+| **Recon and exploitation basics** | nmap tasks (which ports, which versions) on random services; guided Metasploitable; DVWA and Juice Shop (Juice Shop's own challenge API reports what's solved) | Kali + target | `answer`, `run` | LAN |
+| **Containers and automation** | Docker: non-root containers, networks, secrets. k3s: RBAC and network policies. Ansible: configure two targets from a control node | 1–3 Linux | `run` | LAN (after the services batch, for k3s) |
+
+### Phases
+1. **Engine plus the iptables track** (medium). `kind: exercise` and `tasks` in `labs.yaml`; the `run`
+   and `probe` checks (with the exit-code addition); a check job; the Exercises page and checklist;
+   iptables exercises 1–4 on two Ubuntu 24.04 machines. Unit tests for definitions and check results
+   (vcsim for guest operations), then one end-to-end run.
+2. **Answers and randomisation** (small). `answer` checks and per-instance values; iptables 5–8;
+   Linux hardening and log analysis.
+3. **Windows**: Windows and AD administration, then Defend Brookfield (reuses the vuln-ad seeding).
+4. **With networks per instance**: routing and NAT, network appliances.
+5. **The rest** as wanted: traffic analysis, incident response, containers and automation.
+
+### Open questions for Jake
+- Instructions in the LMS (recommended, as above) or in the panel?
+- Progress and scores per learner: these need sign-in, so until then results belong to the instance.
+- Hints: free, or shown after a number of failed checks?
+- Should an exercise have a time limit, or use the usual machine durations (2 h to 7 d)?
+
 ## Open items to confirm with the infra owner
 - vCenter version and licence edition (dvSwitch?), and whether NSX is present.
 - Number of hosts, total RAM, and datastore type and size.

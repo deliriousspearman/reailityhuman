@@ -234,6 +234,8 @@ the PC, and the DHCP server's lease count.
 
 ### Suggested, not yet scheduled
 
+- **Exercises** (planned 2026-10-27): guided tasks on one to three machines, checked by the panel, starting
+  with an iptables track. The design and catalogue are in [plan.md](plan.md#10-exercises).
 - **Mail:** Mailpit (a mail catcher for apps) and GoPhish (phishing exercises), both small Docker
   extras; Mailcow for a realistic organisation mail server.
 - **More Docker services:** Jake to pick the ones that matter most to learners.
