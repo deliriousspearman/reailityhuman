@@ -43,7 +43,7 @@ as building by hand ([setup-vsphere.md](setup-vsphere.md), parts 2, 5 and 6), wh
 | CentOS Stream 9 | `packer/build.sh rhel -var distro=centos-stream` | ~15 min |
 | Fedora Server 44 | `packer/build.sh fedora` | ~10 min |
 | Fedora Workstation 44 | `packer/build.sh fedora -var edition=workstation` | ~18 min |
-| CachyOS (rolling) | `packer/build.sh cachyos` | ~25 min |
+| CachyOS (rolling) | `packer/build.sh cachyos` | ~11 min |
 | Ubuntu 20.04 (legacy) | `packer/build.sh ubuntu -var version=20.04 -var iso=ubuntu-20.04.6-live-server-amd64.iso -var extras=…` | ~9 min |
 | Ubuntu 18.04 (legacy) | `packer/build.sh ubuntu-di -var extras=…` | ~13 min |
 | Ubuntu 16.04 (legacy) | `packer/build.sh ubuntu-di -var version=16.04 -var iso=ubuntu-16.04.7-server-amd64.iso -var legacy=true` | ~6 min |

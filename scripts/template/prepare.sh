@@ -806,8 +806,11 @@ for unit in ssh.socket ssh.service sshd.service; do
 		break
 	fi
 done
-# CachyOS's firewall (ufw, which its installer switches on): on, with SSH let in.
+# CachyOS's firewall (ufw, which its installer switches on): on, with SSH let in. The rule's written
+# while ufw is marked off (install.sh stopped its service, but its configuration still says on, and
+# then ufw tries to apply the rule at once, to chains that aren't there).
 if [[ $FAMILY == arch ]] && command -v ufw >/dev/null; then
+	sed -i 's/^ENABLED=.*/ENABLED=no/' /etc/ufw/ufw.conf
 	ufw allow 22/tcp >/dev/null
 	ufw --force enable >/dev/null
 	systemctl enable -q ufw.service

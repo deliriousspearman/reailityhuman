@@ -46,8 +46,10 @@ echo "==> CachyOS's installer (headless)"
 cachyos-installer --config /root/settings.json
 
 echo "==> Readying the new system for the build"
+# The rest as its fstab says: CachyOS's Btrfs layout has /root, /home and others on subvolumes of
+# their own, so what's written into /root must go on @root.
 mount -o subvol=/@ "${disk}2" /mnt
-mount "${disk}1" /mnt/boot
+mount --all --fstab /mnt/etc/fstab --target-prefix /mnt
 arch-chroot /mnt pacman -S --needed --noconfirm openssh open-vm-tools
 arch-chroot /mnt systemctl enable sshd.service vmtoolsd.service vmware-vmblock-fuse.service
 # The installer switches its firewall (ufw) on, which would keep the build out: prepare.sh switches it

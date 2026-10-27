@@ -596,7 +596,8 @@
 # yet. Rolling: the comment says when it was built.
 - template: cachyos
   version: Rolling
-  planned: true
+  # Built by Packer (packer/build.sh cachyos) on 2026-10-27, from the 260809 ISO and that day's packages.
+  vsphere: Labs/Templates/tpl-cachyos-rolling-20261027
   cpu: 2
   memoryGB: 4
   diskGB: 40
