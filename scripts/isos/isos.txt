@@ -73,5 +73,7 @@ proxmox-ve-9.2   https://enterprise.proxmox.com/iso/proxmox-ve_9.2-1.iso    http
 # TrueNAS: each .sha256 next to the ISO holds the hash alone (CORE's names a build path), so pinned here.
 truenas-scale-25.10  https://download.truenas.com/TrueNAS-SCALE-Goldeye/25.10.7/TrueNAS-SCALE-25.10.7.iso  54ce9441ce66966a392e28f63604ca3c2c083d0bec4db7bb5af2f74f7a007c8e
 truenas-core-13.3    https://download.freenas.org/13.3/STABLE/U1.2/x64/TrueNAS-13.3-U1.2.iso  9810e0a64c0460485a3150e90660bfc1442033ca88b9f00d3d761b1bd7848db1
+truenas-scale-25.04  https://download.truenas.com/TrueNAS-SCALE-Fangtooth/25.04.2.6/TrueNAS-SCALE-25.04.2.6.iso  c766aed47ec6cd872a7c9159929280245c4f5a26a0358f5522e3245f04be54cc
+truenas-core-13.0    https://download.freenas.org/13.0/STABLE/U6.8/x64/TrueNAS-13.0-U6.8.iso  583d68cfa7054f96c2d61c3b8641eb46705e8a1e3593d72911bbc4f5b64545b2
 # XCP-ng 8.3 LTS (packer/xcp-ng): the full installer ISO.
 xcp-ng-8.3       https://updates.xcp-ng.org/isos/8.3/xcp-ng-8.3.0-20260806.iso    https://updates.xcp-ng.org/isos/8.3/SHA256SUMS
