@@ -120,20 +120,39 @@
 		};
 	}
 
+	/** Sizes offered for the .rdp file; the last one picked is kept in this browser. */
+	const RDP_SIZES = ['full', '1024x768', '1280x720', '1366x768', '1600x900', '1920x1080', '2560x1440'];
+	const RDP_SIZE_KEY = 'lab-rdp-size';
+	let rdpSize = $state(savedRdpSize());
+	function savedRdpSize(): string {
+		try {
+			const value = localStorage.getItem(RDP_SIZE_KEY);
+			return value && RDP_SIZES.includes(value) ? value : '1280x720';
+		} catch {
+			return '1280x720';
+		}
+	}
+	function pickRdpSize(value: string) {
+		rdpSize = value;
+		try {
+			localStorage.setItem(RDP_SIZE_KEY, value);
+		} catch {}
+	}
+
 	/**
 	 * A Remote Desktop file for the machine, with its user filled in (the password is asked for). It
-	 * opens in a 1280×720 window: without a size, Windows' client asks for 800×600 and won't let the
-	 * window grow past it. Dynamic resolution asks the machine to follow the window's size where it
-	 * can; no smart sizing, which turns that off in Windows' client.
+	 * opens full screen at the monitor's resolution, or in a window of the size picked: without a
+	 * size, Windows' client asks for 800×600 and won't let the window grow past it. Dynamic
+	 * resolution asks the machine to follow the window's size where it can; no smart sizing, which
+	 * turns that off in Windows' client.
 	 */
-	function rdpFile(ip: string, username: string): string {
+	function rdpFile(ip: string, username: string, size: string): string {
+		const [width, height] = size.split('x');
 		const lines = [
 			`full address:s:${ip}`,
 			`username:s:${username}`,
 			'prompt for credentials:i:1',
-			'screen mode id:i:1',
-			'desktopwidth:i:1280',
-			'desktopheight:i:720',
+			...(size === 'full' ? ['screen mode id:i:2'] : ['screen mode id:i:1', `desktopwidth:i:${width}`, `desktopheight:i:${height}`]),
 			'session bpp:i:32',
 			'dynamic resolution:i:1',
 			'displayconnectionbar:i:1',
@@ -357,7 +376,14 @@
 				<span class="way">Remote Desktop</span>
 				<code class="cmd">{cmd}</code>
 				<button class="btn btn-quiet btn-sm" type="button" onclick={() => copy(cmd)}><Icon name="copy" />{copied === cmd ? 'Copied' : 'Copy'}</button>
-				<a class="btn btn-quiet btn-sm" href={rdpFile(m.ip, m.username)} download="{m.name}.rdp"><Icon name="download" />.rdp file</a>
+				<span class="rdp-file">
+					<select class="select" aria-label="Screen size for the .rdp file" value={rdpSize} onchange={(e) => pickRdpSize(e.currentTarget.value)}>
+						{#each RDP_SIZES as size (size)}
+							<option value={size}>{size === 'full' ? 'Full screen' : size.replace('x', ' × ')}</option>
+						{/each}
+					</select>
+					<a class="btn btn-quiet btn-sm" href={rdpFile(m.ip, m.username, rdpSize)} download="{m.name}.rdp"><Icon name="download" />.rdp file</a>
+				</span>
 			</li>
 		{/if}
 		{#if t.access.includes('console')}
@@ -572,6 +598,17 @@
 		font: 0.85rem var(--lms-mono);
 		color: var(--lms-lime-text);
 		overflow-wrap: anywhere;
+	}
+	.rdp-file {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.35rem;
+	}
+	.rdp-file .select {
+		width: auto;
+		min-height: 2rem;
+		padding: 0.2rem 0.5rem;
+		font-size: 0.85rem;
 	}
 	.cmd.muted {
 		font-family: var(--lms-font);
