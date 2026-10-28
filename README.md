@@ -4,12 +4,18 @@ A web panel that deploys, resets and tears down Pro Labs (HackTheBox-style netwo
 machines) on VMware vSphere, for a LAN without internet access. The labs are advertised on the LMS;
 lab slugs match its `labs/<slug>.md` pages.
 
-What works so far is **single machines**: deploy one VM from a template (Ubuntu 26.04 for now;
-Windows Server 2025, Kali Linux and Parrot Security are written and waiting for their templates) onto the LAN, with optional extras
-(web servers, WordPress, Nextcloud, a mail server, FTP, a remote desktop; IIS and Outlook on Windows), then
-start, stop, reboot, reset, redeploy, extend and destroy it. Machines expire unless they're extended or kept. The admin page shows capacity, every
-machine, leftover VMs and the job queue. Pro Labs, the VPN and sign-in come later; the panel shows
-them greyed out.
+It deploys **single machines** (about 50 template versions: Ubuntu, Debian, the RHEL family, Fedora,
+CachyOS, Kali, Parrot, Windows Server and 11, firewalls and routers, hypervisors, storage appliances and
+vulnerable images) with optional extras (web servers and apps, databases, mail, Docker apps, Active
+Directory, Exchange, …), and **Pro Labs**: several machines deployed together as one instance, in boot
+order, with flags planted in each (Brookfield, an Active Directory domain, is the first). Machines can
+be started, stopped, reset, redeployed, extended and destroyed, and reached over SSH, RDP or a browser
+console. The admin page shows capacity, every machine, leftover VMs and the job queue. Personal
+networks (VPN) and sign-in come later.
+
+**Guides:** the [Admin guide](docs/admin-guide.md) (running the site, adding machines and Pro Labs) and
+the [Developer guide](docs/developer-guide.md) (how it works). Themed HTML copies are in
+[`docs/html/`](docs/html/), made with `python3 scripts/docs/build-html.py`.
 
 - [`frontend/`](frontend/): the panel UI (SvelteKit, static build).
 - [`backend/`](backend/): the API and job worker (FastAPI, pyVmomi, PostgreSQL with Procrastinate).

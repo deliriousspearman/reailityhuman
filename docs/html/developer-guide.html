@@ -1,0 +1,1076 @@
+<!DOCTYPE html>
+<html lang="en-GB" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Developer guide · Codex Labs</title>
+<script>
+(function () {
+  var t = localStorage.getItem('labs-theme') || 'auto';
+  if (t !== 'dark' && t !== 'light') t = matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+  document.documentElement.dataset.theme = t;
+})();
+</script>
+<style>
+:root {
+  --display: 'Chakra Petch', var(--font);
+  --font: 'Figtree Variable', 'Figtree', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --mono: 'JetBrains Mono Variable', 'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, Consolas, 'DejaVu Sans Mono', monospace;
+  --white: #ffffff; --gray-1: #e4e9f4; --gray-2: #a4b1cd; --gray-3: #8494b5; --gray-4: #52627f;
+  --gray-5: #2c3a52; --gray-6: #1a2332; --black: #111927;
+  --accent-low: #2a3d12; --accent: #9fef00; --accent-high: #c5f467;
+  --bg-nav: #1a2332; --bg-sidebar: #141d2b; --bg-code: #202c3f; --panel: #1a2332; --panel-2: #202c3f;
+  --lime: #9fef00; --on-lime: #0e1a02; --lime-text: #9fef00; --medium: #ffaf00; --hard: #ff3e3e;
+  --header: 4rem; --sidebar: 17rem;
+  color-scheme: dark;
+}
+:root[data-theme='light'] {
+  --white: #0f1726; --gray-1: #1a2332; --gray-2: #34435c; --gray-3: #56657f; --gray-4: #8c99b0;
+  --gray-5: #d3dae6; --gray-6: #e9edf4; --black: #f4f6fa;
+  --accent-low: #e8f8c8; --accent: #5b8c00; --accent-high: #3d6200;
+  --bg-nav: #ffffff; --bg-sidebar: #ffffff; --bg-code: #e9edf4; --panel: #ffffff; --panel-2: #f1f4f9;
+  --lime-text: #3d6200; --medium: #b86e00; --hard: #d12a2a;
+  color-scheme: light;
+}
+*, *::before, *::after { box-sizing: border-box; }
+html { scroll-padding-top: calc(var(--header) + 1rem); -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--black); color: var(--gray-2); font: 1rem/1.65 var(--font); }
+a { color: var(--lime-text); }
+a:hover { color: var(--accent-high); }
+:focus-visible { outline: 2px solid var(--accent-high); outline-offset: 2px; }
+
+/* Header */
+.top { position: sticky; top: 0; z-index: 10; display: flex; align-items: center; gap: 1rem;
+  height: var(--header); padding: 0 1.25rem; background: var(--bg-nav); border-bottom: 2px solid var(--gray-5); }
+.brand { display: flex; align-items: center; gap: .6rem; color: var(--white); text-decoration: none;
+  font: 700 1.15rem var(--display); letter-spacing: .02em; }
+.brand-mark { display: grid; place-items: center; width: 2rem; height: 2rem; background: var(--lime);
+  color: var(--on-lime); font: 700 .95rem var(--mono); }
+.crumb { color: var(--gray-3); font: 600 .85rem var(--mono); text-transform: uppercase; letter-spacing: .08em; }
+.top-links { margin-left: auto; display: flex; align-items: center; gap: .75rem; }
+.top-links a { color: var(--gray-2); text-decoration: none; font: 700 .9rem var(--display); }
+.top-links a:hover, .top-links a[aria-current] { color: var(--lime-text); }
+select { padding: .3rem .5rem; border: 1px solid var(--gray-4); border-radius: 0; background: var(--panel);
+  color: var(--white); font: 600 .8rem var(--mono); }
+.menu-btn { display: none; padding: .3rem .6rem; border: 1px solid var(--gray-4); background: transparent;
+  color: var(--white); font: 700 .85rem var(--display); cursor: pointer; }
+
+/* Layout */
+.layout { display: grid; grid-template-columns: var(--sidebar) minmax(0, 1fr); }
+.toc { position: sticky; top: var(--header); align-self: start; height: calc(100vh - var(--header));
+  overflow-y: auto; padding: 1.5rem 1rem 2rem; background: var(--bg-sidebar); border-right: 2px solid var(--gray-5); }
+.toc-title { margin: 0 0 .75rem; color: var(--gray-3); font: 700 .75rem var(--mono); text-transform: uppercase; letter-spacing: .1em; }
+.toc ul { list-style: none; margin: 0; padding: 0; }
+.toc li a { display: block; padding: .3rem .6rem; border-left: 3px solid transparent; color: var(--gray-2);
+  text-decoration: none; font-size: .9rem; line-height: 1.35; }
+.toc li a:hover { color: var(--white); background: var(--panel-2); }
+.toc li a.active { border-left-color: var(--lime); color: var(--lime-text); background: var(--panel-2); }
+.toc ul ul a { padding-left: 1.4rem; font-size: .84rem; color: var(--gray-3); }
+main { min-width: 0; padding: 2.5rem clamp(1.25rem, 4vw, 3.5rem) 5rem; }
+.content { max-width: 52rem; }
+
+/* Text */
+h1, h2, h3, h4 { font-family: var(--display); font-weight: 700; line-height: 1.2; color: var(--white); }
+h1 { margin: 0 0 1rem; font-size: clamp(1.9rem, 1.4rem + 1.8vw, 2.5rem); }
+h2 { margin: 3rem 0 1rem; padding: .35rem 0 .35rem .8rem; border-left: 3px solid var(--lime); font-size: 1.45rem; }
+h3 { margin: 2rem 0 .75rem; font-size: 1.15rem; }
+h4 { margin: 1.5rem 0 .5rem; font-size: 1rem; }
+.headerlink { margin-left: .4rem; color: var(--gray-4); text-decoration: none; opacity: 0; }
+h2:hover .headerlink, h3:hover .headerlink { opacity: 1; }
+p, ul, ol { margin: 0 0 1rem; }
+li { margin: .25rem 0; }
+li > ul, li > ol { margin: .25rem 0 0; }
+strong { color: var(--gray-1); }
+hr { border: 0; border-top: 2px solid var(--gray-5); margin: 2rem 0; }
+code { padding: .1rem .35rem; background: var(--bg-code); color: var(--gray-1); font: .86em var(--mono); }
+a code { color: inherit; }
+
+/* Code blocks: the panel's terminal window */
+.term { margin: 0 0 1.25rem; border: 2px solid #2c3a52; background: #0d1420; }
+.term-bar { display: flex; align-items: center; gap: .4rem; padding: .45rem .75rem; background: #1a2332;
+  border-bottom: 1px solid #2c3a52; }
+.term-bar i { width: .65rem; height: .65rem; border-radius: 50%; }
+.term-bar i:nth-child(1) { background: #ff3e3e; } .term-bar i:nth-child(2) { background: #ffaf00; }
+.term-bar i:nth-child(3) { background: #9fef00; }
+.term-bar span { margin-left: auto; color: #8494b5; font: 600 .7rem var(--mono); text-transform: uppercase; letter-spacing: .08em; }
+.term pre { margin: 0; padding: 1rem 1.1rem; overflow-x: auto; color: #a4b1cd; font: .85rem/1.55 var(--mono); }
+.term pre code { padding: 0; background: none; color: inherit; font: inherit; }
+
+/* Tables */
+.table-wrap { margin: 0 0 1.5rem; overflow-x: auto; border: 2px solid var(--gray-5); background: var(--panel); }
+table { width: 100%; border-collapse: collapse; font-size: .92rem; }
+th { padding: .6rem .8rem; text-align: left; white-space: nowrap; color: var(--gray-3); background: var(--panel-2);
+  font: 700 .72rem var(--mono); text-transform: uppercase; letter-spacing: .06em; border-bottom: 2px solid var(--gray-5); }
+td { padding: .6rem .8rem; vertical-align: top; border-top: 1px solid var(--gray-5); }
+tr:first-child td { border-top: 0; }
+
+/* Callouts: the panel's banners */
+blockquote { margin: 0 0 1.25rem; padding: .85rem 1.1rem; border: 1px solid var(--gray-4);
+  border-left-width: 4px; background: var(--panel); }
+blockquote p:last-child { margin: 0; }
+blockquote.note { border-color: var(--accent); background: linear-gradient(90deg, var(--accent-low), transparent 70%); }
+blockquote.warn { border-color: var(--medium); background: linear-gradient(90deg, color-mix(in srgb, var(--medium) 16%, transparent), transparent 70%); }
+blockquote.note strong:first-child { color: var(--lime-text); }
+blockquote.warn strong:first-child { color: var(--medium); }
+
+.foot { margin-top: 4rem; padding-top: 1rem; border-top: 2px solid var(--gray-5); color: var(--gray-3); font-size: .85rem; }
+
+@media (max-width: 900px) {
+  .layout { grid-template-columns: 1fr; }
+  .menu-btn { display: inline-block; }
+  .crumb { display: none; }
+  .toc { position: fixed; top: var(--header); left: 0; z-index: 9; width: min(85vw, 20rem); transform: translateX(-105%);
+    transition: transform .2s; }
+  body.toc-open .toc { transform: none; box-shadow: 4px 0 0 var(--lime); }
+}
+@media (max-width: 560px) {
+  .top { gap: .6rem; padding: 0 .75rem; }
+  .brand-name, .top-links a:not([aria-current]) { display: none; }
+}
+@media print {
+  .top, .toc { display: none; }
+  .layout { display: block; }
+}
+</style>
+</head>
+<body>
+<header class="top">
+  <button class="menu-btn" id="menu" type="button" aria-label="Contents">Contents</button>
+  <a class="brand" href="#top"><span class="brand-mark">CL</span><span class="brand-name">Codex Labs</span></a>
+  <span class="crumb">Developer guide</span>
+  <nav class="top-links" aria-label="Guides">
+    <a href="developer-guide.html" aria-current="page">Developer guide</a> <a href="admin-guide.html">Admin guide</a>
+    <select id="theme" aria-label="Theme">
+      <option value="auto">Auto</option><option value="dark">Dark</option><option value="light">Light</option>
+    </select>
+  </nav>
+</header>
+<div class="layout">
+  <nav class="toc" aria-label="On this page">
+    <p class="toc-title">On this page</p>
+    <ul><li><a href="#1-what-the-panel-is">1. What the panel is</a></li><li><a href="#2-architecture">2. Architecture</a></li><li><a href="#3-repository-tour">3. Repository tour</a><ul><li><a href="#the-backend-modules-backendapp">The backend modules (backend/app/)</a></li></ul></li><li><a href="#4-data-model">4. Data model</a><ul><li><a href="#machine-states">Machine states</a></li></ul></li><li><a href="#5-api-reference">5. API reference</a></li><li><a href="#6-jobs-and-the-worker">6. Jobs and the worker</a><ul><li><a href="#queueing">Queueing</a></li><li><a href="#what-each-action-does-actionspy">What each action does (actions.py)</a></li><li><a href="#cancellation">Cancellation</a></li><li><a href="#the-sweep">The sweep</a></li></ul></li><li><a href="#7-templates-families-and-first-boot">7. Templates, families and first boot</a></li><li><a href="#8-extras-framework">8. Extras framework</a></li><li><a href="#9-pro-labs-internals">9. Pro Labs internals</a></li><li><a href="#10-console-relay">10. Console relay</a></li><li><a href="#11-frontend">11. Frontend</a></li><li><a href="#12-local-development-and-tests">12. Local development and tests</a></li><li><a href="#13-ci-and-deployment">13. CI and deployment</a></li><li><a href="#14-configuration-reference">14. Configuration reference</a></li><li><a href="#15-conventions-and-gotchas">15. Conventions and gotchas</a></li></ul>
+  </nav>
+  <main id="top">
+    <article class="content">
+<h1 id="developer-guide">Developer guide<a class="headerlink" href="#developer-guide" title="Permanent link">#</a></h1>
+<p>How the lab panel works inside: its parts, data, jobs, templates, extras, Pro Labs and console, and
+how to develop, test and ship it. For running the site (adding machines and Pro Labs, capacity,
+backups), see the <a href="admin-guide.html">Admin guide</a>.</p>
+<blockquote class="note">
+<p><strong>Note:</strong> Paths are from the repository's root. Addresses in this guide use documentation ranges
+(192.0.2.0/24, 198.51.100.0/24) and <code>.example</code> names, as everything committed here must.</p>
+</blockquote>
+<h2 id="1-what-the-panel-is">1. What the panel is<a class="headerlink" href="#1-what-the-panel-is" title="Permanent link">#</a></h2>
+<p>The panel deploys, resets and tears down virtual machines on VMware vSphere, for a LAN without
+internet access. It offers two things:</p>
+<ul>
+<li><strong>Single machines.</strong> One VM from a template (Ubuntu, Windows Server, Kali, OPNsense, …) with
+    optional <em>extras</em> ticked at deploy (web servers, databases, Active Directory, Docker apps, …).</li>
+<li><strong>Pro Labs.</strong> A set of machines deployed together as one <em>instance</em> (e.g. Brookfield: a domain
+    controller, an Exchange server and a workstation), set up in boot order, with flags planted fresh
+    in each instance.</li>
+</ul>
+<p>There is <strong>no sign-in</strong>. Learners type a name when they deploy; the browser remembers it and sends it
+as the <code>X-Lab-User</code> header, and the API uses it only to label jobs and log lines. Every machine is
+everyone's, and <code>/admin</code> is open to anyone who can reach the panel.</p>
+<h2 id="2-architecture">2. Architecture<a class="headerlink" href="#2-architecture" title="Permanent link">#</a></h2>
+<div class="term"><div class="term-bar"><i></i><i></i><i></i><span></span></div><pre><code> browser ── HTTPS ──▶ Caddy (deploy/Caddyfile)
+                        ├── /            static SvelteKit build (frontend/build → /srv/site)
+                        └── /api/*  ──▶  api: FastAPI + uvicorn (backend/app)
+                                           │  writes rows, queues jobs
+                                           ▼
+                                     PostgreSQL 16  ◀── Procrastinate job queue lives here too
+                                           ▲
+                         ┌─────────────────┴─────────────────┐
+                    worker (all queues,               sweeper (quick queue,
+                    concurrency 4)                    concurrency 3)
+                         └───────────── pyVmomi ─────────────┘
+                                           ▼
+                              vCenter ── ESXi host(s) ── datastore, port group (DHCP)</code></pre></div>
+<p>The browser never talks to vCenter. The API answers from the database and queues work; the workers
+do everything that touches vSphere. The console is the one exception that streams. The API relays
+the browser's WebSocket to ESXi (see <a href="#10-console-relay">Console relay</a>).</p>
+<p>The services in <code>deploy/compose.yaml</code>:</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Service</th>
+<th>What it runs</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>caddy</code></td>
+<td>Ports 80/443, TLS from Caddy's internal CA, serves the site and proxies <code>/api</code></td>
+</tr>
+<tr>
+<td><code>postgres</code></td>
+<td>postgres:16-alpine, with a health check</td>
+</tr>
+<tr>
+<td><code>api</code></td>
+<td><code>alembic upgrade head</code>, then uvicorn on :8000. Must stay <strong>one process</strong> (console tickets live in memory)</td>
+</tr>
+<tr>
+<td><code>worker</code></td>
+<td><code>procrastinate worker --concurrency=4</code>: every queue (deploys, resets, power changes)</td>
+</tr>
+<tr>
+<td><code>sweeper</code></td>
+<td><code>procrastinate worker --queues=quick --concurrency=3</code>: quick jobs and the per-minute sweep, so they never wait behind a long deploy</td>
+</tr>
+<tr>
+<td><code>backup</code></td>
+<td><code>pg_dump</code> at start and daily into <code>/srv/lab-deploy/backups</code>, kept 14 days</td>
+</tr>
+</tbody>
+</table></div>
+<p>All backend services read <code>lab-deploy.env</code> (see <a href="#14-configuration-reference">Configuration reference</a>).</p>
+<h2 id="3-repository-tour">3. Repository tour<a class="headerlink" href="#3-repository-tour" title="Permanent link">#</a></h2>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Path</th>
+<th>What's there</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>backend/app/</code></td>
+<td>The API and the worker's code (below)</td>
+</tr>
+<tr>
+<td><code>backend/templates.yaml</code></td>
+<td>The catalogue: which template versions can be deployed, and where they are in vCenter</td>
+</tr>
+<tr>
+<td><code>backend/extras.yaml</code></td>
+<td>Every extra, with its options and per-family install scripts</td>
+</tr>
+<tr>
+<td><code>backend/labs.yaml</code></td>
+<td>Pro Lab definitions</td>
+</tr>
+<tr>
+<td><code>backend/alembic/</code></td>
+<td>Database migrations</td>
+</tr>
+<tr>
+<td><code>backend/tests/</code></td>
+<td>pytest suite, run against PostgreSQL and vcsim</td>
+</tr>
+<tr>
+<td><code>frontend/</code></td>
+<td>The SvelteKit panel (static build)</td>
+</tr>
+<tr>
+<td><code>deploy/</code></td>
+<td>Compose file, Caddyfile, <code>deploy.sh</code>, <code>setup-server.sh</code>, offline bundle and installer</td>
+</tr>
+<tr>
+<td><code>packer/</code></td>
+<td>One folder per template build, plus <code>build.sh</code>; import scripts for complete images</td>
+</tr>
+<tr>
+<td><code>scripts/template/</code></td>
+<td><code>prepare.sh</code>/<code>clean.sh</code> (Linux), <code>prepare.ps1</code>/<code>clean.ps1</code> (Windows), appliance first-boot scripts</td>
+</tr>
+<tr>
+<td><code>scripts/isos/</code></td>
+<td><code>isos.txt</code> and <code>fetch.sh</code>: download, verify and upload ISOs</td>
+</tr>
+<tr>
+<td><code>scripts/e2e/</code></td>
+<td><code>run.py</code>: deploys real machines through the panel and checks them</td>
+</tr>
+<tr>
+<td><code>scripts/setup_vcenter.py</code></td>
+<td>Creates the vCenter folders, roles and permissions</td>
+</tr>
+<tr>
+<td><code>docs/</code></td>
+<td>These guides, the runbooks, the plan and the roadmap</td>
+</tr>
+</tbody>
+</table></div>
+<h3 id="the-backend-modules-backendapp">The backend modules (<code>backend/app/</code>)<a class="headerlink" href="#the-backend-modules-backendapp" title="Permanent link">#</a></h3>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Module</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>config.py</code></td>
+<td><code>Settings</code> (pydantic-settings), read only from the environment; <code>settings()</code> is cached</td>
+</tr>
+<tr>
+<td><code>db.py</code></td>
+<td>The engine and <code>session()</code> (commits on success, rolls back on error)</td>
+</tr>
+<tr>
+<td><code>deps.py</code></td>
+<td>FastAPI dependencies: <code>actor()</code> reads <code>X-Lab-User</code> (anything not matching <code>^[a-z][a-z0-9-]{0,19}$</code> becomes <code>anyone</code>), <code>get_machine()</code>, <code>add_log()</code></td>
+</tr>
+<tr>
+<td><code>models.py</code></td>
+<td>SQLAlchemy tables: <code>Machine</code>, <code>LogLine</code>, <code>Job</code>, <code>InstanceFlag</code></td>
+</tr>
+<tr>
+<td><code>api.py</code></td>
+<td>The <code>/api</code> router: request models, output shapers, the capacity check, and <code>create_app()</code></td>
+</tr>
+<tr>
+<td><code>jobs.py</code></td>
+<td>The Procrastinate app, the <code>machine_action</code> and <code>sweep</code> tasks, and <code>enqueue()</code></td>
+</tr>
+<tr>
+<td><code>actions.py</code></td>
+<td>What the worker does for each action, setup waits, flags, and the sweep's parts</td>
+</tr>
+<tr>
+<td><code>vsphere.py</code></td>
+<td>The pyVmomi adapter, <code>VCenter</code>: clone, power, snapshots, guest operations, capacity, console tickets</td>
+</tr>
+<tr>
+<td><code>catalogue.py</code></td>
+<td>Loads and validates <code>templates.yaml</code></td>
+</tr>
+<tr>
+<td><code>extras.py</code></td>
+<td>Loads <code>extras.yaml</code>; resolves options; builds the Linux cloud-config and the Windows runner</td>
+</tr>
+<tr>
+<td><code>cloudinit.py</code></td>
+<td>First-boot data per family, password rules and generation, a pure-Python <code>sha512_crypt</code></td>
+</tr>
+<tr>
+<td><code>labs.py</code></td>
+<td>Loads and validates <code>labs.yaml</code></td>
+</tr>
+<tr>
+<td><code>console.py</code></td>
+<td>The WebMKS console relay</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="4-data-model">4. Data model<a class="headerlink" href="#4-data-model" title="Permanent link">#</a></h2>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Table</th>
+<th>Columns that matter</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>machines</code></td>
+<td><code>id</code> (<code>m-xxxx</code>), <code>name</code> (unique, ≤15 chars, a hostname), <code>template</code>, <code>version</code>, <code>family</code>, <code>owner</code>, <code>vm_name</code> (<code>&lt;owner&gt;-&lt;name&gt;-&lt;hex&gt;</code> in vCenter), <code>state</code>, <code>created_at</code>, <code>expires_at</code> (null = kept permanently), <code>ip</code>, <code>username</code>, <code>password</code> (plaintext, shown to learners), <code>ssh_key</code>, <code>extras</code> (JSON <code>[{id, options}]</code>), and for Pro Labs <code>instance_id</code>, <code>lab</code>, <code>role</code>, <code>pending</code></td>
+</tr>
+<tr>
+<td><code>log_lines</code></td>
+<td>The activity log per machine: <code>machine_id</code> (cascade delete), <code>at</code>, <code>text</code>, <code>tone</code> (<code>ok</code>, <code>warn</code>, <code>error</code>, <code>muted</code>)</td>
+</tr>
+<tr>
+<td><code>jobs</code></td>
+<td><code>id</code>, <code>machine_id</code> (<strong>no</strong> foreign key, so jobs outlive destroyed machines), <code>action</code> (a label such as "Deploy ubuntu01"), <code>kind</code>, <code>by</code>, <code>state</code> (<code>queued</code>, <code>running</code>, <code>done</code>, <code>failed</code>), <code>queued_at</code>, <code>started_at</code>, <code>finished_at</code>, <code>detail</code>, <code>cancelled_by</code></td>
+</tr>
+<tr>
+<td><code>instance_flags</code></td>
+<td>One row per planted flag: <code>instance_id</code>, <code>flag_id</code>, <code>value</code> (<code>LAB{…}</code>), <code>planted_at</code></td>
+</tr>
+</tbody>
+</table></div>
+<p>A Pro Lab instance has no table of its own. It is the set of machines sharing an <code>instance_id</code>
+(<code>i-xxxx</code>).</p>
+<p>Migrations (<code>backend/alembic/versions/</code>): <code>0001</code> initial tables and Procrastinate's schema · <code>0002</code>
+machine extras · <code>0003</code> unique machine names · <code>0004</code> <code>jobs.kind</code> · <code>0005</code> <code>jobs.queued_at</code> ·
+<code>0006</code> <code>machines.family</code> · <code>0007</code> <code>jobs.cancelled_by</code> · <code>0008</code> instance columns on machines · <code>0009</code>
+<code>instance_flags</code>. Add a new one with <code>alembic revision -m "…"</code> in <code>backend/</code>. The <code>api</code> container
+runs <code>alembic upgrade head</code> on every start.</p>
+<h3 id="machine-states">Machine states<a class="headerlink" href="#machine-states" title="Permanent link">#</a></h3>
+<div class="term"><div class="term-bar"><i></i><i></i><i></i><span></span></div><pre><code>                ┌──────────── API sets a busy state, queues a job ───────────┐
+ stable:  running · stopped · error · expired                busy:  deploying · stopping · rebooting
+                ▲                                                   resetting · destroying
+                └──────── worker sets the result (or error) ─────────────────┘</code></pre></div>
+<ul>
+<li><strong>Which actions are allowed.</strong> The API accepts an action only from a stable state (<code>require_idle</code>).
+    An <code>expired</code> machine accepts only destroy, extend, keep or a new expiry. Giving it time queues a
+    <code>start</code>. There is no <code>starting</code> state: start uses <code>deploying</code>.</li>
+<li><strong>What the worker sets.</strong> On success it sets <code>running</code> (<code>stopped</code> after a stop); destroy deletes
+    the row. Any exception sets <code>error</code>, and the job's <code>detail</code> holds the message (with the end of the
+    machine's setup log, for setup failures).</li>
+<li><strong>What the sweep sets.</strong> Expiry turns a machine <code>expired</code> (powered off); after <code>GRACE_MINUTES</code> it
+    turns <code>destroying</code>. Reconcile makes <code>running</code>/<code>stopped</code> follow the VM's real power state. An
+    <code>error</code> left by a failed deploy, redeploy or reset stays <code>error</code>, and a VM that has vanished
+    becomes <code>error</code>.</li>
+<li><strong>An instance's state</strong> is derived from its machines (<code>api.py</code>, near <code>instance_out</code>): the first
+    busy machine's state, otherwise <code>error</code>, <code>expired</code>, all-<code>stopped</code>, or <code>running</code>.</li>
+</ul>
+<h2 id="5-api-reference">5. API reference<a class="headerlink" href="#5-api-reference" title="Permanent link">#</a></h2>
+<p>Everything is under <code>/api</code>. The schema is at <code>/api/openapi.json</code>; the interactive docs pages are
+switched off.</p>
+<p><strong>Config and status</strong></p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Path</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GET</td>
+<td><code>/config</code></td>
+<td>Templates, services (extras with <code>offeredBy</code>), labs, limits and validation rules: everything the frontend needs to draw forms</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/health</code></td>
+<td>Database and vCenter reachability</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/capacity</code></td>
+<td>Memory, CPU and datastore (read from vCenter, cached 30 s)</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/state?jobs=1</code></td>
+<td>Machines and instances (and jobs): what the panel polls</td>
+</tr>
+</tbody>
+</table></div>
+<p><strong>Machines</strong></p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Path</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GET</td>
+<td><code>/machines</code></td>
+<td>All machines, without passwords or logs</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/machines/{id}?after=</code></td>
+<td>One machine, with password and log lines (after a line id, if given)</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/machines</code></td>
+<td>Deploy (201). Body: <code>template</code>, <code>version</code>, <code>name</code>, <code>hours</code> (null = permanent), <code>owner</code>, optional <code>password</code>, <code>sshKey</code>, <code>extras</code></td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/machines/{id}/start</code> · <code>stop</code> · <code>reboot</code> · <code>reset</code> · <code>redeploy</code></td>
+<td>Power and rebuild actions</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/machines/{id}/cancel</code></td>
+<td>Cancel its queued or running jobs</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/machines/{id}/extend</code></td>
+<td><code>{hours}</code>: add time</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/machines/{id}/keep</code></td>
+<td>Keep permanently (within <code>MAX_PERMANENT</code>)</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/machines/{id}/expiry</code></td>
+<td><code>{hours}</code>: a new expiry, counted from now</td>
+</tr>
+<tr>
+<td>DELETE</td>
+<td><code>/machines/{id}</code></td>
+<td>Destroy</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/machines/{id}/console</code></td>
+<td>A one-off console path (see <a href="#10-console-relay">Console relay</a>)</td>
+</tr>
+<tr>
+<td>WS</td>
+<td><code>/console/{token}</code></td>
+<td>The console stream</td>
+</tr>
+</tbody>
+</table></div>
+<p><code>hours</code> is 1–720 (<code>MAX_HOURS</code>). Names must match <code>^[a-z](?:[a-z0-9-]{0,13}[a-z0-9])?$</code>.</p>
+<p><strong>Pro Lab instances</strong></p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Path</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GET</td>
+<td><code>/instances</code>, <code>/instances/{id}</code></td>
+<td>List, or one</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/instances</code></td>
+<td>Deploy a lab: <code>{lab, owner, hours}</code></td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/instances/{id}/reset</code> · <code>extend</code> · <code>cancel</code></td>
+<td>Applied to every machine (reset in boot order)</td>
+</tr>
+<tr>
+<td>DELETE</td>
+<td><code>/instances/{id}</code></td>
+<td>Destroy every machine</td>
+</tr>
+</tbody>
+</table></div>
+<p><strong>Admin</strong></p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Path</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GET</td>
+<td><code>/leftovers</code></td>
+<td>VMs in the machines folder that no machine row owns</td>
+</tr>
+<tr>
+<td>DELETE</td>
+<td><code>/leftovers/{name}</code></td>
+<td>Delete one (re-checked first)</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/jobs?limit=&amp;machine=</code></td>
+<td>Jobs, newest first (<code>limit</code> 1–500)</td>
+</tr>
+</tbody>
+</table></div>
+<p>Errors are JSON <code>{"detail": "…"}</code> with a sentence meant for people; the frontend shows it as is.</p>
+<h2 id="6-jobs-and-the-worker">6. Jobs and the worker<a class="headerlink" href="#6-jobs-and-the-worker" title="Permanent link">#</a></h2>
+<h3 id="queueing">Queueing<a class="headerlink" href="#queueing" title="Permanent link">#</a></h3>
+<p><code>jobs.enqueue()</code> inserts a <code>jobs</code> row, then defers the Procrastinate task <code>machine_action</code> with
+<code>lock=&lt;machine id&gt;</code>. Each machine therefore runs one job at a time, in order.</p>
+<ul>
+<li><strong>Queues.</strong> <code>quick</code> takes start, stop, reboot, expire and destroy; <code>default</code> takes deploy,
+    redeploy and reset. The <code>sweeper</code> only takes <code>quick</code>, so a long Windows deploy never holds up a
+    stop.</li>
+<li><strong>The API.</strong> <code>api.queue()</code> commits the database change before it enqueues, so the worker always
+    sees the new state.</li>
+</ul>
+<h3 id="what-each-action-does-actionspy">What each action does (<code>actions.py</code>)<a class="headerlink" href="#what-each-action-does-actionspy" title="Permanent link">#</a></h3>
+<p>Each job opens its own vCenter session (<code>vsphere.connect()</code>).</p>
+<ul>
+<li>
+<p><strong>deploy:</strong></p>
+<ol>
+<li>Resolve the extras and fill in <code>machine</code>-type options with the other machine's details.</li>
+<li>Build the family's first-boot data (<code>cloudinit.py</code>).</li>
+<li><strong>Linked-clone</strong> the template's <code>clean</code> snapshot, then reconfigure it (CPU, memory,
+   <code>guestinfo.*</code>, NIC), and take the clone's own <code>clean</code> snapshot before first boot.</li>
+<li>Power on and wait for an address (<code>_record_ip</code>). A machine that gets an ESXi or vCenter address
+   from DHCP is powered off at once.</li>
+<li>Wait for setup (<code>_await_setup</code>): read the status file through VMware Tools until it says done.
+   The wait is <code>EXTRAS_TIMEOUT_SECONDS</code>, or <code>WINDOWS_SETUP_TIMEOUT_SECONDS</code> for Windows, plus each
+   extra's <code>setupMinutes</code>.</li>
+<li>Clear <code>guestinfo.userdata</code> if it carried a plaintext password, re-read the address, plant any
+   Pro Lab flags, and set <code>running</code>.</li>
+</ol>
+</li>
+<li>
+<p><strong>reset:</strong> power off, revert to the clone's <code>clean</code> snapshot, power on, then wait for the
+    address and setup again. Because the snapshot predates first boot, cloud-init runs again: a reset
+    machine is as new.</p>
+</li>
+<li><strong>redeploy:</strong> delete the VM and deploy again with the same settings; machines that depend on it
+    are told if its address changed.</li>
+<li><strong>start / stop / reboot:</strong> stop tries a clean shutdown, falling back to power-off after 90 s.
+    Address waits are capped at 120 s.</li>
+<li><strong>expire:</strong> power off. <strong>destroy:</strong> delete the VM and the row.</li>
+<li><strong>extend, keep and expiry</strong> are API-only database updates. They queue a <code>start</code> only if the
+    machine had expired.</li>
+</ul>
+<h3 id="cancellation">Cancellation<a class="headerlink" href="#cancellation" title="Permanent link">#</a></h3>
+<p><code>POST …/cancel</code> sets <code>jobs.cancelled_by</code>. Long waits call <code>vsphere.check_cancelled()</code>, which polls
+that column at most every 2 s and raises <code>Cancelled</code>. A job cancelled while still queued marks its
+machine <code>error</code>.</p>
+<h3 id="the-sweep">The sweep<a class="headerlink" href="#the-sweep" title="Permanent link">#</a></h3>
+<p><code>sweep</code> runs every minute (<code>cron="* * * * *"</code>, <code>queueing_lock="sweep"</code> so runs never stack), on
+the quick queue:</p>
+<ol>
+<li><code>recover_lost_jobs</code>: fail jobs whose worker's heartbeat is older than 60 s (a worker that was
+    killed mid-deploy), and panel jobs the queue no longer holds.</li>
+<li><code>advance_instances</code>: move Pro Lab instances on to their next boot-order tier.</li>
+<li><code>expiry_sweep</code>: expire machines whose time is up; destroy those past the grace period.</li>
+<li><code>reconcile</code>: one bulk vCenter read to sync power states and addresses.</li>
+<li>Once an hour, <code>prune_history</code>: finished <code>jobs</code> older than 90 days, finished Procrastinate jobs
+    older than 7 days.</li>
+</ol>
+<h2 id="7-templates-families-and-first-boot">7. Templates, families and first boot<a class="headerlink" href="#7-templates-families-and-first-boot" title="Permanent link">#</a></h2>
+<p>A <strong>template</strong> is a vSphere template VM with a snapshot named exactly <code>clean</code>. Every machine is a
+linked clone of that snapshot, so a deploy writes only its own changes (<code>CLONE_DISK_GB</code>, 10 GB by
+default, for the capacity check). For the same reason, a template can't be deleted while machines
+still use it.</p>
+<p>Templates carry no per-machine settings. On first boot, the machine reads them from vCenter's
+<code>guestinfo</code> variables, set by the clone's reconfigure. How that works depends on the template's
+<strong>family</strong> (<code>templates.yaml</code>'s <code>family</code>):</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Family</th>
+<th>Used for</th>
+<th>First-boot data (<code>cloudinit.py</code>)</th>
+<th>Ready when</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>debian</code></td>
+<td>Ubuntu, Debian, Kali, Parrot</td>
+<td><code>guestinfo.metadata</code> (hostname, netplan DHCP) + <code>guestinfo.userdata</code> (<code>#cloud-config</code>: user, SHA-512 password hash, admin group, SSH key, extras' <code>write_files</code>/<code>runcmd</code>)</td>
+<td><code>/var/lib/lab-deploy/extras.status</code> says done</td>
+</tr>
+<tr>
+<td><code>rhel</code></td>
+<td>Rocky, Alma, CentOS Stream, Fedora</td>
+<td>As debian, <code>wheel</code> group</td>
+<td>As debian</td>
+</tr>
+<tr>
+<td><code>arch</code></td>
+<td>CachyOS</td>
+<td>As debian, <code>wheel</code> group</td>
+<td>As debian</td>
+</tr>
+<tr>
+<td><code>windows</code></td>
+<td>Windows Server, Windows 11, Exchange</td>
+<td>A Cloudbase-Init <code>#ps1_sysnative</code> script: creates the user (a domain admin on a domain controller), disables the built-in Administrator, sets up OpenSSH, then runs the extras' runner</td>
+<td><code>C:\ProgramData\lab-deploy\extras.status</code> says done</td>
+</tr>
+<tr>
+<td><code>legacy</code></td>
+<td>Old Linux, OPNsense, pfSense, Proxmox, TrueNAS, XCP-ng</td>
+<td>Plain <code>guestinfo.lab.*</code> keys, read by the template's own <code>lab-firstboot</code> script (<code>scripts/template/legacy/</code>, <code>opnsense/</code>, …)</td>
+<td>The status file</td>
+</tr>
+<tr>
+<td><code>vyos</code></td>
+<td>VyOS</td>
+<td>cloud-config <code>users</code> + <code>vyos_config_commands</code></td>
+<td>A guest login succeeds</td>
+</tr>
+<tr>
+<td><code>image</code></td>
+<td>Metasploitable, MikroTik CHR</td>
+<td>None: deployed as is, with the fixed <code>password</code> from <code>templates.yaml</code></td>
+<td>An address</td>
+</tr>
+</tbody>
+</table></div>
+<p>The worker reads status files through VMware Tools guest operations (<code>read_guest_file</code>). That needs
+the guest-operation privileges <code>setup_vcenter.py</code> grants, and the panel's server must reach the ESXi
+host on port 443.</p>
+<h2 id="8-extras-framework">8. Extras framework<a class="headerlink" href="#8-extras-framework" title="Permanent link">#</a></h2>
+<p>An <strong>extra</strong> is an optional service installed at deploy: a web server, a database, a domain
+controller, a Docker app. Extras are defined in <code>backend/extras.yaml</code>, whose header documents every
+key; <code>extras.py</code> loads them.</p>
+<p><strong>No downloads at deploy.</strong> An extra's packages are <strong>baked into the template</strong>, installed but
+switched off, by <code>scripts/template/prepare.sh</code>: <code>EXTRA_PACKAGES_&lt;FAMILY&gt;[&lt;id&gt;]</code>, <code>EXTRA_SERVICES</code>,
+<code>DOCKER_IMAGES</code>, and <code>bake_&lt;id&gt;()</code> for anything more. At deploy, only the extra's <code>script</code> runs.
+<code>test_extras.py</code> checks that every Linux extra's packages, images and bake functions are in
+<code>prepare.sh</code>.</p>
+<p><strong>How a template offers an extra.</strong> It lists the extra under <code>extras:</code> in <code>templates.yaml</code>. Extras
+prepped in <code>prepare.sh</code> but not yet in that build go under <code>plannedExtras:</code>, and show as "Soon".</p>
+<p><strong>Clashes come from ports alone.</strong> Two extras that list the same port can't be ticked together. The
+old <code>uses</code>/<code>provides</code>/<code>conflicts</code> keys are refused by the loader.</p>
+<p><strong>Options</strong> (<code>options:</code>) are typed: <code>hostname</code>, <code>text</code> (with <code>pattern</code>), <code>choice</code>, <code>boolean</code> (<code>yes</code>/
+<code>no</code>) and <code>machine</code>. A <code>machine</code> option takes another machine's id; the script receives
+<code>&lt;opt&gt;_ip</code>, <code>&lt;opt&gt;_name</code>, <code>&lt;opt&gt;_username</code>, <code>&lt;opt&gt;_password</code> and that machine's own option values.
+This is how <code>join-domain</code> finds its domain controller. Every value reaches the script as a
+validated, quoted shell or PowerShell variable; scripts never see raw input.</p>
+<p><strong>Linux scripts</strong> run as root with <code>bash -e</code> from cloud-init's <code>runcmd</code>, through a runner that
+records each extra's result in the status file. Helpers from <code>extras.py</code>'s <code>LIB</code> are loaded:
+<code>lab_ip</code>, <code>lab_cert</code>, <code>lab_php</code>, <code>lab_apache</code>, <code>lab_apache_site</code>, <code>lab_sql_string</code>, <code>lab_docker</code>,
+<code>lab_wait_http</code> and <code>lab_open</code>.</p>
+<p><strong>Windows scripts</strong> run as SYSTEM under a PowerShell runner (<code>extras.windows_setup()</code>). Exit codes
+manage restarts:</p>
+<ul>
+<li><strong>3010</strong> means restart, then go on to the next extra.</li>
+<li><strong>3011</strong> means restart, then run this extra again.</li>
+<li>The runner tells Cloudbase-Init <strong>1003</strong> to get the restart, and allows at most 3 restarts.</li>
+</ul>
+<p><strong>After setup</strong>, <code>extras.details()</code> builds the links and notes shown on the machine's page, from
+each extra's <code>links</code>/<code>notes</code> with <code>{ip}</code>, <code>{username}</code>, <code>{hostname}</code> and option placeholders.</p>
+<h2 id="9-pro-labs-internals">9. Pro Labs internals<a class="headerlink" href="#9-pro-labs-internals" title="Permanent link">#</a></h2>
+<p>Pro Labs are defined in <code>backend/labs.yaml</code> (schema in its header) and loaded by <code>labs.py</code>. A lab is
+a list of machines, each a catalogue template and version with a <code>role</code>, a <code>bootOrder</code> and extras,
+plus the flags to plant.</p>
+<p><strong>When a lab is "Soon".</strong> <code>labs.unavailable_reason()</code> checks two things: every machine's template
+must be deployable, and every extra a lab machine uses must be in that template's <code>extras:</code>.
+Otherwise the lab is listed as "Soon" instead of failing to load.</p>
+<p><strong>Machine references.</strong> A <code>machine</code>-type option in a lab is written <code>"@&lt;role name&gt;"</code>, e.g.
+<code>{join-domain: {dc: "@dc"}}</code>. It must point at another machine in the lab with a lower <code>bootOrder</code>.
+At deploy, the API allocates every machine id first and swaps each <code>@dc</code> for the real <code>m-xxxx</code> id.</p>
+<p><strong>Deploying an instance</strong> (<code>POST /instances</code>):</p>
+<ol>
+<li>Check the lab is available, the quotas, and the combined memory and disk.</li>
+<li>Create every machine row with <code>pending="deploy"</code>.</li>
+<li><code>actions.generate_flags</code> stores a random <code>LAB{…}</code> value per flag.</li>
+<li><code>actions.advance_instance</code> queues the lowest boot-order tier. Once every machine in it is
+    <code>running</code>, it queues the next tier; if one fails, the waiting machines fail too.</li>
+</ol>
+<p><code>advance_instance</code> runs after every lab job and from the sweep, under a row lock, so it is safe to
+call from both.</p>
+<p><strong>Flags</strong> are planted by <code>actions.plant_flags</code> once a machine is set up, through VMware Tools guest
+operations:</p>
+<ul>
+<li><code>file:</code> writes the value to that path.</li>
+<li><code>run:</code> runs the program with the value as its last argument. Brookfield's mail flag is planted
+    this way, by a script its seeding extra left on the mail server.</li>
+</ul>
+<p><strong>Reset</strong> reverts every machine to its own <code>clean</code> snapshot, in boot order, and plants new flag
+values.</p>
+<h2 id="10-console-relay">10. Console relay<a class="headerlink" href="#10-console-relay" title="Permanent link">#</a></h2>
+<p>The browser console is noVNC talking to ESXi's WebMKS, relayed through the API (<code>console.py</code>):</p>
+<ol>
+<li><code>POST /api/machines/{id}/console</code>. The API asks vCenter for a WebMKS ticket
+    (<code>vm.AcquireTicket("webmks")</code>) and stores it in memory under a random token for 30 s, single
+    use. It returns <code>/api/console/&lt;token&gt;</code>.</li>
+<li>The browser opens that WebSocket (subprotocol <code>binary</code>). A cross-origin <code>Origin</code> is refused
+    (close code 4403).</li>
+<li>The API connects to <code>wss://&lt;esxi&gt;/ticket/&lt;ticket&gt;</code>. It pins ESXi's certificate to the thumbprint
+    vCenter reported before sending the ticket, then relays bytes both ways.</li>
+</ol>
+<p><strong>Gotchas:</strong></p>
+<ul>
+<li><strong>Single API process.</strong> Tokens live in process memory, so the API must run as a single process.</li>
+<li><strong>No pings.</strong> ESXi closes the console on a WebSocket ping, so upstream pings are off.</li>
+<li><strong>Shifted characters.</strong> ESXi maps keysyms to keys without Shift. "Type password" and "Paste"
+    therefore send Shift around capitals and shifted symbols, assuming a US layout.</li>
+<li><strong>Privilege.</strong> It needs <code>VirtualMachine.Interact.ConsoleInteract</code>.</li>
+</ul>
+<h2 id="11-frontend">11. Frontend<a class="headerlink" href="#11-frontend" title="Permanent link">#</a></h2>
+<p><code>frontend/</code> is SvelteKit 2 with Svelte 5, built to static files by <code>adapter-static</code> (<code>ssr = false</code>;
+<code>200.html</code> is the fallback, served by Caddy's <code>try_files</code>).</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Path</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>src/routes/machines/…</code></td>
+<td>Machine list (By OS / By service), deploy form (<code>new/[template]</code>), machine page (<code>[id]</code>), console (<code>[id]/console</code>)</td>
+</tr>
+<tr>
+<td><code>src/routes/labs/…</code>, <code>instances/…</code></td>
+<td>Pro Lab catalogue and lab pages; deployed instances</td>
+</tr>
+<tr>
+<td><code>src/routes/admin/</code></td>
+<td>Capacity, all machines, leftover VMs, jobs</td>
+</tr>
+<tr>
+<td><code>src/lib/api.ts</code></td>
+<td><code>fetch</code> wrapper: sends <code>X-Lab-User</code>, turns error bodies into <code>ApiError</code></td>
+</tr>
+<tr>
+<td><code>src/lib/store.svelte.ts</code></td>
+<td><code>PanelStore</code>: polls <code>/api/state</code> every 3 s while the tab is visible (15 s hidden); every action the UI takes</td>
+</tr>
+<tr>
+<td><code>src/lib/types.ts</code></td>
+<td>Types shared with the API's JSON. Build backend work against these</td>
+</tr>
+<tr>
+<td><code>src/lib/templates.ts</code></td>
+<td>The catalogue's display side: names, categories, versions, end-of-life marks, access, flags</td>
+</tr>
+<tr>
+<td><code>src/lib/services.ts</code></td>
+<td>Services planned but not yet extras ("Soon" under By service)</td>
+</tr>
+<tr>
+<td><code>src/lib/labs.ts</code></td>
+<td>Pro Lab designs (cards, pictures, network sketches), matched to <code>labs.yaml</code> by slug</td>
+</tr>
+<tr>
+<td><code>src/lib/os-logos.ts</code></td>
+<td>Inline logos (Simple Icons) or lettered badges</td>
+</tr>
+<tr>
+<td><code>src/lib/styles/</code></td>
+<td><code>tokens.css</code> (Hardline Classic theme), <code>palettes.css</code> (other themes), <code>app.css</code> (shared classes)</td>
+</tr>
+</tbody>
+</table></div>
+<p><strong>The catalogue lives in two places.</strong> <code>templates.yaml</code> decides what can be deployed and where it
+is in vCenter; <code>templates.ts</code> holds how it looks. <code>backend/tests/test_catalogue.py</code> parses
+<code>templates.ts</code> and fails if a YAML template/version is missing from it. Templates in <code>templates.ts</code>
+with no YAML entry show as "Soon".</p>
+<p><strong>Theme.</strong> The look copies the course site's Hardline Classic: dark by default, square corners, 2px
+outlines, and a lime accent. Keep <code>tokens.css</code> in step with the course site. The theme menu sets
+<code>data-theme</code> and <code>data-palette</code> on <code>&lt;html&gt;</code> and stores the choice in localStorage (<code>labs-theme</code>).</p>
+<p><strong>Content Security Policy.</strong> Caddy sends a strict CSP: <code>default-src 'self'</code>, with fonts and images
+self-hosted. Nothing may load from a CDN. noVNC is bundled and imported dynamically, and fonts stay
+separate files (<code>assetsInlineLimit: 0</code>).</p>
+<h2 id="12-local-development-and-tests">12. Local development and tests<a class="headerlink" href="#12-local-development-and-tests" title="Permanent link">#</a></h2>
+<div class="term"><div class="term-bar"><i></i><i></i><i></i><span>shell</span></div><pre><code># Backend tests: PostgreSQL + vcsim (VMware's vCenter simulator), in Docker
+docker compose -f backend/compose.test.yaml run --rm --build tests
+
+# Frontend: dev server on :5173, /api proxied to localhost:8000
+cd frontend &amp;&amp; npm install &amp;&amp; npm run dev
+
+# Frontend type and Svelte checks (CI runs this)
+cd frontend &amp;&amp; npm run check
+
+# Shell scripts: use the same shellcheck version as CI. Newer ones miss some warnings it raises.
+docker run --rm -v "$PWD:/mnt" -w /mnt koalaman/shellcheck-alpine:v0.10.0 shellcheck scripts/template/*.sh</code></pre></div>
+<p><strong>Test fixtures</strong> (<code>backend/tests/conftest.py</code>):</p>
+<ul>
+<li>It points <code>VCENTER_*</code> at vcsim and builds a <code>Labs/Templates</code> inventory with <code>clean</code> snapshots.</li>
+<li>It resets the schema with Alembic and truncates the tables after each test.</li>
+<li>It fakes guest-file reads; mark a test <code>real_guest_files</code> to opt out.</li>
+<li>The <code>queued</code> fixture captures deferred jobs, and <code>run_queued()</code> runs them in the test.</li>
+</ul>
+<p><strong>What vcsim can't tell you:</strong></p>
+<ul>
+<li>It <strong>doesn't enforce privileges</strong>, so a missing vCenter privilege only shows on a real vCenter.</li>
+<li>Read VM properties by path (the PropertyCollector).</li>
+<li>Apply clone configuration in a separate <code>ReconfigVM</code>.</li>
+</ul>
+<p><strong>End-to-end tests</strong> run against a real panel and vCenter:</p>
+<div class="term"><div class="term-bar"><i></i><i></i><i></i><span>shell</span></div><pre><code>scripts/e2e/run.py --panel https://panel.example --only ubuntu:26.04 --report e2e-report.md</code></pre></div>
+<p>It deploys <code>e2e-*</code> machines owned by <code>e2e</code>, runs the whole lifecycle (deploy, sign-in over SSH or
+RDP, stop, start, reboot, reset, redeploy, destroy), then one deploy per extra with the checks in
+<code>scripts/e2e/checks.py</code>. Exit 0 is the sign-off for a new template.</p>
+<blockquote class="warn">
+<p><strong>Warning:</strong> Don't run heavy tests on the panel's own server. It also runs the panel, and CI
+deploys to it.</p>
+</blockquote>
+<h2 id="13-ci-and-deployment">13. CI and deployment<a class="headerlink" href="#13-ci-and-deployment" title="Permanent link">#</a></h2>
+<p><code>.gitlab-ci.yml</code> runs on every push. The <strong>build</strong> stage has four jobs:</p>
+<ul>
+<li><code>build</code>: <code>npm run check</code> and <code>npm run build</code>.</li>
+<li><code>scripts-check</code>: shellcheck v0.10.0.</li>
+<li><code>scripts-check-windows</code>: parses the <code>.ps1</code> files with PowerShell's parser.</li>
+<li><code>backend-test</code>: pytest with Postgres and vcsim services.</li>
+</ul>
+<p>On the default branch, the <strong>deploy</strong> stage then runs <code>deploy/deploy.sh</code> with the frontend that
+<code>build</code> already built. It needs the CI/CD variables <code>DEPLOY_HOST</code>, <code>SITE_ADDRESS</code>, <code>SSH_PRIVATE_KEY</code>
+and <code>SSH_KNOWN_HOSTS</code>, plus <code>DEPLOY_USER</code> if it isn't the default.</p>
+<p><strong>What <code>deploy/deploy.sh</code> does:</strong></p>
+<ol>
+<li>Rsyncs the built site, the backend, <code>compose.yaml</code>, the env example and the Caddyfile to
+    <code>/srv/lab-deploy</code>.</li>
+<li>Writes <code>.env</code>. On the first deploy only, it creates <code>lab-deploy.env</code> with a generated database
+    password.</li>
+<li>Builds <code>api</code> and starts everything except the worker.</li>
+<li>Restarts the worker last, letting running jobs finish for up to 15 minutes.</li>
+<li>Reloads Caddy.</li>
+</ol>
+<p>Overlapping deploys can leave the API down, so batch your pushes.</p>
+<p><strong>Offline installs</strong> use <code>deploy/bundle.sh</code> (online side) and <code>deploy/install.sh</code> with the
+<code>labinstall</code> package (offline side). These build the panel and every template from a carried-in
+bundle; see <a href="../offline-install.md">offline-install.md</a>. Its template list is
+<code>deploy/install/manifest.toml</code>; each entry's <code>catalogue</code> must exist in <code>templates.yaml</code>.</p>
+<h2 id="14-configuration-reference">14. Configuration reference<a class="headerlink" href="#14-configuration-reference" title="Permanent link">#</a></h2>
+<p>All settings come from the environment (<code>lab-deploy.env</code> on the server; an example is in
+<code>deploy/lab-deploy.env.example</code>). <code>config.py</code> is the source of truth.</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Variable</th>
+<th>Default</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>DATABASE_URL</code></td>
+<td><code>postgresql://labdeploy:labdeploy@localhost/labdeploy</code></td>
+<td>Database</td>
+</tr>
+<tr>
+<td><code>VCENTER_HOST</code></td>
+<td>—</td>
+<td>vCenter, <code>host[:port]</code></td>
+</tr>
+<tr>
+<td><code>VCENTER_USER</code>, <code>VCENTER_PASSWORD</code></td>
+<td>—</td>
+<td>The panel's vCenter account (<code>svc-labdeploy</code>)</td>
+</tr>
+<tr>
+<td><code>VCENTER_INSECURE</code></td>
+<td><code>false</code></td>
+<td>Accept a self-signed vCenter certificate</td>
+</tr>
+<tr>
+<td><code>VCENTER_DATACENTER</code>, <code>VCENTER_CLUSTER</code></td>
+<td>—</td>
+<td>Where machines run. Without these four, deploys fail with "vCenter isn't configured"</td>
+</tr>
+<tr>
+<td><code>VCENTER_RESOURCE_POOL</code></td>
+<td>cluster root</td>
+<td>Optional resource pool</td>
+</tr>
+<tr>
+<td><code>VCENTER_DATASTORE</code></td>
+<td>—</td>
+<td>Datastore for clones</td>
+</tr>
+<tr>
+<td><code>VCENTER_FOLDER</code></td>
+<td><code>Labs/Machines</code></td>
+<td>VM folder for machines</td>
+</tr>
+<tr>
+<td><code>VCENTER_NETWORK</code></td>
+<td>—</td>
+<td>Port group machines join (needs DHCP)</td>
+</tr>
+<tr>
+<td><code>MAX_MACHINES</code></td>
+<td><code>10</code></td>
+<td>Machines at once (expired ones don't count)</td>
+</tr>
+<tr>
+<td><code>MAX_PERMANENT</code></td>
+<td><code>3</code></td>
+<td>Of those, kept permanently</td>
+</tr>
+<tr>
+<td><code>MEMORY_OVERCOMMIT</code></td>
+<td><code>1.0</code></td>
+<td>Memory the capacity check may hand out, as a multiple of physical memory (≥1)</td>
+</tr>
+<tr>
+<td><code>DATASTORE_RESERVE_GB</code></td>
+<td><code>30</code></td>
+<td>Datastore space deploys never use</td>
+</tr>
+<tr>
+<td><code>CLONE_DISK_GB</code></td>
+<td><code>10</code></td>
+<td>What a new linked clone is expected to write</td>
+</tr>
+<tr>
+<td><code>GRACE_MINUTES</code></td>
+<td><code>1440</code></td>
+<td>How long expired machines are kept before deletion</td>
+</tr>
+<tr>
+<td><code>IP_TIMEOUT_SECONDS</code></td>
+<td><code>300</code></td>
+<td>Wait for an address</td>
+</tr>
+<tr>
+<td><code>EXTRAS_TIMEOUT_SECONDS</code></td>
+<td><code>600</code></td>
+<td>Wait for Linux setup and extras</td>
+</tr>
+<tr>
+<td><code>WINDOWS_SETUP_TIMEOUT_SECONDS</code></td>
+<td><code>1200</code></td>
+<td>Wait for Windows setup</td>
+</tr>
+<tr>
+<td><code>MACHINE_DOMAIN</code></td>
+<td>—</td>
+<td>Fills <code>{fqdn}</code> in extras' defaults, e.g. <code>lab.example</code></td>
+</tr>
+<tr>
+<td><code>PASSWORD_LENGTH</code></td>
+<td><code>16</code></td>
+<td>Generated passwords</td>
+</tr>
+<tr>
+<td><code>CATALOGUE_PATH</code></td>
+<td><code>backend/templates.yaml</code></td>
+<td>The catalogue. <code>extras.yaml</code> and <code>labs.yaml</code> are read from the same folder</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="15-conventions-and-gotchas">15. Conventions and gotchas<a class="headerlink" href="#15-conventions-and-gotchas" title="Permanent link">#</a></h2>
+<p><strong>Conventions:</strong></p>
+<ul>
+<li><strong>Example data.</strong> Committed files use documentation addresses and <code>.example</code> domains; real
+    hostnames, IPs and keys stay out of the repository.</li>
+<li><strong>Commits.</strong> Every change is committed as <code>Lab Deploy Admin</code> and pushed to <code>main</code>, which deploys
+    it.</li>
+<li><strong>Repeatable steps.</strong> These are scripts in <code>scripts/</code>, not commands pasted into a doc.</li>
+</ul>
+<p><strong>Gotchas:</strong></p>
+<ul>
+<li><strong>New privileges need <code>setup_vcenter.py</code>.</strong> When a feature needs a new vCenter privilege, add it to
+    <code>scripts/setup_vcenter.py</code> and say so in the commit. <code>NoPermission</code> errors name the missing
+    privilege.</li>
+<li><strong>DHCP churn.</strong> Every clone is a new MAC, so test runs eat DHCP leases. Keep fixed addresses
+    outside the pool; the panel powers off a machine that gets a host's or vCenter's address.</li>
+<li><strong>A paused ESXi.</strong> If ESXi runs nested in VMware Workstation, it pauses when the PC's disk fills.
+    When both ESXi and vCenter stop answering, check that first.</li>
+<li><strong>Deleting a template.</strong> vCenter refuses to delete a template outright ("Invalid virtual machine
+    state"). Convert it to a virtual machine first.</li>
+<li><strong>Stale comments to know about.</strong> <code>models.py</code> says <code>family</code> is "debian, rhel or windows" (there are
+    seven), and <code>labs.yaml</code>'s header still speaks of "golden templates". Brookfield uses the base
+    templates plus seeding extras.</li>
+</ul>
+      <p class="foot">Generated from <code>docs/developer-guide.md</code> by <code>scripts/docs/build-html.py</code>. Edit the markdown, not this file.</p>
+    </article>
+  </main>
+</div>
+<script>
+(function () {
+  var sel = document.getElementById('theme');
+  var saved = localStorage.getItem('labs-theme');
+  sel.value = saved === 'dark' || saved === 'light' ? saved : 'auto';
+  sel.addEventListener('change', function () {
+    localStorage.setItem('labs-theme', sel.value);
+    var t = sel.value === 'auto' ? (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark') : sel.value;
+    document.documentElement.dataset.theme = t;
+  });
+  document.getElementById('menu').addEventListener('click', function () { document.body.classList.toggle('toc-open'); });
+  var links = Array.prototype.slice.call(document.querySelectorAll('.toc a'));
+  links.forEach(function (a) { a.addEventListener('click', function () { document.body.classList.remove('toc-open'); }); });
+  var heads = links.map(function (a) { return document.getElementById(decodeURIComponent(a.hash.slice(1))); });
+  function spy() {
+    var current = 0;
+    heads.forEach(function (h, i) { if (h && h.getBoundingClientRect().top < 120) current = i; });
+    links.forEach(function (a, i) { a.classList.toggle('active', i === current); });
+  }
+  addEventListener('scroll', spy, { passive: true });
+  spy();
+})();
+</script>
+</body>
+</html>
