@@ -120,9 +120,20 @@
 		};
 	}
 
-	/** A Remote Desktop file for the machine, with its user filled in (the password is asked for). */
+	/**
+	 * A Remote Desktop file for the machine, with its user filled in (the password is asked for). It
+	 * opens in a window whose resolution follows the window as it's resized, where the machine can
+	 * (Windows, GNOME, xrdp 0.10); elsewhere the screen is scaled to the window.
+	 */
 	function rdpFile(ip: string, username: string): string {
-		const lines = [`full address:s:${ip}`, `username:s:${username}`, 'prompt for credentials:i:1', 'screen mode id:i:1'];
+		const lines = [
+			`full address:s:${ip}`,
+			`username:s:${username}`,
+			'prompt for credentials:i:1',
+			'screen mode id:i:1',
+			'dynamic resolution:i:1',
+			'smart sizing:i:1',
+		];
 		return `data:application/x-rdp;charset=utf-8,${encodeURIComponent(lines.join('\r\n') + '\r\n')}`;
 	}
 
