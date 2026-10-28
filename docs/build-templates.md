@@ -16,6 +16,8 @@ as building by hand ([setup-vsphere.md](setup-vsphere.md), parts 2, 5 and 6), wh
 | Windows Server 2025 (Desktop Experience) | `packer/build.sh windows-server` | ~22 min |
 | Windows Server 2025 Core | `packer/build.sh windows-server -var edition=core` | ~10 min |
 | Windows Server 2022, 2019 | `packer/build.sh windows-server -var version=2022` (or 2019) | ~45–70 min |
+| Windows Server 2016 (legacy) | `packer/build.sh windows-server -var version=2016` | ~10 min |
+| Windows Server 2012 R2 (legacy) | `packer/windows-server/fetch-legacy.sh` once (its TLS can't download them itself), then `packer/build.sh windows-server -var version=2012r2` | ~10 min |
 | Windows 11 Enterprise (evaluation) | `packer/build.sh windows` | ~37 min |
 | OPNsense 26.7 | `packer/build.sh opnsense` | ~14 min |
 | pfSense CE 2.7.2 | `packer/build.sh pfsense` | ~10 min |
@@ -30,7 +32,9 @@ as building by hand ([setup-vsphere.md](setup-vsphere.md), parts 2, 5 and 6), wh
 | Exchange Server SE | `packer/build.sh windows-server -var exchange=true -var office=false -var sql_server=false` | ~40 min |
 | Zimbra 8.8.15 (Ubuntu 20.04) | `packer/build.sh ubuntu -var zimbra=true -var version=20.04 -var iso=ubuntu-20.04.6-live-server-amd64.iso` | ~30 min |
 | TrueNAS SCALE 25.10 | `packer/build.sh truenas-scale` | ~25 min |
+| TrueNAS SCALE 25.04 | `packer/build.sh truenas-scale -var version=25.04 -var iso=TrueNAS-SCALE-25.04.2.6.iso` | ~20 min |
 | TrueNAS CORE 13.3 | `packer/build.sh truenas-core` | ~25 min |
+| TrueNAS CORE 13.0 | `packer/build.sh truenas-core -var version=13.0 -var iso=TrueNAS-13.0-U6.8.iso` | ~20 min |
 | VyOS 1.5 rolling | `packer/vyos/build-iso.sh` once, then `packer/build.sh vyos` | ~8 min |
 | Metasploitable 2 | `packer/metasploitable/import-ms2.sh` | ~15 min |
 | Metasploitable 3 (Ubuntu 14.04) | `packer/metasploitable/import-ms3.sh` | ~30 min |

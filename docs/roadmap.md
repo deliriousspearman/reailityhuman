@@ -20,14 +20,14 @@ deployed by CI.
 | Enterprise Linux | Rocky 10, 9 and 8; AlmaLinux 10, 9 and 8; CentOS Stream 9; CentOS 8, 7, 6 (legacy) |
 | Fedora | Server 44 (with Cockpit), Workstation 44 (GNOME over Remote Desktop) |
 | Arch-based | CachyOS (rolling; KDE Plasma on the console) |
-| Windows Server | 2025 (desktop and Core); 2022 and 2019 retired 2026-10-27 to make room for Brookfield (shown as planned; to rebuild when wanted) |
+| Windows Server | 2025 (desktop and Core), 2022, 2019 (rebuilt 2026-10-28); 2016 and 2012 R2 (legacy; added 2026-10-28, no SQL Server or Outlook) |
 | Windows | 11 Enterprise (90-day evaluation; TPM checks skipped) |
 | Security | Kali 2026.2, Parrot 7.4 |
 | Firewalls and routers | OPNsense 26.7, pfSense CE 2.7.2, VyOS (rolling), MikroTik CHR 7.24 and 6.49 |
 | Hypervisors | Proxmox VE 9.2, 8.4, 7.4; XCP-ng 8.3 (all nested) |
 | Mail | Exchange Server SE (its own template; joins a domain controller's domain), Zimbra 8.8.15 |
-| Storage | TrueNAS SCALE 25.10, TrueNAS CORE 13.3 |
-| Practice targets | Metasploitable 2 and 3 (Linux), as complete images; Metasploitable 3 (Windows) retired 2026-10-27, as Windows Server 2019/2022 |
+| Storage | TrueNAS SCALE 25.10 and 25.04, TrueNAS CORE 13.3 and 13.0 |
+| Practice targets | Metasploitable 2 and 3 (Linux), as complete images; Metasploitable 3 (Windows) retired 2026-10-27 for space, to re-import |
 
 **Extras:** web servers (Apache with a choice of PHP 5.6 to 8.5 on Ubuntu 22.04 and 24.04),
 WordPress, Nextcloud, databases with sample data, mail (and iRedMail), FTP, desktop and RDP, IIS,
@@ -90,8 +90,8 @@ the next step (an xrdp debug log while resizing) is agreed.
 
 | Item | What's needed | Then |
 |---|---|---|
-| Windows 10 | The ISO in the datastore's `ISO/` folder (Enterprise LTSC 2021 or 22H2, x64, en-US), its file name, and a key if it isn't an evaluation | Build with `packer/windows` (as Windows 11, `version = "10"`), run the e2e tests, add it to `templates.yaml` |
-| Windows 7 | The ISO, as for Windows 10 | A legacy Windows build (see "More templates") |
+| Disk space for the next templates | A yes to delete the ISOs `fetch.sh` can download again (~35 GB) and `parrot-base-7.4` (12.7 GB). 42.9 GB free on 2026-10-28; the panel keeps 30 GB | Windows 10 (~23 GB), Metasploitable 3 Windows (~14 GB), Parrot 6 (~19 GB, plus its import base while building) |
+| Windows 7, Server 2008 R2, ESXi | Their ISOs (not downloadable without a licence or a Broadcom login) | A legacy Windows build; nested ESXi |
 | vuln-ad fixes | A yes to push the fixes to `workstation/vuln-workstation.ps1`, committed locally in the vuln-ad repo | Push to `jake/vuln-ad` |
 | Firefox black screen | Testing on the one affected Firefox: without extensions, then with `privacy.resistFingerprinting` off. Canvas blockers stop the screen drawing | A fix if it isn't the browser's settings |
 | Workstation snapshot | Delete the snapshot of the ESXi VM taken before the datastore was extended | — |
@@ -244,7 +244,7 @@ sign in at the OPNsense menu.
 | Template | Approach | Notes |
 |---|---|---|
 | Windows 7 | Legacy Windows build: BIOS, older unattend, no Cloudbase-Init support for the newest versions | ISO from Jake |
-| Windows 10 | See "Waiting on Jake" | — |
+| Windows 10 | Jake's ISO is in the datastore as `windows-10-22h2-19045.2965-consumer-x64.iso` (Home, Education, Pro; no Enterprise): build Pro with `packer/windows -var version=10`, set up with Microsoft's public setup key for Pro. Never delete that ISO: it can't be downloaded again | Waits for disk space |
 
 Each follows the usual path: `packer/<name>`, ISO in `scripts/isos/isos.txt`, entry in
 `templates.yaml`, e2e tests, commit.
@@ -287,12 +287,12 @@ the PC, and the DHCP server's lease count.
 - **Health tasks:** a periodic check that templates still deploy, and evaluation licences
   (Windows 11 lasts 90 days) are rebuilt in time.
 - **Nested ESXi:** the ISO needs a Broadcom login; Jake may supply it.
-- **Older releases:** Windows Server 2008 R2 to 2016 and Parrot 6. Jake has offered ISOs.
+- **Older releases:** Windows Server 2008 R2 (Jake to supply the ISO) and Parrot 6 (from Parrot's archive). Windows Server 2016 and 2012 R2 are done (2026-10-28).
 
 ## The lab today
 
-- **Datastore:** datastore1, 583.5 GB over two extents, about 119 GB free on 2026-10-27 after
-  retiring three templates. The PC's own free disk is the real limit.
+- **Datastore:** datastore1, 583.5 GB over two extents, 42.9 GB free on 2026-10-28 after six new
+  templates (each one's ISO deleted once it passed). The PC's own free disk is the real limit.
 - **Memory:** the panel counts 46 GB with overcommit; vCenter uses 14 GB of it.
 - **Deploys:** at most 2 or 3 test machines at once.
 - **Limits on what Claude may do in the lab:**
