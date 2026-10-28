@@ -6,6 +6,7 @@
 #   packer/build.sh windows-server -var version=2022     # 2022 or 2019 (either edition): their evaluations
 #   packer/build.sh windows-server -var version=2016     # 2016 or 2012r2: no Office or SQL Server (neither
 #                                                        # supports them); legacy.ps1 adds what they lack
+#   packer/windows-server/fetch-legacy.sh                # once, before 2012r2: its files, for the CD
 #
 # Installs from the evaluation ISO with autounattend.xml, installs VMware Tools and opens WinRM
 # (bootstrap.ps1), adds what 2016 and 2012 R2 lack (legacy.ps1, then a restart), runs scripts/template/prepare.ps1 (provision.ps1 gathers Cloudbase-Init, Office's
@@ -151,6 +152,12 @@ locals {
     "2016"   = "windows9Server64Guest"
     "2012r2" = "windows8Server64Guest"
   }[var.version]
+  # The CD's windows folder: an offline build's media folder; else, for 2012 R2 (which can't download
+  # them: its TLS is too old), what fetch-legacy.sh downloaded, which 2016 uses too when it's there.
+  legacy_media = "${path.root}/media/windows"
+  media = var.media_dir != "" ? ["${var.media_dir}/windows"] : (
+    var.version == "2012r2" || (local.legacy && fileexists("${local.legacy_media}/cloudbase-init/CloudbaseInitSetup_x64.msi")) ? [local.legacy_media] : []
+  )
   office     = var.office && !local.core && !local.legacy
   sql_server = var.sql_server && !local.legacy
   iso_paths = concat(
@@ -198,7 +205,7 @@ source "vsphere-iso" "windows" {
       "${path.root}/../../scripts/template/clean.ps1",
       "${path.root}/../../scripts/template/office/download.xml",
     ],
-    var.media_dir != "" ? ["${var.media_dir}/windows"] : [],
+    local.media,
   )
   cd_content = {
     "autounattend.xml" = templatefile("${path.root}/autounattend.pkrtpl.xml", {

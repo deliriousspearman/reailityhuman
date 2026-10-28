@@ -11,3 +11,4 @@ __pycache__/
 # Packer: real settings, and build results
 packer/lab.pkrvars.hcl
 packer/output/
+packer/windows-server/media/
