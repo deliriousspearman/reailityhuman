@@ -407,6 +407,69 @@ class VCenter:
         self.power_off(vm)
         wait(vm.Destroy_Task(), "Delete")
 
+    # Templates on demand (app/builds.py) -------------------------------------------------------
+
+    @property
+    def template_folder(self) -> vim.Folder:
+        folder = self._path(self._vm_path(self.cfg.vcenter_template_folder))
+        if not isinstance(folder, vim.Folder):
+            raise VSphereError(f"VM folder '{self.cfg.vcenter_template_folder}' not found")
+        return folder
+
+    def templates(self) -> dict[str, "TemplateInfo"]:
+        """Every VM in the templates folder by name: its size on the datastore and whether it has the
+        "clean" snapshot clones are made from. One call."""
+        found = self.collect(self.template_folder, vim.VirtualMachine, ("name", "summary.storage.committed", "snapshot"), recursive=False)
+        out = {}
+        for _, p in found:
+            if "name" not in p:
+                continue
+            snap = p.get("snapshot")
+            names = set()
+            stack = list(snap.rootSnapshotList) if snap else []
+            while stack:
+                tree = stack.pop()
+                names.add(tree.name)
+                stack.extend(tree.childSnapshotList or [])
+            out[p["name"]] = TemplateInfo(size_gb=(p.get("summary.storage.committed") or 0) / 2**30, clean=CLEAN in names)
+        return out
+
+    def clones_of(self, template_path: str) -> list[str]:
+        """The VMs, anywhere in the datacenter, with a disk in the template's folder on the datastore:
+        its linked clones, which would lose their disk if it were deleted."""
+        tpl = self.template(template_path)
+        home = self.props(tpl, "config.files.vmPathName").get("config.files.vmPathName") or ""
+        prefix = home.rsplit("/", 1)[0] + "/" if "/" in home else home
+        users = []
+        for vm, p in self.collect(self.datacenter.vmFolder, vim.VirtualMachine, ("name", "config.hardware.device")):
+            if vm == tpl or not prefix:
+                continue
+            for dev in p.get("config.hardware.device") or []:
+                backing = getattr(dev, "backing", None) if isinstance(dev, vim.vm.device.VirtualDisk) else None
+                while backing is not None:
+                    if (getattr(backing, "fileName", "") or "").startswith(prefix):
+                        users.append(p.get("name", "?"))
+                        break
+                    backing = getattr(backing, "parent", None)
+                else:
+                    continue
+                break
+        return users
+
+    def iso_files(self) -> set[str]:
+        """The file names in the datastore's ISO folder."""
+        ds = self.datastore
+        spec = vim.host.DatastoreBrowser.SearchSpec(matchPattern=["*.iso"])
+        try:
+            result = wait(ds.browser.SearchDatastore_Task(datastorePath=f"[{ds.name}] {self.cfg.vcenter_iso_folder}", searchSpec=spec), "List ISOs")
+        except VSphereError as e:
+            raise VSphereError(f"Couldn't list the datastore's {self.cfg.vcenter_iso_folder} folder: {e}") from e
+        return {f.path for f in (getattr(result, "file", None) or [])}
+
+    def delete_template(self, path: str) -> None:
+        """Deletes a template and its files (templates are never powered on)."""
+        wait(self.template(path).Destroy_Task(), "Delete template")
+
     def powered_on(self, vm: vim.VirtualMachine) -> bool:
         return self.power_state(vm) == "poweredOn"
 
@@ -571,6 +634,12 @@ class VCenter:
             used_disk_gb=(total - free) // 2**30,
             powered_on=frozenset(powered_on),
         )
+
+
+@dataclass(frozen=True)
+class TemplateInfo:
+    size_gb: float
+    clean: bool
 
 
 @contextmanager

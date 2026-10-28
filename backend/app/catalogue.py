@@ -5,6 +5,7 @@ The frontend has the full catalogue (descriptions, categories, flags) in src/lib
 the versions listed here can be deployed, and the rest show as "coming soon".
 """
 
+import re
 from dataclasses import dataclass, field
 from functools import lru_cache
 
@@ -12,6 +13,51 @@ import yaml
 
 from . import extras
 from .config import settings
+
+
+@dataclass(frozen=True)
+class BuildRecipe:
+    """How the panel builds a template again (templates.yaml `build`): packer/build.sh <packer> with
+    these -var settings, after the prepare scripts, from these ISOs (docs/plan.md, section 11)."""
+
+    packer: str
+    vars: dict[str, str] = field(default_factory=dict)
+    isos: tuple[str, ...] = ()
+    prepare: tuple[str, ...] = ()
+    rolling: bool = False
+    minutes: int = 30
+    size_gb: int = 20
+
+
+PACKER_DIR = re.compile(r"^[a-z0-9][a-z0-9-]*$")
+# A -var name and value, and a prepare script: nothing a shell or Packer would read as more.
+VAR_NAME = re.compile(r"^[a-z_][a-z0-9_]*$")
+VAR_VALUE = re.compile(r"^[A-Za-z0-9._,:/-]*$")
+SCRIPT = re.compile(r"^(packer|scripts)/[A-Za-z0-9._/-]+\.sh$")
+
+
+def _recipe(where: str, b: dict) -> BuildRecipe:
+    if not isinstance(b, dict) or not PACKER_DIR.match(str(b.get("packer", ""))):
+        raise ValueError(f"templates.yaml: {where}: build needs packer: <a directory under packer/>")
+    vars_ = {str(k): ("true" if v is True else "false" if v is False else str(v)) for k, v in (b.get("vars") or {}).items()}
+    for k, v in vars_.items():
+        if not VAR_NAME.match(k) or not VAR_VALUE.match(v):
+            raise ValueError(f"templates.yaml: {where}: build var {k}={v!r} isn't a plain name and value")
+    isos = tuple(str(i) for i in b.get("isos") or [])
+    if not isos or any("/" in i or not i.endswith(".iso") for i in isos):
+        raise ValueError(f"templates.yaml: {where}: build needs isos: the .iso files in the ISO folder it reads")
+    prepare = tuple(str(p) for p in b.get("prepare") or [])
+    if bad := [p for p in prepare if not SCRIPT.match(p) or ".." in p]:
+        raise ValueError(f"templates.yaml: {where}: build prepare {', '.join(bad)} isn't a script under packer/ or scripts/")
+    return BuildRecipe(
+        packer=b["packer"],
+        vars=vars_,
+        isos=isos,
+        prepare=prepare,
+        rolling=bool(b.get("rolling", False)),
+        minutes=int(b.get("minutes", 30)),
+        size_gb=int(b.get("sizeGB", 20)),
+    )
 
 
 @dataclass(frozen=True)
@@ -49,6 +95,8 @@ class LiveTemplate:
     # More choices for per-template options (extras.yaml perTemplate), by option id, e.g. the PHP
     # versions this template has: {"php": ("7.4", "8.1")}.
     choices: dict[str, tuple[str, ...]] = field(default_factory=dict)
+    # How the panel builds it again, or None: it can't be deleted from the admin page.
+    build: BuildRecipe | None = None
 
 
 ACCESS = ("ssh", "rdp", "web", "console")
@@ -83,6 +131,7 @@ def _load() -> list[LiveTemplate]:
             fixed_password=str(e.get("password", "")),
             always=tuple(e.get("always", [])),
             choices={k: tuple(str(v) for v in vs) for k, vs in (e.get("choices") or {}).items()},
+            build=_recipe(f"{e['template']} {e['version']}", e["build"]) if e.get("build") else None,
         )
         if (family == "image") != bool(t.fixed_password):
             raise ValueError(f"templates.yaml: {t.template} {t.version}: give a password for family image (its own sign-in), and only then")

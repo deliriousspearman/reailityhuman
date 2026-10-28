@@ -15,7 +15,7 @@ from sqlalchemy import select, text
 from . import catalogue, cloudinit, extras, labs
 from .config import settings
 from .db import session
-from .models import STABLE_STATES, InstanceFlag, Job, LogLine, Machine, utcnow
+from .models import STABLE_STATES, InstanceFlag, Job, LogLine, Machine, TemplateBuild, utcnow
 from pyVmomi import vmodl
 
 from .vsphere import SetupError, VCenter, VSphereError, cancelled_by, check_cancelled, connect, describe
@@ -98,7 +98,13 @@ def deploy(vc: VCenter, m: Machine) -> None:
         extra = cloudinit.guestinfo(
             m.id, m.name, m.username, m.password, m.ssh_key, tpl.admin_group, extras.cloud_config(chosen, tpl.family, m.name, m.username, m.password)
         )
-    vm = vc.clone(tpl.vsphere, m.vm_name, extras.cpu(tpl.cpu, chosen), extras.memory_gb(tpl.memory_gb, chosen), extra)
+    from . import builds  # it imports this module
+
+    with session() as s:
+        if not builds.is_built(s, tpl):
+            raise VSphereError(f"{m.template} {m.version} isn't built right now: deploy it again to build it first")
+        path = builds.vsphere_path(s, tpl)
+    vm = vc.clone(path, m.vm_name, extras.cpu(tpl.cpu, chosen), extras.memory_gb(tpl.memory_gb, chosen), extra)
     add_log(m.id, f"Cloned from {m.template}/{m.version}")
     vc.power_on(vm)
     add_log(m.id, "Powered on. Waiting for it to get an address…", "muted")
@@ -483,7 +489,8 @@ def advance_instance(instance_id: str, enqueue: Callable[[str, str, str], None])
                 s.add(LogLine(machine_id=m.id, text=f"Not {verb}: {', '.join(failed)} isn't running, and this machine needs it first.", tone="error"))
             return
         for m in waiting:
-            if order.get(m.role or "", 1) == turn:
+            # Waiting for its template to be built (builds.py) instead: queued once it is.
+            if order.get(m.role or "", 1) == turn and m.pending != "build":
                 queued.append((m.id, m.pending))
                 m.pending = None
     for machine_id, action in queued:
@@ -494,7 +501,7 @@ def advance_instances(enqueue: Callable[[str, str, str], None]) -> None:
     """advance_instance for every instance with machines waiting: picks up where a job's own call
     didn't happen (the worker stopped between the two)."""
     with session() as s:
-        instance_ids = set(s.scalars(select(Machine.instance_id).where(Machine.pending.is_not(None))))
+        instance_ids = set(s.scalars(select(Machine.instance_id).where(Machine.pending.is_not(None), Machine.instance_id.is_not(None))))
     for instance_id in instance_ids:
         advance_instance(instance_id, enqueue)
 
@@ -575,6 +582,9 @@ def recover_lost_jobs(now: datetime | None = None) -> None:
                 continue
             job.state, job.finished_at = "failed", now
             job.detail = "The job worker stopped before this finished (it was probably restarted). Try again."
+            if job.kind == "build" and job.template and (r := s.get(TemplateBuild, tuple(job.template.split("/", 1)))):
+                if r.state == "building":  # the sweep queues it again if machines are waiting for it
+                    r.state, r.detail = "failed", job.detail
             m = s.get(Machine, job.machine_id) if job.machine_id else None
             if m and m.state not in STABLE_STATES:
                 m.state = "error"

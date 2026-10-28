@@ -61,6 +61,42 @@ count too.
 
 Every machine, whoever owns it, and how many are kept permanently, against `MAX_PERMANENT`.
 
+### Templates
+
+Every template the panel can deploy, with:
+
+- **its state:** Built, Not built (deleted to save space), Build queued, Building, or Build failed
+  (hover to see why);
+- **its size on the datastore,** and how many machines use it;
+- **when it was last deployed,** and roughly how long a rebuild takes.
+
+The heading says how much space deleting every deletable template would free.
+
+**Delete** removes a template from vCenter and keeps its ISO. It's offered only when:
+
+- the template has a build recipe (`build:` in `templates.yaml`);
+- no machine uses it;
+- no VM in vCenter is a linked clone of it;
+- every ISO it's built from is in the datastore's ISO folder.
+
+Otherwise the row says why it can't be deleted: **In use**, **Can't delete** (hover for the reason),
+or **Kept** for imported templates, which can't be rebuilt from the panel.
+
+**Deploying a deleted template builds it first.** The deploy page warns how much longer it takes. The
+machine waits, its log says it's waiting for the build, and it deploys once the build is done. If the
+build fails, the machine goes to error with the reason. **Build** builds a deleted or failed template
+straight away instead of waiting for a deploy.
+
+Builds run on the `builder` service, one at a time, as the panel's own vCenter account. Each build's
+full output is in `/srv/lab-deploy/build-logs/`; a failed build's job shows its last lines. A build
+first checks:
+
+- that its ISOs are there;
+- that the datastore has room for it on top of `DATASTORE_RESERVE_GB`.
+
+> **Note:** Redeploying the panel stops a running build. The sweep queues it again within a minute,
+> and that build deletes what the first left behind.
+
 ### Leftover VMs
 
 These are VMs in vCenter's `Labs/Machines` folder that the panel has no record of. Typical causes:
@@ -77,7 +113,7 @@ again that no machine owns it. Templates are never listed here.
 
 ### Jobs
 
-Every deploy, power change, reset and destroy: who asked, when, how long it took, and its result.
+Every deploy, power change, reset, destroy and template build: who asked, when, how long it took, and its result.
 Click a failed job to see its full error, which for a failed setup includes the end of the machine's
 own log.
 
@@ -139,6 +175,9 @@ The settings you're most likely to change:
 | `WINDOWS_SETUP_TIMEOUT_SECONDS` | 1200 | Windows deploys with several extras time out |
 | `MACHINE_DOMAIN` | empty | Machines should get names like `web01.lab.example` in certificates and defaults |
 | `VCENTER_*` | — | vCenter moved, or its password changed (see [section 8](#8-vcenter-setup-and-privileges)) |
+| `BUILD_HTTP_IP` | empty | Template builds' VMs can't reach the server: set it to the server's LAN address |
+| `BUILD_MEDIA_DIR` | empty | Offline: the media folder `fetch-media.sh` made, for the Windows builds |
+| `BUILD_TIMEOUT_MINUTES` | 180 | A build that takes longer is stopped |
 
 The [Developer guide's configuration reference](developer-guide.md#14-configuration-reference)
 lists every setting.
@@ -530,6 +569,10 @@ The panel signs in to vCenter as its own account (`svc-labdeploy`), with two rol
 - **Lab Deploy**, on the `Labs` folders, the datastore and the port group;
 - **Lab Deploy (placement)**, on the cluster.
 
+Lab Deploy includes what Packer needs to build templates (the Admin page's Templates list), so the
+server never holds an administrator's sign-in. Re-run the script after updating to a version that
+added this (2026-10-28).
+
 The script also creates the folders `Labs/Templates` and `Labs/Machines`. The account itself is
 created by hand in vCenter (Administration → Single Sign On → Users and Groups).
 
@@ -555,7 +598,8 @@ It prints the `VCENTER_*` lines for `lab-deploy.env`. Full walk-through:
 **Disk** is where trouble comes from. A full datastore **pauses every VM** writing to it, and vCenter
 asks a "no more space" question for each. To keep room:
 
-- Delete ISOs once their templates are built; `fetch.sh` can fetch them again.
+- Delete templates nobody uses from the Admin page's Templates list: a template takes about five
+  times its ISO's space, and the next deploy builds it again from the ISO. Keep the ISOs.
 - Delete replaced templates promptly ([section 5.7](#57-updating-and-retiring-a-template)).
 - Run builds, Windows especially, one at a time, and check free space first.
 - Keep `DATASTORE_RESERVE_GB` above what one build needs.
@@ -565,7 +609,8 @@ asks a "no more space" question for each. To keep room:
 | Safe | Not safe |
 |---|---|
 | VMs in `Labs/` that the panel lists as leftovers | The vCenter VM, ever |
-| Datastore files under `ISO/` | A template while any machine uses it |
+| Templates the Admin page offers to delete | A template while any machine uses it |
+| ISOs listed in `scripts/isos/isos.txt` whose templates can't be rebuilt from the panel | An ISO a rebuildable template needs, or one that can't be downloaded again |
 | Retired `tpl-*` templates no machine uses | A template's `clean` snapshot |
 
 > **Warning:** If ESXi runs nested inside VMware Workstation, its virtual disk grows on the PC and

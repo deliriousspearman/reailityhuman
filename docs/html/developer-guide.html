@@ -1015,6 +1015,41 @@ bundle; see <a href="../offline-install.md">offline-install.md</a>. Its template
 <td>Generated passwords</td>
 </tr>
 <tr>
+<td><code>VCENTER_TEMPLATE_FOLDER</code></td>
+<td><code>Labs/Templates</code></td>
+<td>Where templates are, and builds put them</td>
+</tr>
+<tr>
+<td><code>VCENTER_ISO_FOLDER</code></td>
+<td><code>ISO</code></td>
+<td>The datastore folder builds read their ISOs from</td>
+</tr>
+<tr>
+<td><code>BUILD_DIR</code></td>
+<td><code>/build</code></td>
+<td>The builder's copy of <code>packer/</code> and <code>scripts/</code> (deploy.sh puts them there)</td>
+</tr>
+<tr>
+<td><code>BUILD_LOGS_DIR</code></td>
+<td><code>/build-logs</code></td>
+<td>Each build's whole output</td>
+</tr>
+<tr>
+<td><code>BUILD_HTTP_IP</code></td>
+<td>—</td>
+<td>The address build VMs fetch answer files from (Packer's web server)</td>
+</tr>
+<tr>
+<td><code>BUILD_MEDIA_DIR</code></td>
+<td>—</td>
+<td>Offline: <code>fetch-media.sh</code>'s media folder, for the Windows builds</td>
+</tr>
+<tr>
+<td><code>BUILD_TIMEOUT_MINUTES</code></td>
+<td><code>180</code></td>
+<td>A longer build is stopped</td>
+</tr>
+<tr>
 <td><code>CATALOGUE_PATH</code></td>
 <td><code>backend/templates.yaml</code></td>
 <td>The catalogue. <code>extras.yaml</code> and <code>labs.yaml</code> are read from the same folder</td>

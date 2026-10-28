@@ -38,6 +38,9 @@ rsync -az --delete -e "${SSH[*]}" "$ROOT/frontend/build/" "$TARGET:$REMOTE/site/
 rsync -az --delete --exclude __pycache__ --exclude .pytest_cache --exclude '*.egg-info' \
 	-e "${SSH[*]}" "$ROOT/backend/" "$TARGET:$REMOTE/backend/"
 rsync -az -e "${SSH[*]}" "$ROOT/deploy/compose.yaml" "$ROOT/deploy/lab-deploy.env.example" "$TARGET:$REMOTE/"
+# The builder's copy of the template builds (app/builds.py), without local settings and results.
+rsync -az --delete --mkpath --exclude output/ --exclude lab.pkrvars.hcl --exclude packer_cache/ --exclude 'windows-server/media/' \
+	--exclude __pycache__ -e "${SSH[*]}" "$ROOT/packer" "$ROOT/scripts" "$TARGET:$REMOTE/build/"
 rsync -az --mkpath -e "${SSH[*]}" "$ROOT/deploy/Caddyfile" "$TARGET:$REMOTE/caddy/"
 
 echo "==> Starting containers"
@@ -46,6 +49,8 @@ set -euo pipefail
 cd "$1"
 printf 'SITE_ADDRESS=%s\n' "$2" >.env
 rm -f Caddyfile # before caddy/ existed, the Caddyfile sat here
+# Each template build's output (the builder runs as an unprivileged user).
+mkdir -p build-logs && chmod 1777 build-logs
 if [[ ! -f lab-deploy.env ]]; then
 	password=$(head -c 32 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c 32)
 	sed -e "s/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=$password/" \

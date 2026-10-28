@@ -259,6 +259,13 @@ Alerts on the panel's Admin page, and refusal to deploy, when one of these runs 
 Those three caused most outages so far. The last two need a way to read them: an agent or a check on
 the PC, and the DHCP server's lease count.
 
+### 8. Templates on demand (medium) — step 1 built 2026-10-28
+
+Delete a template nobody uses from the Admin page and keep its ISO; the next deploy builds it again
+first. A template takes about five times its ISO's space. Design: [plan.md](plan.md#11-templates-on-demand).
+Step 1 (deleting by hand, building on deploy or with Build) is built; step 2, flagging templates
+unused for 30 days and deleting them after a week unless kept, comes once step 1 has proved itself.
+
 ### Suggested, not yet scheduled
 
 - **Exercises** (planned 2026-10-27, not started): guided tasks on one to three machines, checked by the

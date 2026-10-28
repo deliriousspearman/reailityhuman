@@ -8,6 +8,8 @@
 	import { ago, jobStates, tookLabel } from '$lib/format';
 	import { api, ApiError } from '$lib/api';
 	import { store } from '$lib/store.svelte';
+	import { findTemplate } from '$lib/templates';
+	import type { TemplateStatus } from '$lib/types';
 
 	// Capacity comes from vCenter, which is slower to ask than the database: on load, then every 30 s.
 	onMount(() => {
@@ -68,6 +70,64 @@
 		};
 	}
 
+	// Templates on demand (docs/plan.md, section 11): delete one no machine uses, keeping its ISOs; the
+	// next deploy of it builds it again. Polled every 15 s while a build is queued or running.
+	let templates = $state<TemplateStatus[] | null>(null);
+	let templatesProblem = $state<string | null>(null);
+	async function loadTemplates() {
+		try {
+			templates = await api('/templates');
+			templatesProblem = null;
+		} catch (e) {
+			templatesProblem = e instanceof Error ? e.message : String(e);
+		}
+	}
+	onMount(() => {
+		void loadTemplates();
+		const timer = setInterval(() => {
+			if (templates?.some((t) => t.job || t.state === 'building')) void loadTemplates();
+		}, 15_000);
+		return () => clearInterval(timer);
+	});
+	const templateStates: Record<TemplateStatus['state'], { label: string; tone: 'up' | 'busy' | 'warn' | 'error' }> = {
+		built: { label: 'Built', tone: 'up' },
+		deleted: { label: 'Not built', tone: 'warn' },
+		building: { label: 'Building', tone: 'busy' },
+		failed: { label: 'Build failed', tone: 'error' },
+	};
+	const templateName = (t: TemplateStatus) => `${findTemplate(t.template)?.name ?? t.template} ${t.version}`;
+	const freeable = $derived(
+		Math.round((templates ?? []).filter((t) => t.deletable).reduce((sum, t) => sum + (t.sizeGB ?? 0), 0)),
+	);
+	function deleteTemplate(t: TemplateStatus) {
+		request = {
+			title: `Delete ${templateName(t)}?`,
+			body:
+				`The template ${t.vsphere} is deleted from vCenter${t.sizeGB ? `, freeing about ${Math.round(t.sizeGB)} GB` : ''}. ` +
+				`Its ISO${t.build && t.build.isos.length > 1 ? 's stay' : ' stays'} on the datastore: the next deploy of it builds it again first, ` +
+				`which takes about ${t.build?.minutes ?? 30} minutes more.` +
+				(t.build?.rolling ? ' It\'s a rolling release, so that build will be a newer one.' : ''),
+			label: 'Delete',
+			danger: true,
+			run: async () => {
+				try {
+					await api(`/templates/${encodeURIComponent(t.template)}/${encodeURIComponent(t.version)}`, { method: 'DELETE' });
+				} catch (e) {
+					store.say(e instanceof ApiError ? e.message : String(e));
+				}
+				await loadTemplates();
+			},
+		};
+	}
+	async function buildTemplate(t: TemplateStatus) {
+		try {
+			await api(`/templates/${encodeURIComponent(t.template)}/${encodeURIComponent(t.version)}/build`, { method: 'POST' });
+		} catch (e) {
+			store.say(e instanceof ApiError ? e.message : String(e));
+		}
+		await loadTemplates();
+	}
+
 	const roomFor = $derived(cap ? Math.max(0, Math.floor((cap.total.memoryGB - cap.used.memoryGB) / biggest)) : 0);
 </script>
 
@@ -119,6 +179,64 @@
 <MachineTable machines={store.machines} owners empty={store.loaded ? 'Nobody has deployed a machine.' : 'Loading…'} />
 
 <div class="section-heading">
+	<h2 id="templates">Templates</h2>
+	<p>
+		Delete one no machine uses to free its space; its ISO stays, and the next deploy builds it again{#if freeable}
+			· {freeable} GB could be freed{/if}
+	</p>
+</div>
+{#if templatesProblem}
+	<p class="problem"><strong>Can't list them:</strong> {templatesProblem}</p>
+{:else if !templates}
+	<p class="loading">Asking vCenter…</p>
+{:else}
+	<div class="table-wrap">
+		<table class="table templates">
+			<thead>
+				<tr>
+					<th scope="col">Template</th>
+					<th scope="col">State</th>
+					<th scope="col">Size</th>
+					<th scope="col">Machines</th>
+					<th scope="col">Last deployed</th>
+					<th scope="col">Rebuild</th>
+					<th scope="col"><span class="visually-hidden">Actions</span></th>
+				</tr>
+			</thead>
+			<tbody>
+				{#each templates as t (`${t.template}/${t.version}`)}
+					{@const st = t.job && t.state !== 'building' ? { label: 'Build queued', tone: 'busy' as const } : templateStates[t.state]}
+					<tr>
+						<th scope="row">
+							{templateName(t)}
+							{#if t.vsphere}<span class="path mono">{t.vsphere}</span>{/if}
+						</th>
+						<td>
+							<Status size="sm" {...st} />
+							{#if t.state === 'failed' && t.detail}<span class="why" title={t.detail}>{t.detail}</span>{/if}
+							{#if t.problem}<span class="why">{t.problem}</span>{/if}
+						</td>
+						<td class="mono">{t.sizeGB === null ? '—' : `${Math.round(t.sizeGB)} GB`}</td>
+						<td>{t.machines.length || '—'}</td>
+						<td class="mono">{t.lastDeployedAt ? ago(t.lastDeployedAt, store.now) : '—'}</td>
+						<td class="mono">{t.build ? `~${t.build.minutes} min` : '—'}</td>
+						<td class="toggle-cell">
+							{#if t.deletable}
+								<button class="btn btn-sm" type="button" onclick={() => deleteTemplate(t)}><Icon name="trash" /> Delete</button>
+							{:else if t.rebuildable && (t.state === 'deleted' || t.state === 'failed') && !t.job}
+								<button class="btn btn-sm" type="button" onclick={() => buildTemplate(t)}><Icon name="rebuild" /> Build</button>
+							{:else if t.cantDelete && t.state === 'built'}
+								<span class="why" title={t.cantDelete}>{t.machines.length ? 'In use' : t.rebuildable ? "Can't delete" : 'Kept'}</span>
+							{/if}
+						</td>
+					</tr>
+				{/each}
+			</tbody>
+		</table>
+	</div>
+{/if}
+
+<div class="section-heading">
 	<h2 id="leftovers">Leftover VMs</h2>
 	<p>VMs in the machines folder that no machine owns, e.g. from a deploy that failed partway</p>
 </div>
@@ -155,7 +273,7 @@
 
 <div class="section-heading">
 	<h2 id="jobs">Jobs</h2>
-	<p>Deploys, resets and power changes, newest first</p>
+	<p>Deploys, resets, power changes and template builds, newest first</p>
 </div>
 <div class="table-wrap">
 	<table class="table jobs">
@@ -178,7 +296,9 @@
 					<th scope="row">{job.id}</th>
 					<td>{job.action}</td>
 					<td>
-						{#if job.machineId && store.machine(job.machineId)}
+						{#if job.template}
+							<a href="#templates">Template</a>
+						{:else if job.machineId && store.machine(job.machineId)}
 							<a href="/machines/{job.machineId}">Machine</a>
 						{:else}
 							Machine
@@ -286,6 +406,21 @@
 	}
 	.problem strong {
 		color: var(--lab-error);
+	}
+	.templates .path {
+		display: block;
+		font-size: 0.75rem;
+		color: var(--lms-gray-3);
+		font-weight: normal;
+	}
+	.templates .why {
+		display: block;
+		max-width: 22rem;
+		font-size: 0.8rem;
+		color: var(--lms-gray-3);
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 	h2 .soon-tag {
 		vertical-align: middle;

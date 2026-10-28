@@ -29,6 +29,15 @@
 #               Ubuntu Desktop 26.04's Remote Login
 #   plannedExtras  optional: extras prepped in prepare.sh but not in this template yet, as it was built
 #               before them; shown as "Soon" under those services. Once rebuilt, move them to extras.
+#   build       optional: how the panel rebuilds it, so it can be deleted from the admin page while
+#               no machine uses it and built again on the next deploy (docs/plan.md, section 11):
+#                 packer   the directory under packer/, as for packer/build.sh <packer>
+#                 vars     its -var settings, e.g. {version: "24.04", iso: …}
+#                 isos     the files in the datastore's ISO folder it reads: all must be there to delete it
+#                 prepare  optional: scripts to run first, from the repository's root
+#                 rolling  optional: true for a rolling release (a rebuild is a newer one)
+#                 minutes  roughly how long a build takes; sizeGB, roughly its size on the datastore
+#               Without one (imports, and builds with a by-hand first step), it can't be deleted there.
 #
 # Each template and version here must also be in the frontend's catalogue, which has its name,
 # description and category (a test checks).
@@ -38,6 +47,11 @@
   # Built by Packer (packer/build.sh ubuntu) on 2026-10-23, with every extra baked in (and the
   # container apps' Docker images).
   vsphere: Labs/Templates/tpl-ubuntu-26.04-20261023
+  build:
+    packer: ubuntu
+    isos: [ubuntu-26.04.1-live-server-amd64.iso]
+    minutes: 15
+    sizeGB: 18
   cpu: 2
   memoryGB: 2
   diskGB: 40
@@ -52,6 +66,12 @@
   # Built by Packer (packer/build.sh ubuntu -var version=24.04 -var iso=ubuntu-24.04.5-live-server-amd64.iso) on 2026-10-22, with every
   # extra baked in.
   vsphere: Labs/Templates/tpl-ubuntu-24.04-20261023
+  build:
+    packer: ubuntu
+    vars: {version: "24.04", iso: ubuntu-24.04.5-live-server-amd64.iso}
+    isos: [ubuntu-24.04.5-live-server-amd64.iso]
+    minutes: 40
+    sizeGB: 21
   cpu: 2
   memoryGB: 2
   diskGB: 40
@@ -65,6 +85,12 @@
   # Built by Packer (packer/build.sh ubuntu -var version=22.04 -var iso=ubuntu-22.04.5-live-server-amd64.iso) on 2026-10-23, with every
   # extra baked in.
   vsphere: Labs/Templates/tpl-ubuntu-22.04-20261023b
+  build:
+    packer: ubuntu
+    vars: {version: "22.04", iso: ubuntu-22.04.5-live-server-amd64.iso}
+    isos: [ubuntu-22.04.5-live-server-amd64.iso]
+    minutes: 40
+    sizeGB: 20
   cpu: 2
   memoryGB: 2
   diskGB: 40
@@ -81,6 +107,11 @@
   version: "13"
   # Built by Packer (packer/build.sh debian) on 2026-10-23.
   vsphere: Labs/Templates/tpl-debian-13-20261023
+  build:
+    packer: debian
+    isos: [debian-13.7.0-amd64-netinst.iso]
+    minutes: 65
+    sizeGB: 14
   cpu: 2
   memoryGB: 2
   diskGB: 40
@@ -91,6 +122,12 @@
   version: "12"
   # Built by Packer (packer/build.sh debian -var version=12 -var iso=debian-12.15.0-amd64-netinst.iso) on 2026-10-23.
   vsphere: Labs/Templates/tpl-debian-12-20261023
+  build:
+    packer: debian
+    vars: {version: "12", iso: debian-12.15.0-amd64-netinst.iso}
+    isos: [debian-12.15.0-amd64-netinst.iso]
+    minutes: 45
+    sizeGB: 16
   cpu: 2
   memoryGB: 2
   diskGB: 40
@@ -106,6 +143,12 @@
   version: "11"
   # Built by Packer (packer/build.sh debian -var version=11 -var iso=…) on 2026-10-20.
   vsphere: Labs/Templates/tpl-debian-11-20261020
+  build:
+    packer: debian
+    vars: {version: "11", iso: debian-11.11.0-amd64-netinst.iso}
+    isos: [debian-11.11.0-amd64-netinst.iso]
+    minutes: 10
+    sizeGB: 4
   cpu: 2
   memoryGB: 2
   diskGB: 25
@@ -117,6 +160,12 @@
   version: "10"
   # Built by Packer (packer/build.sh debian -var version=10 -var iso=…) on 2026-10-20.
   vsphere: Labs/Templates/tpl-debian-10-20261020
+  build:
+    packer: debian
+    vars: {version: "10", iso: debian-10.13.0-amd64-netinst.iso}
+    isos: [debian-10.13.0-amd64-netinst.iso]
+    minutes: 10
+    sizeGB: 4
   cpu: 2
   memoryGB: 2
   diskGB: 25
@@ -129,6 +178,12 @@
   version: "9"
   # Built by Packer (packer/build.sh debian -var version=9 -var iso=…) on 2026-10-20.
   vsphere: Labs/Templates/tpl-debian-9-20261020
+  build:
+    packer: debian
+    vars: {version: "9", iso: debian-9.13.0-amd64-netinst.iso}
+    isos: [debian-9.13.0-amd64-netinst.iso]
+    minutes: 10
+    sizeGB: 3
   cpu: 2
   memoryGB: 2
   diskGB: 25
@@ -141,6 +196,12 @@
   version: "8"
   # Built by Packer (packer/build.sh debian -var version=8 -var iso=…) on 2026-10-20.
   vsphere: Labs/Templates/tpl-debian-8-20261020
+  build:
+    packer: debian
+    vars: {version: "8", iso: debian-8.11.1-amd64-netinst.iso}
+    isos: [debian-8.11.1-amd64-netinst.iso]
+    minutes: 45
+    sizeGB: 3
   cpu: 1
   memoryGB: 1
   diskGB: 25
@@ -156,6 +217,11 @@
   version: "2025"
   # Built by Packer (packer/build.sh windows-server) on 2026-10-16, with Office's and SQL Server's files.
   vsphere: Labs/Templates/tpl-windows-server-2025-20261016
+  build:
+    packer: windows-server
+    isos: [windows-server-2025-eval-26100.1742.iso, SQLServer2025-x64-ENU-EntDev.iso]
+    minutes: 25
+    sizeGB: 19
   cpu: 2
   memoryGB: 4
   diskGB: 60
@@ -168,6 +234,12 @@
   # Built by Packer (packer/build.sh windows-server -var version=2022) on 2026-10-28, with Office's and
   # SQL Server's files (rebuilt after its retirement on 2026-10-27).
   vsphere: Labs/Templates/tpl-windows-server-2022-20261028
+  build:
+    packer: windows-server
+    vars: {version: "2022"}
+    isos: [windows-server-2022-eval.iso, SQLServer2025-x64-ENU-EntDev.iso]
+    minutes: 45
+    sizeGB: 18
   cpu: 2
   memoryGB: 4
   diskGB: 60
@@ -180,6 +252,12 @@
   # Built by Packer (packer/build.sh windows-server -var version=2019) on 2026-10-28, with Office's and
   # SQL Server's files (rebuilt after its retirement on 2026-10-27).
   vsphere: Labs/Templates/tpl-windows-server-2019-20261028
+  build:
+    packer: windows-server
+    vars: {version: "2019"}
+    isos: [windows-server-2019-eval.iso, SQLServer2025-x64-ENU-EntDev.iso]
+    minutes: 70
+    sizeGB: 16
   cpu: 2
   memoryGB: 4
   diskGB: 60
@@ -193,6 +271,12 @@
   # evaluation, with OpenSSH from Win32-OpenSSH (legacy.ps1). No SQL Server or Outlook: SQL Server 2025
   # and Microsoft 365 Apps don't support 2016.
   vsphere: Labs/Templates/tpl-windows-server-2016-20261028
+  build:
+    packer: windows-server
+    vars: {version: "2016"}
+    isos: [windows-server-2016-eval.iso]
+    minutes: 15
+    sizeGB: 12
   cpu: 2
   memoryGB: 4
   diskGB: 60
@@ -206,6 +290,13 @@
   # 2026-10-28: the 180-day evaluation, end of life since October 2023, with PowerShell 5.1 (WMF 5.1),
   # .NET 4.8 and OpenSSH from Win32-OpenSSH (legacy.ps1). No SQL Server or Outlook, as on 2016.
   vsphere: Labs/Templates/tpl-windows-server-2012r2-20261028
+  build:
+    packer: windows-server
+    vars: {version: 2012r2}
+    isos: [windows-server-2012r2-eval.iso]
+    prepare: [packer/windows-server/fetch-legacy.sh]
+    minutes: 15
+    sizeGB: 12
   cpu: 2
   memoryGB: 4
   diskGB: 60
@@ -218,6 +309,12 @@
   # Built by Packer (packer/build.sh windows-server -var edition=core) on 2026-10-21, with SQL Server's files
   # (and the media folder: the offline install's second rehearsal).
   vsphere: Labs/Templates/tpl-windows-server-2025-core-20261021
+  build:
+    packer: windows-server
+    vars: {edition: core}
+    isos: [windows-server-2025-eval-26100.1742.iso, SQLServer2025-x64-ENU-EntDev.iso]
+    minutes: 15
+    sizeGB: 10
   cpu: 2
   memoryGB: 2
   diskGB: 40
@@ -234,6 +331,11 @@
   # Built by Packer (packer/build.sh windows) on 2026-10-18, from 26H2 (26300.9457), with Office's and
   # SQL Server's files.
   vsphere: Labs/Templates/tpl-windows-11-20261018b
+  build:
+    packer: windows
+    isos: [windows-11-enterprise-eval-26300.9457.iso, SQLServer2025-x64-ENU-EntDev.iso]
+    minutes: 45
+    sizeGB: 25
   cpu: 2
   memoryGB: 4
   diskGB: 64
@@ -250,6 +352,11 @@
   version: "2.7.2"
   # Built by Packer (packer/build.sh pfsense) on 2026-10-20.
   vsphere: Labs/Templates/tpl-pfsense-2.7.2-20261020
+  build:
+    packer: pfsense
+    isos: [pfSense-CE-2.7.2-RELEASE-amd64.iso]
+    minutes: 15
+    sizeGB: 2
   cpu: 2
   memoryGB: 2
   diskGB: 16
@@ -296,6 +403,12 @@
   version: "SE"
   # Built by Packer (packer/build.sh windows-server -var exchange=true -var office=false -var sql_server=false) on 2026-10-20.
   vsphere: Labs/Templates/tpl-windows-server-2025-exchange-20261020
+  build:
+    packer: windows-server
+    vars: {exchange: "true", office: "false", sql_server: "false"}
+    isos: [windows-server-2025-eval-26100.1742.iso, ExchangeServerSE-x64.iso]
+    minutes: 45
+    sizeGB: 21
   cpu: 4
   memoryGB: 10
   diskGB: 100
@@ -313,6 +426,12 @@
   version: "8.8.15"
   # Built by Packer (packer/build.sh ubuntu -var zimbra=true -var version=20.04 …) on 2026-10-22.
   vsphere: Labs/Templates/tpl-zimbra-8.8.15-20261022
+  build:
+    packer: ubuntu
+    vars: {zimbra: "true", version: "20.04", iso: ubuntu-20.04.6-live-server-amd64.iso}
+    isos: [ubuntu-20.04.6-live-server-amd64.iso]
+    minutes: 30
+    sizeGB: 10
   cpu: 4
   memoryGB: 8
   diskGB: 40
@@ -330,6 +449,11 @@
   version: "26.7"
   # Built by Packer (packer/build.sh opnsense) on 2026-10-18.
   vsphere: Labs/Templates/tpl-opnsense-26.7-20261018b
+  build:
+    packer: opnsense
+    isos: [OPNsense-26.7-dvd-amd64.iso]
+    minutes: 15
+    sizeGB: 4
   cpu: 2
   memoryGB: 2
   diskGB: 20
@@ -360,6 +484,11 @@
   version: "9"
   # Built by Packer (packer/build.sh proxmox) on 2026-10-20: Proxmox VE 9.2.
   vsphere: Labs/Templates/tpl-proxmox-9.2-20261020
+  build:
+    packer: proxmox
+    isos: [proxmox-ve_9.2-1-auto.iso]
+    minutes: 15
+    sizeGB: 12
   cpu: 4
   memoryGB: 6
   diskGB: 64
@@ -377,6 +506,11 @@
   version: "8.3"
   # Built by Packer (packer/build.sh xcp-ng -var http_ip=…) on 2026-10-20.
   vsphere: Labs/Templates/tpl-xcp-ng-8.3-20261020
+  build:
+    packer: xcp-ng
+    isos: [xcp-ng-8.3.0-20260806.iso]
+    minutes: 10
+    sizeGB: 5
   cpu: 2
   memoryGB: 4
   diskGB: 64
@@ -394,6 +528,11 @@
   version: "25.10"
   # Built by Packer (packer/build.sh truenas-scale) on 2026-10-20: 25.10.7.
   vsphere: Labs/Templates/tpl-truenas-scale-25.10-20261020
+  build:
+    packer: truenas-scale
+    isos: [TrueNAS-SCALE-25.10.7.iso]
+    minutes: 25
+    sizeGB: 5
   cpu: 2
   memoryGB: 8
   diskGB: 60
@@ -406,6 +545,12 @@
   # Built by Packer (packer/build.sh truenas-scale -var version=25.04 -var iso=TrueNAS-SCALE-25.04.2.6.iso)
   # on 2026-10-28: 25.04.2.6, the release before 25.10.
   vsphere: Labs/Templates/tpl-truenas-scale-25.04-20261028
+  build:
+    packer: truenas-scale
+    vars: {version: "25.04", iso: TrueNAS-SCALE-25.04.2.6.iso}
+    isos: [TrueNAS-SCALE-25.04.2.6.iso]
+    minutes: 20
+    sizeGB: 5
   cpu: 2
   memoryGB: 8
   diskGB: 60
@@ -422,6 +567,11 @@
   version: "13.3"
   # Built by Packer (packer/build.sh truenas-core) on 2026-10-20: 13.3-U1.2.
   vsphere: Labs/Templates/tpl-truenas-core-13.3-20261020
+  build:
+    packer: truenas-core
+    isos: [TrueNAS-13.3-U1.2.iso]
+    minutes: 25
+    sizeGB: 3
   cpu: 2
   memoryGB: 8
   diskGB: 60
@@ -434,6 +584,12 @@
   # Built by Packer (packer/build.sh truenas-core -var version=13.0 -var iso=TrueNAS-13.0-U6.8.iso) on
   # 2026-10-28: 13.0-U6.8, the release before 13.3.
   vsphere: Labs/Templates/tpl-truenas-core-13.0-20261028
+  build:
+    packer: truenas-core
+    vars: {version: "13.0", iso: TrueNAS-13.0-U6.8.iso}
+    isos: [TrueNAS-13.0-U6.8.iso]
+    minutes: 20
+    sizeGB: 3
   cpu: 2
   memoryGB: 8
   diskGB: 60
@@ -447,6 +603,12 @@
   version: "8"
   # Built by Packer (packer/build.sh proxmox -var version=8.4 -var iso=proxmox-ve_8.4-1-auto.iso) on 2026-10-20.
   vsphere: Labs/Templates/tpl-proxmox-8.4-20261020
+  build:
+    packer: proxmox
+    vars: {version: "8.4", iso: proxmox-ve_8.4-1-auto.iso}
+    isos: [proxmox-ve_8.4-1-auto.iso]
+    minutes: 10
+    sizeGB: 11
   cpu: 4
   memoryGB: 6
   diskGB: 64
@@ -461,6 +623,11 @@
   version: "7"
   # Built by Packer (packer/build.sh proxmox7) on 2026-10-20: Proxmox VE 7.4.
   vsphere: Labs/Templates/tpl-proxmox-7.4-20261020
+  build:
+    packer: proxmox7
+    isos: [debian-11.11.0-amd64-netinst.iso]
+    minutes: 30
+    sizeGB: 7
   cpu: 4
   memoryGB: 6
   diskGB: 64
@@ -477,6 +644,12 @@
   version: "26.04"
   # Built by Packer (packer/build.sh ubuntu -var desktop=true) on 2026-10-23.
   vsphere: Labs/Templates/tpl-ubuntu-desktop-26.04-20261023b
+  build:
+    packer: ubuntu
+    vars: {desktop: "true"}
+    isos: [ubuntu-26.04.1-live-server-amd64.iso]
+    minutes: 45
+    sizeGB: 17
   cpu: 2
   memoryGB: 4
   diskGB: 40
@@ -489,6 +662,12 @@
   version: "24.04"
   # Built by Packer (packer/build.sh ubuntu -var desktop=true -var version=24.04 -var iso=ubuntu-24.04.5-live-server-amd64.iso) on 2026-10-23.
   vsphere: Labs/Templates/tpl-ubuntu-desktop-24.04-20261023b
+  build:
+    packer: ubuntu
+    vars: {desktop: "true", version: "24.04", iso: ubuntu-24.04.5-live-server-amd64.iso}
+    isos: [ubuntu-24.04.5-live-server-amd64.iso]
+    minutes: 45
+    sizeGB: 17
   cpu: 2
   memoryGB: 4
   diskGB: 40
@@ -500,6 +679,12 @@
   version: "22.04"
   # Built by Packer (packer/build.sh ubuntu -var desktop=true -var version=22.04 -var iso=ubuntu-22.04.5-live-server-amd64.iso) on 2026-10-23.
   vsphere: Labs/Templates/tpl-ubuntu-desktop-22.04-20261023b
+  build:
+    packer: ubuntu
+    vars: {desktop: "true", version: "22.04", iso: ubuntu-22.04.5-live-server-amd64.iso}
+    isos: [ubuntu-22.04.5-live-server-amd64.iso]
+    minutes: 45
+    sizeGB: 17
   cpu: 2
   memoryGB: 4
   diskGB: 40
@@ -515,6 +700,11 @@
   version: "2026.2"
   # Built by Packer (packer/build.sh kali) on 2026-10-23.
   vsphere: Labs/Templates/tpl-kali-2026.2-20261023b
+  build:
+    packer: kali
+    isos: [kali-linux-2026.2-installer-amd64.iso]
+    minutes: 50
+    sizeGB: 27
   cpu: 2
   memoryGB: 4
   diskGB: 60
@@ -540,6 +730,12 @@
   version: "Stream 9"
   # Built by Packer (packer/build.sh rhel -var distro=centos-stream) on 2026-10-17.
   vsphere: Labs/Templates/tpl-centos-stream-9-20261017
+  build:
+    packer: rhel
+    vars: {distro: centos-stream}
+    isos: [CentOS-Stream-9-latest-x86_64-boot.iso]
+    minutes: 15
+    sizeGB: 5
   cpu: 2
   memoryGB: 2
   diskGB: 20
@@ -550,6 +746,12 @@
   version: "10"
   # Built by Packer (packer/build.sh rhel -var distro=rocky -var version=10 -var iso=…) on 2026-10-18, from Rocky Linux 10.2.
   vsphere: Labs/Templates/tpl-rocky-10-20261018
+  build:
+    packer: rhel
+    vars: {distro: rocky, version: "10", iso: Rocky-10.2-x86_64-boot.iso}
+    isos: [Rocky-10.2-x86_64-boot.iso]
+    minutes: 30
+    sizeGB: 4
   cpu: 2
   memoryGB: 2
   diskGB: 20
@@ -560,6 +762,12 @@
   version: "9"
   # Built by Packer (packer/build.sh rhel -var distro=rocky) on 2026-10-17, from Rocky Linux 9.8.
   vsphere: Labs/Templates/tpl-rocky-9-20261017
+  build:
+    packer: rhel
+    vars: {distro: rocky}
+    isos: [Rocky-9.8-x86_64-boot.iso]
+    minutes: 20
+    sizeGB: 5
   cpu: 2
   memoryGB: 2
   diskGB: 20
@@ -570,6 +778,12 @@
   version: "8"
   # Built by Packer (packer/build.sh rhel -var distro=rocky -var version=8 -var iso=…) on 2026-10-18, from Rocky Linux 8.10.
   vsphere: Labs/Templates/tpl-rocky-8-20261018
+  build:
+    packer: rhel
+    vars: {distro: rocky, version: "8", iso: Rocky-8.10-x86_64-boot.iso}
+    isos: [Rocky-8.10-x86_64-boot.iso]
+    minutes: 35
+    sizeGB: 6
   cpu: 2
   memoryGB: 2
   diskGB: 20
@@ -580,6 +794,12 @@
   version: "10"
   # Built by Packer (packer/build.sh rhel -var distro=alma -var version=10 -var iso=…) on 2026-10-18, from AlmaLinux 10.2.
   vsphere: Labs/Templates/tpl-alma-10-20261018
+  build:
+    packer: rhel
+    vars: {distro: alma, version: "10", iso: AlmaLinux-10.2-x86_64-boot.iso}
+    isos: [AlmaLinux-10.2-x86_64-boot.iso]
+    minutes: 30
+    sizeGB: 4
   cpu: 2
   memoryGB: 2
   diskGB: 20
@@ -590,6 +810,12 @@
   version: "9"
   # Built by Packer (packer/build.sh rhel -var distro=alma) on 2026-10-17, from AlmaLinux 9.8.
   vsphere: Labs/Templates/tpl-alma-9-20261017
+  build:
+    packer: rhel
+    vars: {distro: alma}
+    isos: [AlmaLinux-9.8-x86_64-boot.iso]
+    minutes: 15
+    sizeGB: 5
   cpu: 2
   memoryGB: 2
   diskGB: 20
@@ -607,6 +833,12 @@
   version: "8"
   # Built by Packer (packer/build.sh rhel -var distro=alma -var version=8 -var iso=…) on 2026-10-18, from AlmaLinux 8.10.
   vsphere: Labs/Templates/tpl-alma-8-20261018
+  build:
+    packer: rhel
+    vars: {distro: alma, version: "8", iso: AlmaLinux-8.10-x86_64-boot.iso}
+    isos: [AlmaLinux-8.10-x86_64-boot.iso]
+    minutes: 35
+    sizeGB: 6
   cpu: 2
   memoryGB: 2
   diskGB: 20
@@ -621,6 +853,11 @@
   version: "44"
   # Built by Packer (packer/build.sh fedora) on 2026-10-27, from Fedora 44 (1.7).
   vsphere: Labs/Templates/tpl-fedora-server-44-20261027
+  build:
+    packer: fedora
+    isos: [Fedora-Server-netinst-x86_64-44-1.7.iso]
+    minutes: 10
+    sizeGB: 6
   cpu: 2
   memoryGB: 2
   diskGB: 20
@@ -631,6 +868,12 @@
   version: "44"
   # Built by Packer (packer/build.sh fedora -var edition=workstation) on 2026-10-27, from Fedora 44 (1.7).
   vsphere: Labs/Templates/tpl-fedora-workstation-44-20261027
+  build:
+    packer: fedora
+    vars: {edition: workstation}
+    isos: [Fedora-Everything-netinst-x86_64-44-1.7.iso]
+    minutes: 20
+    sizeGB: 10
   cpu: 2
   memoryGB: 4
   diskGB: 40
@@ -646,6 +889,12 @@
   version: Rolling
   # Built by Packer (packer/build.sh cachyos) on 2026-10-27, from the 260809 ISO and that day's packages.
   vsphere: Labs/Templates/tpl-cachyos-rolling-20261027
+  build:
+    packer: cachyos
+    isos: [cachyos-desktop-linux-260809.iso]
+    rolling: true
+    minutes: 15
+    sizeGB: 8
   cpu: 2
   memoryGB: 4
   diskGB: 40
@@ -655,6 +904,12 @@
   version: "20.04"
   # Built by Packer (packer/build.sh ubuntu -var version=20.04 …) on 2026-10-17.
   vsphere: Labs/Templates/tpl-ubuntu-20.04-20261017
+  build:
+    packer: ubuntu
+    vars: {version: "20.04", iso: ubuntu-20.04.6-live-server-amd64.iso, extras: "nginx,apache,apache-https,wordpress,postgresql,mariadb,sqlite,ftp"}
+    isos: [ubuntu-20.04.6-live-server-amd64.iso]
+    minutes: 10
+    sizeGB: 8
   cpu: 2
   memoryGB: 2
   diskGB: 25
@@ -665,6 +920,12 @@
   version: "18.04"
   # Built by Packer (packer/build.sh ubuntu-di) on 2026-10-17, from the 18.04.6 debian-installer ISO.
   vsphere: Labs/Templates/tpl-ubuntu-18.04-20261017b
+  build:
+    packer: ubuntu-di
+    vars: {extras: "nginx,apache,apache-https,wordpress,postgresql,mariadb,sqlite,ftp"}
+    isos: [ubuntu-18.04.6-server-amd64.iso]
+    minutes: 15
+    sizeGB: 7
   cpu: 2
   memoryGB: 2
   diskGB: 25
@@ -677,6 +938,12 @@
   # Built by Packer (packer/build.sh ubuntu-di -var version=16.04 -var legacy=true) on 2026-10-18, from
   # the 16.04.7 server ISO. Its cloud-init can't read vCenter's data: the legacy family (lab-firstboot).
   vsphere: Labs/Templates/tpl-ubuntu-16.04-20261018
+  build:
+    packer: ubuntu-di
+    vars: {version: "16.04", iso: ubuntu-16.04.7-server-amd64.iso, legacy: "true"}
+    isos: [ubuntu-16.04.7-server-amd64.iso]
+    minutes: 10
+    sizeGB: 4
   cpu: 2
   memoryGB: 2
   diskGB: 25
@@ -688,6 +955,11 @@
   version: "7"
   # Built by Packer (packer/build.sh centos-legacy) on 2026-10-17, from CentOS 7.9 (2207-02).
   vsphere: Labs/Templates/tpl-centos-7-20261017
+  build:
+    packer: centos-legacy
+    isos: [CentOS-7-x86_64-Minimal-2207-02.iso]
+    minutes: 10
+    sizeGB: 3
   cpu: 2
   memoryGB: 2
   diskGB: 20
@@ -702,6 +974,12 @@
   version: "8"
   # Built by Packer (packer/build.sh centos-legacy -var version=8 -var iso=CentOS-8.5.2111-x86_64-boot.iso) on 2026-10-20.
   vsphere: Labs/Templates/tpl-centos-8-20261020
+  build:
+    packer: centos-legacy
+    vars: {version: "8", iso: CentOS-8.5.2111-x86_64-boot.iso}
+    isos: [CentOS-8.5.2111-x86_64-boot.iso]
+    minutes: 10
+    sizeGB: 3
   cpu: 2
   memoryGB: 2
   diskGB: 20
@@ -717,6 +995,12 @@
   version: "6"
   # Built by Packer (packer/build.sh centos-legacy -var version=6 -var iso=CentOS-6.10-x86_64-minimal.iso) on 2026-10-20.
   vsphere: Labs/Templates/tpl-centos-6-20261020
+  build:
+    packer: centos-legacy
+    vars: {version: "6", iso: CentOS-6.10-x86_64-minimal.iso}
+    isos: [CentOS-6.10-x86_64-minimal.iso]
+    minutes: 10
+    sizeGB: 3
   cpu: 1
   memoryGB: 1
   diskGB: 20

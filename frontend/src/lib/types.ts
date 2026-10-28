@@ -109,6 +109,8 @@ export interface Job {
 	detail?: string;
 	/** The job that retried this one. */
 	retriedAs?: string;
+	/** A template build's template version, "<template>/<version>" (then machineId is unset). */
+	template?: string;
 }
 
 export type Role = 'admin' | 'learner';
@@ -302,6 +304,9 @@ export interface PanelConfig {
 		webUrl?: string;
 		/** A complete image's own password (family image): every machine signs in with it. */
 		fixedPassword?: string;
+		/** False when it's been deleted to save space: deploying builds it first, about buildMinutes more. */
+		built?: false;
+		buildMinutes?: number;
 	}[];
 	/** Every extra, and where it runs, for choosing a service first. */
 	services: Service[];
@@ -339,4 +344,37 @@ export interface Capacity {
 export interface PersonalNetwork {
 	cidr: string;
 	endpoint: string;
+}
+
+/** A template version on the admin page (GET /api/templates): templates on demand, docs/plan.md section 11. */
+export interface TemplateStatus {
+	template: string;
+	version: string;
+	state: 'built' | 'deleted' | 'building' | 'failed';
+	/** Its inventory path in vCenter, while built. */
+	vsphere: string;
+	/** Its size on the datastore, or null when vCenter doesn't have it (not built). */
+	sizeGB: number | null;
+	/** The panel's machines from it: while there are any, it can't be deleted. */
+	machines: string[];
+	lastDeployedAt: number | null;
+	builtAt: number | null;
+	/** Whether templates.yaml has a recipe for building it again. */
+	rebuildable: boolean;
+	build?: {
+		minutes: number;
+		sizeGB: number;
+		rolling: boolean;
+		/** present is missing when vCenter couldn't list the ISO folder. */
+		isos: { name: string; present?: boolean }[];
+	};
+	/** Its build job, while queued or running. */
+	job?: Job;
+	/** Why the last build failed. */
+	detail?: string;
+	/** Something's wrong with it as it is, e.g. missing from vCenter. */
+	problem?: string;
+	deletable: boolean;
+	/** Why it can't be deleted now. */
+	cantDelete?: string;
 }

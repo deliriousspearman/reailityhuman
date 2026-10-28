@@ -495,6 +495,13 @@ All settings come from the environment (`lab-deploy.env` on the server; an examp
 | `WINDOWS_SETUP_TIMEOUT_SECONDS` | `1200` | Wait for Windows setup |
 | `MACHINE_DOMAIN` | — | Fills `{fqdn}` in extras' defaults, e.g. `lab.example` |
 | `PASSWORD_LENGTH` | `16` | Generated passwords |
+| `VCENTER_TEMPLATE_FOLDER` | `Labs/Templates` | Where templates are, and builds put them |
+| `VCENTER_ISO_FOLDER` | `ISO` | The datastore folder builds read their ISOs from |
+| `BUILD_DIR` | `/build` | The builder's copy of `packer/` and `scripts/` (deploy.sh puts them there) |
+| `BUILD_LOGS_DIR` | `/build-logs` | Each build's whole output |
+| `BUILD_HTTP_IP` | — | The address build VMs fetch answer files from (Packer's web server) |
+| `BUILD_MEDIA_DIR` | — | Offline: `fetch-media.sh`'s media folder, for the Windows builds |
+| `BUILD_TIMEOUT_MINUTES` | `180` | A longer build is stopped |
 | `CATALOGUE_PATH` | `backend/templates.yaml` | The catalogue. `extras.yaml` and `labs.yaml` are read from the same folder |
 
 ## 15. Conventions and gotchas

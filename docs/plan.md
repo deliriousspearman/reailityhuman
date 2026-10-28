@@ -319,6 +319,74 @@ Still open on 2026-10-28; phase 1 waits on them.
 - Hints: free, or shown after a number of failed checks?
 - Should an exercise have a time limit, or use the usual machine durations (2 h to 7 d)?
 
+## 11. Templates on demand
+
+Added 2026-10-28. Templates take about five times the space of the ISOs they're built from (about
+330 GB of templates against 70 GB of ISOs). So: keep every ISO, and let an admin delete a template
+nobody is using. The next deploy of it builds it again first, which takes as long as the build
+(10–70 minutes, about 25 on average). Step 1, below, is deleting by hand. Step 2, later, flags
+templates unused for a while and deletes them after a week unless an admin keeps them.
+
+### What a template needs to be deletable
+- **A build recipe** in its `templates.yaml` entry, `build:`: the Packer directory and variables
+  (as `packer/build.sh <dir> -var …`), the ISOs it reads, any script to run first (e.g.
+  `packer/windows-server/fetch-legacy.sh` for 2012 R2), and its rough build time and size.
+  Templates without one (imports: MikroTik, Metasploitable; ones with a by-hand first step: Parrot,
+  VyOS) can't be deleted from the panel.
+- **Its ISOs on the datastore**: checked before deleting, so it can always be rebuilt. (Every ISO
+  in `scripts/isos/isos.txt` can be fetched again; Jake's own, e.g. Windows 10's, can't, and stay.)
+- **No machines from it**: none in the database (any state, Pro Lab members included), and no VM in
+  the machines folder whose disk is a linked clone of it (a leftover would lose its disk).
+
+### State
+A new table, `template_builds`, one row per template version that has been deleted or built by the
+panel: its state (`built`, `deleted`, `building`, `failed`), its vSphere path (a rebuild's name has
+a new date, so this overrides `templates.yaml`'s `vsphere`), when it was built, the last build's
+job, and when a machine was last deployed from it. No row: as `templates.yaml` says.
+
+### Building
+- **A builder** on the panel server: a third worker, `builder`, taking only the new `build`
+  queue, one build at a time. Its image is the backend's plus Packer, the vSphere plugin and
+  xorriso. `deploy.sh` copies `packer/` and `scripts/` to the server, mounted read-only; each build
+  runs in a copy of them, as the builds in the lab do in a git worktree.
+- **Its vCenter account is the panel's own** (`VCENTER_USER`), with the privileges Packer needs
+  added to the "Lab Deploy" role by `scripts/setup_vcenter.py` (create a VM, add devices, upload the
+  build CD, mark as template). They stay scoped to the Labs folder, the datastore and the port
+  group, so no administrator sign-in sits on the panel server.
+- **Settings it writes for Packer**: `lab.pkrvars.hcl` from the `VCENTER_*` settings, the templates
+  folder (`VCENTER_TEMPLATE_FOLDER`, default `Labs/Templates`), the ISO folder (`VCENTER_ISO_FOLDER`,
+  default `ISO`), and the server's address for builds that serve files over HTTP (`BUILD_HTTP_IP`).
+  Offline: `BUILD_MEDIA_DIR`, the media folder `scripts/isos/fetch-media.sh` makes.
+- **Before it starts**: the ISOs are there, and the datastore has the template's size free on top of
+  `DATASTORE_RESERVE_GB` and the disk running deploys will write. Otherwise it fails at once and says
+  why.
+- **After it**: the template from Packer's manifest must exist with its `clean` snapshot; then the
+  row is `built` with its new path, and machines waiting for it are queued. A failed build leaves
+  it `failed` (deploying tries again), puts the end of Packer's output in the job, and sets the
+  waiting machines to error with the reason. The full output is kept in `build-logs/`.
+
+### Deploying a template that isn't built
+The deploy goes through as usual (quota, memory, and disk for the clone plus the build). The machine
+is created waiting (`pending: build`), its log says the template is being built and roughly how
+long it takes, and the build is queued if one isn't already. Once it's built, the deploy runs.
+A Pro Lab instance's machines wait the same way; the per-minute sweep queues a build again if a
+machine is waiting and none is queued or running (e.g. after a restart).
+
+### The admin page
+A Templates section: each template version with its state, size on the datastore, the machines
+using it, when it was last deployed, and its ISOs. **Delete** (with a confirmation naming what it
+frees and how long a rebuild takes) when the checks above pass, otherwise the reason it can't be;
+**Build** for a deleted or failed one. The deploy page says when a template isn't built and how
+much longer the deploy will take.
+
+### Phases
+1. Recipes in `templates.yaml`, the table and its migration, and the checks; tests.
+2. The builder: image, compose service, `deploy.sh`, the build job; the vCenter privileges.
+3. Deploying while not built, and the sweep; tests.
+4. The admin page and the deploy page's notice.
+5. End to end in the lab: delete a small template (Debian 11), deploy it, watch it build and deploy;
+   then the same through the admin page's Build.
+
 ## Open items to confirm with the infra owner
 - vCenter version and licence edition (dvSwitch?), and whether NSX is present.
 - Number of hosts, total RAM, and datastore type and size.

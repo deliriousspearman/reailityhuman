@@ -55,6 +55,22 @@ class Settings(BaseSettings):
     machine_domain: str = ""
     password_length: int = 16
 
+    # Templates on demand (docs/plan.md, section 11). The templates folder, and the datastore's ISO
+    # folder the builds read from.
+    vcenter_template_folder: str = "Labs/Templates"
+    vcenter_iso_folder: str = "ISO"
+    # The builder's copy of packer/ and scripts/ (deploy.sh puts them there), and where each build's
+    # whole output is kept.
+    build_dir: Path = Path("/build")
+    build_logs_dir: Path = Path("/build-logs")
+    # The address build VMs fetch their answer files from (Packer's HTTP server): this server's on
+    # the LAN. Empty: Packer's own guess.
+    build_http_ip: str = ""
+    # Offline: the media folder scripts/isos/fetch-media.sh makes, for the Windows builds.
+    build_media_dir: str = ""
+    # A build that takes longer is stopped (the slowest take about 70 minutes).
+    build_timeout_minutes: int = 180
+
     catalogue_path: Path = Path(__file__).resolve().parent.parent / "templates.yaml"
 
     @property

@@ -81,6 +81,28 @@ PRIVILEGES = [
     "VirtualMachine.State.CreateSnapshot",
     "VirtualMachine.State.RevertToSnapshot",
 ]
+# What Packer needs to build a template (the builder, backend/app/builds.py: templates on demand):
+# create a VM from scratch, give it disks, CDs and settings, upload its build CD to the datastore, type
+# its boot command, and turn it into a template. Like the rest, only on the Labs folder, the datastore
+# and the port group.
+BUILD_PRIVILEGES = [
+    "Datastore.FileManagement",  # the build CD, uploaded to packer_cache
+    "Datastore.DeleteFile",
+    "Datastore.UpdateVirtualMachineFiles",
+    "VirtualMachine.Config.AddNewDisk",
+    "VirtualMachine.Config.AddRemoveDevice",  # CD drives, and taking them out again
+    "VirtualMachine.Config.Annotation",  # the template's notes
+    "VirtualMachine.Config.DiskExtend",
+    "VirtualMachine.Config.RemoveDisk",
+    "VirtualMachine.Config.Resource",
+    "VirtualMachine.Interact.AnswerQuestion",
+    "VirtualMachine.Interact.PutUsbScanCodes",  # the boot command
+    "VirtualMachine.Interact.SetCDMedia",
+    "VirtualMachine.Inventory.Create",
+    "VirtualMachine.Provisioning.MarkAsTemplate",
+    "VirtualMachine.Provisioning.MarkAsVM",
+]
+PRIVILEGES += BUILD_PRIVILEGES
 PLACEMENT_PRIVILEGES = ["Resource.AssignVMToPool"]
 
 

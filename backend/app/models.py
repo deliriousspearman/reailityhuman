@@ -88,6 +88,26 @@ class InstanceFlag(Base):
     planted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
+class TemplateBuild(Base):
+    """A template version the panel has deleted or built (docs/plan.md, section 11). No row: it's as
+    templates.yaml says, built at its `vsphere` path."""
+
+    __tablename__ = "template_builds"
+
+    template: Mapped[str] = mapped_column(String(64), primary_key=True)
+    version: Mapped[str] = mapped_column(String(32), primary_key=True)
+    # built | deleted | building | failed (builds.STATES)
+    state: Mapped[str] = mapped_column(String(16))
+    # Where it is now, once the panel has built it (a rebuild's name has a new date); None: templates.yaml's.
+    vsphere: Mapped[str | None] = mapped_column(String(255))
+    built_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Set at every deploy of it, whether or not the panel ever built it.
+    last_deployed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # The last build's job, and why it failed.
+    job_id: Mapped[int | None] = mapped_column(Integer)
+    detail: Mapped[str | None] = mapped_column(Text)
+
+
 class Job(Base):
     __tablename__ = "jobs"
 
@@ -96,7 +116,7 @@ class Job(Base):
     machine_id: Mapped[str | None] = mapped_column(String(16), index=True)
     # e.g. "Deploy ubuntu01"
     action: Mapped[str] = mapped_column(String(128))
-    # deploy | start | stop | reboot | reset | expire | destroy (actions.ACTIONS)
+    # deploy | start | stop | reboot | reset | expire | destroy (actions.ACTIONS), or build (a template: builds.py)
     kind: Mapped[str] = mapped_column(String(16), default="")
     by: Mapped[str] = mapped_column(String(64))
     # queued | running | done | failed
@@ -108,3 +128,5 @@ class Job(Base):
     detail: Mapped[str | None] = mapped_column(Text)
     # Who asked to cancel it, while it waits or runs: the worker stops it at its next check.
     cancelled_by: Mapped[str | None] = mapped_column(String(64))
+    # A build job's template version, "<template>/<version>" (machine_id is None then).
+    template: Mapped[str | None] = mapped_column(String(100))

@@ -148,7 +148,7 @@ blockquote.warn strong:first-child { color: var(--medium); }
 <div class="layout">
   <nav class="toc" aria-label="On this page">
     <p class="toc-title">On this page</p>
-    <ul><li><a href="#1-overview">1. Overview</a></li><li><a href="#2-the-admin-page">2. The Admin page</a><ul><li><a href="#capacity">Capacity</a></li><li><a href="#machines">Machines</a></li><li><a href="#leftover-vms">Leftover VMs</a></li><li><a href="#jobs">Jobs</a></li></ul></li><li><a href="#3-day-to-day-machine-management">3. Day-to-day machine management</a></li><li><a href="#4-settings-lab-deployenv">4. Settings (lab-deploy.env)</a></li><li><a href="#5-adding-a-machine-template-by-hand">5. Adding a machine (template) by hand</a><ul><li><a href="#51-choose-how-to-build-it">5.1 Choose how to build it</a></li><li><a href="#52-build-it-with-packer">5.2 Build it with Packer</a></li><li><a href="#53-build-it-by-hand-linux">5.3 Build it by hand (Linux)</a></li><li><a href="#54-import-a-complete-image">5.4 Import a complete image</a></li><li><a href="#55-add-it-to-the-catalogue">5.5 Add it to the catalogue</a></li><li><a href="#56-test-ship-and-check">5.6 Test, ship, and check</a></li><li><a href="#57-updating-and-retiring-a-template">5.7 Updating and retiring a template</a></li></ul></li><li><a href="#6-adding-an-extra-service">6. Adding an extra (service)</a></li><li><a href="#7-adding-a-pro-lab-by-hand">7. Adding a Pro Lab by hand</a><ul><li><a href="#71-before-you-start">7.1 Before you start</a></li><li><a href="#72-define-it-in-labsyaml">7.2 Define it in labs.yaml</a></li><li><a href="#73-the-catalogue-card-optional">7.3 The catalogue card (optional)</a></li><li><a href="#74-ship-and-test-it">7.4 Ship and test it</a></li></ul></li><li><a href="#8-vcenter-setup-and-privileges">8. vCenter setup and privileges</a></li><li><a href="#9-capacity-and-datastore-space">9. Capacity and datastore space</a></li><li><a href="#10-backups-and-restore">10. Backups and restore</a></li><li><a href="#11-deploying-and-updating-the-panel">11. Deploying and updating the panel</a></li><li><a href="#12-troubleshooting">12. Troubleshooting</a></li></ul>
+    <ul><li><a href="#1-overview">1. Overview</a></li><li><a href="#2-the-admin-page">2. The Admin page</a><ul><li><a href="#capacity">Capacity</a></li><li><a href="#machines">Machines</a></li><li><a href="#templates">Templates</a></li><li><a href="#leftover-vms">Leftover VMs</a></li><li><a href="#jobs">Jobs</a></li></ul></li><li><a href="#3-day-to-day-machine-management">3. Day-to-day machine management</a></li><li><a href="#4-settings-lab-deployenv">4. Settings (lab-deploy.env)</a></li><li><a href="#5-adding-a-machine-template-by-hand">5. Adding a machine (template) by hand</a><ul><li><a href="#51-choose-how-to-build-it">5.1 Choose how to build it</a></li><li><a href="#52-build-it-with-packer">5.2 Build it with Packer</a></li><li><a href="#53-build-it-by-hand-linux">5.3 Build it by hand (Linux)</a></li><li><a href="#54-import-a-complete-image">5.4 Import a complete image</a></li><li><a href="#55-add-it-to-the-catalogue">5.5 Add it to the catalogue</a></li><li><a href="#56-test-ship-and-check">5.6 Test, ship, and check</a></li><li><a href="#57-updating-and-retiring-a-template">5.7 Updating and retiring a template</a></li></ul></li><li><a href="#6-adding-an-extra-service">6. Adding an extra (service)</a></li><li><a href="#7-adding-a-pro-lab-by-hand">7. Adding a Pro Lab by hand</a><ul><li><a href="#71-before-you-start">7.1 Before you start</a></li><li><a href="#72-define-it-in-labsyaml">7.2 Define it in labs.yaml</a></li><li><a href="#73-the-catalogue-card-optional">7.3 The catalogue card (optional)</a></li><li><a href="#74-ship-and-test-it">7.4 Ship and test it</a></li></ul></li><li><a href="#8-vcenter-setup-and-privileges">8. vCenter setup and privileges</a></li><li><a href="#9-capacity-and-datastore-space">9. Capacity and datastore space</a></li><li><a href="#10-backups-and-restore">10. Backups and restore</a></li><li><a href="#11-deploying-and-updating-the-panel">11. Deploying and updating the panel</a></li><li><a href="#12-troubleshooting">12. Troubleshooting</a></li></ul>
   </nav>
   <main id="top">
     <article class="content">
@@ -251,6 +251,39 @@ read their passwords, and use the Admin page. Keep the panel on a trusted networ
 count too.</p>
 <h3 id="machines">Machines<a class="headerlink" href="#machines" title="Permanent link">#</a></h3>
 <p>Every machine, whoever owns it, and how many are kept permanently, against <code>MAX_PERMANENT</code>.</p>
+<h3 id="templates">Templates<a class="headerlink" href="#templates" title="Permanent link">#</a></h3>
+<p>Every template the panel can deploy, with:</p>
+<ul>
+<li><strong>its state:</strong> Built, Not built (deleted to save space), Build queued, Building, or Build failed
+  (hover to see why);</li>
+<li><strong>its size on the datastore,</strong> and how many machines use it;</li>
+<li><strong>when it was last deployed,</strong> and roughly how long a rebuild takes.</li>
+</ul>
+<p>The heading says how much space deleting every deletable template would free.</p>
+<p><strong>Delete</strong> removes a template from vCenter and keeps its ISO. It's offered only when:</p>
+<ul>
+<li>the template has a build recipe (<code>build:</code> in <code>templates.yaml</code>);</li>
+<li>no machine uses it;</li>
+<li>no VM in vCenter is a linked clone of it;</li>
+<li>every ISO it's built from is in the datastore's ISO folder.</li>
+</ul>
+<p>Otherwise the row says why it can't be deleted: <strong>In use</strong>, <strong>Can't delete</strong> (hover for the reason),
+or <strong>Kept</strong> for imported templates, which can't be rebuilt from the panel.</p>
+<p><strong>Deploying a deleted template builds it first.</strong> The deploy page warns how much longer it takes. The
+machine waits, its log says it's waiting for the build, and it deploys once the build is done. If the
+build fails, the machine goes to error with the reason. <strong>Build</strong> builds a deleted or failed template
+straight away instead of waiting for a deploy.</p>
+<p>Builds run on the <code>builder</code> service, one at a time, as the panel's own vCenter account. Each build's
+full output is in <code>/srv/lab-deploy/build-logs/</code>; a failed build's job shows its last lines. A build
+first checks:</p>
+<ul>
+<li>that its ISOs are there;</li>
+<li>that the datastore has room for it on top of <code>DATASTORE_RESERVE_GB</code>.</li>
+</ul>
+<blockquote class="note">
+<p><strong>Note:</strong> Redeploying the panel stops a running build. The sweep queues it again within a minute,
+and that build deletes what the first left behind.</p>
+</blockquote>
 <h3 id="leftover-vms">Leftover VMs<a class="headerlink" href="#leftover-vms" title="Permanent link">#</a></h3>
 <p>These are VMs in vCenter's <code>Labs/Machines</code> folder that the panel has no record of. Typical causes:</p>
 <ul>
@@ -265,7 +298,7 @@ again that no machine owns it. Templates are never listed here.</p>
 in that folder as its own.</p>
 </blockquote>
 <h3 id="jobs">Jobs<a class="headerlink" href="#jobs" title="Permanent link">#</a></h3>
-<p>Every deploy, power change, reset and destroy: who asked, when, how long it took, and its result.
+<p>Every deploy, power change, reset, destroy and template build: who asked, when, how long it took, and its result.
 Click a failed job to see its full error, which for a failed setup includes the end of the machine's
 own log.</p>
 <h2 id="3-day-to-day-machine-management">3. Day-to-day machine management<a class="headerlink" href="#3-day-to-day-machine-management" title="Permanent link">#</a></h2>
@@ -407,6 +440,21 @@ curl -sk https://localhost/api/health      # database and vCenter both "ok"</cod
 <td><code>VCENTER_*</code></td>
 <td>—</td>
 <td>vCenter moved, or its password changed (see <a href="#8-vcenter-setup-and-privileges">section 8</a>)</td>
+</tr>
+<tr>
+<td><code>BUILD_HTTP_IP</code></td>
+<td>empty</td>
+<td>Template builds' VMs can't reach the server: set it to the server's LAN address</td>
+</tr>
+<tr>
+<td><code>BUILD_MEDIA_DIR</code></td>
+<td>empty</td>
+<td>Offline: the media folder <code>fetch-media.sh</code> made, for the Windows builds</td>
+</tr>
+<tr>
+<td><code>BUILD_TIMEOUT_MINUTES</code></td>
+<td>180</td>
+<td>A build that takes longer is stopped</td>
 </tr>
 </tbody>
 </table></div>
@@ -835,6 +883,9 @@ network sketch:</p>
 <li><strong>Lab Deploy</strong>, on the <code>Labs</code> folders, the datastore and the port group;</li>
 <li><strong>Lab Deploy (placement)</strong>, on the cluster.</li>
 </ul>
+<p>Lab Deploy includes what Packer needs to build templates (the Admin page's Templates list), so the
+server never holds an administrator's sign-in. Re-run the script after updating to a version that
+added this (2026-10-28).</p>
 <p>The script also creates the folders <code>Labs/Templates</code> and <code>Labs/Machines</code>. The account itself is
 created by hand in vCenter (Administration → Single Sign On → Users and Groups).</p>
 <div class="term"><div class="term-bar"><i></i><i></i><i></i><span>shell</span></div><pre><code>python3 -m venv ~/labdeploy-setup &amp;&amp; ~/labdeploy-setup/bin/pip install pyvmomi
@@ -853,7 +904,8 @@ created by hand in vCenter (Administration → Single Sign On → Users and Grou
 <p><strong>Disk</strong> is where trouble comes from. A full datastore <strong>pauses every VM</strong> writing to it, and vCenter
 asks a "no more space" question for each. To keep room:</p>
 <ul>
-<li>Delete ISOs once their templates are built; <code>fetch.sh</code> can fetch them again.</li>
+<li>Delete templates nobody uses from the Admin page's Templates list: a template takes about five
+  times its ISO's space, and the next deploy builds it again from the ISO. Keep the ISOs.</li>
 <li>Delete replaced templates promptly (<a href="#57-updating-and-retiring-a-template">section 5.7</a>).</li>
 <li>Run builds, Windows especially, one at a time, and check free space first.</li>
 <li>Keep <code>DATASTORE_RESERVE_GB</code> above what one build needs.</li>
@@ -872,8 +924,12 @@ asks a "no more space" question for each. To keep room:</p>
 <td>The vCenter VM, ever</td>
 </tr>
 <tr>
-<td>Datastore files under <code>ISO/</code></td>
+<td>Templates the Admin page offers to delete</td>
 <td>A template while any machine uses it</td>
+</tr>
+<tr>
+<td>ISOs listed in <code>scripts/isos/isos.txt</code> whose templates can't be rebuilt from the panel</td>
+<td>An ISO a rebuildable template needs, or one that can't be downloaded again</td>
 </tr>
 <tr>
 <td>Retired <code>tpl-*</code> templates no machine uses</td>

@@ -1,5 +1,18 @@
-# One image for the API and the worker; compose.yaml picks the command.
+# One image for the API, the workers and the builder; compose.yaml picks the command.
 FROM python:3.12-slim
+
+# The builder's tools (app/builds.py runs packer/build.sh): Packer and its vSphere plugin, as the offline
+# install's tools image has them (deploy/install/Dockerfile), xorriso for the builds' CDs, ssh-keygen
+# for their throwaway keys, curl for fetch-legacy.sh.
+ARG PACKER_VERSION=1.16.1
+ARG VSPHERE_PLUGIN_VERSION=2.5.0
+ENV PACKER_PLUGIN_PATH=/opt/packer-plugins CHECKPOINT_DISABLE=1
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl openssh-client unzip xorriso \
+    && rm -rf /var/lib/apt/lists/* \
+    && curl -fsSL -o /tmp/packer.zip "https://releases.hashicorp.com/packer/${PACKER_VERSION}/packer_${PACKER_VERSION}_linux_amd64.zip" \
+    && unzip -q /tmp/packer.zip -d /usr/local/bin && rm /tmp/packer.zip \
+    && packer plugins install github.com/hashicorp/vsphere "v${VSPHERE_PLUGIN_VERSION}" \
+    && chmod -R a+rX /opt/packer-plugins
 
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1 PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PYTHONPATH=/app

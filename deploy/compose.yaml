@@ -31,6 +31,9 @@ services:
     image: postgres:16-alpine
     restart: unless-stopped
     env_file: lab-deploy.env
+    # For the builder, on the host's network: on this server's loopback only.
+    ports:
+      - '127.0.0.1:5433:5432'
     environment:
       POSTGRES_USER: labdeploy
       POSTGRES_DB: labdeploy
@@ -57,7 +60,7 @@ services:
   # Deploys, power changes and the per-minute expiry sweep. Starts once the API has migrated.
   worker:
     <<: *backend
-    command: ['procrastinate', '--app=app.jobs.app', 'worker', '--concurrency=4']
+    command: ['procrastinate', '--app=app.jobs.app', 'worker', '--queues=default,quick', '--concurrency=4']
     # Same image as the API, built locally by it; there's nothing to pull.
     pull_policy: never
     # On a redeploy, let running jobs (a deploy takes minutes) finish rather than killing them
@@ -76,6 +79,27 @@ services:
     pull_policy: never
     # Its jobs take seconds, a destroy a minute or two.
     stop_grace_period: 3m
+    depends_on:
+      api:
+        condition: service_healthy
+
+  # Template builds (app/builds.py, docs/plan.md section 11), one at a time: Packer, run on the host's
+  # network, as the builds' VMs fetch their answer files from its web server and it signs in to them over
+  # SSH and WinRM. So it reaches PostgreSQL on the loopback port above. It works in a copy of packer/ and
+  # scripts/ (deploy.sh puts them in build/), and keeps each build's whole output in build-logs/.
+  # A redeploy cuts a running build off: the sweep queues it again, and that build deletes its VM.
+  builder:
+    <<: *backend
+    command:
+      - sh
+      - -c
+      - export DATABASE_URL="$$(printf %s "$$DATABASE_URL" | sed 's|@postgres/|@127.0.0.1:5433/|')"; exec procrastinate --app=app.jobs.app worker --queues=build --concurrency=1
+    pull_policy: never
+    network_mode: host
+    volumes:
+      - ./build:/build:ro
+      - ./build-logs:/build-logs
+    stop_grace_period: 30s
     depends_on:
       api:
         condition: service_healthy

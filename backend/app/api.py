@@ -14,10 +14,10 @@ from sqlalchemy import func, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, object_session
 
-from . import actions, catalogue, cloudinit, console, extras, jobs, labs
+from . import actions, builds, catalogue, cloudinit, console, extras, jobs, labs
 from .config import settings
 from .deps import ANYONE, OWNER_RULE, Actor, Db, add_log, get_machine
-from .models import STABLE_STATES, InstanceFlag, Job, LogLine, Machine, utcnow
+from .models import STABLE_STATES, InstanceFlag, Job, LogLine, Machine, TemplateBuild, utcnow
 from .vsphere import Capacity, VSphereError, connect
 
 # A hostname label: starts with a letter, doesn't end with a hyphen; 15 at most, Windows' limit.
@@ -97,6 +97,8 @@ def job_out(j: Job) -> dict:
         "id": f"j-{j.id}",
         "instanceId": "",
         "machineId": j.machine_id,
+        # A build job's template version, "<template>/<version>".
+        **({"template": j.template} if j.template else {}),
         "lab": "",
         "action": j.action,
         "by": j.by,
@@ -166,8 +168,9 @@ def extra_out(x: extras.Extra, choices: dict[str, tuple[str, ...]] | None = None
 
 
 @router.get("/config")
-def config() -> dict:
+def config(db: Db) -> dict:
     cfg = settings()
+    unbuilt = {(r.template, r.version) for r in db.scalars(select(TemplateBuild).where(TemplateBuild.state != "built"))}
     return {
         "templates": [
             {
@@ -181,6 +184,8 @@ def config() -> dict:
                 **({"webUrl": t.web_url} if t.web_url else {}),
                 # A complete image's own sign-in, the same on every machine (family "image").
                 **({"fixedPassword": t.fixed_password} if t.fixed_password else {}),
+                # Deleted to save space (builds.py): a deploy builds it first, taking about this long more.
+                **({"built": False, "buildMinutes": t.build.minutes if t.build else 0} if (t.template, t.version) in unbuilt else {}),
             }
             for t in catalogue.catalogue().values()
         ],
@@ -387,7 +392,11 @@ def deploy_machine(req: DeployRequest, db: Db) -> dict:
             raise HTTPException(409, f"{cfg.max_permanent} machines can be kept permanently. Set an expiry on another one first.")
     if not cfg.vcenter_configured:
         raise HTTPException(503, "vCenter isn't configured yet, so nothing can be deployed.")
-    blocker = capacity_blocker(db, extras.memory_gb(tpl.memory_gb, chosen), extras.disk_gb(chosen))
+    built = builds.is_built(db, tpl)
+    if not built and tpl.build is None:
+        raise HTTPException(409, f"{tpl.template} {tpl.version} isn't built, and has no build recipe to build it from.")
+    # Not built: room for the template too, which is built first.
+    blocker = capacity_blocker(db, extras.memory_gb(tpl.memory_gb, chosen), extras.disk_gb(chosen) + (0 if built else tpl.build.size_gb))
     if blocker:
         raise HTTPException(409, blocker)
     forget_capacity()
@@ -426,9 +435,28 @@ def deploy_machine(req: DeployRequest, db: Db) -> dict:
             f"{o.label.lower()} {shown(o)}" for o in x.options if c["options"].get(o.id) and not (o.per_template and c["options"][o.id] == o.default)
         )
         add_log(db, m, f"With {x.name}{f' ({details})' if details else ''}", "muted")
-    queue(db, m, "deploy", owner)
+    builds.note_deployed(db, tpl)
+    if not built:
+        hold_for_build(db, m, tpl)
+        db.commit()
+        request_build(tpl, owner)
+    else:
+        queue(db, m, "deploy", owner)
     db.refresh(m)
     return machine_out(m)
+
+
+def hold_for_build(db: Session, m: Machine, tpl: catalogue.LiveTemplate) -> None:
+    """The machine waits for its template to be built (builds.py), then deploys."""
+    m.pending = builds.WAITING
+    add_log(db, m, f"{tpl.template} {tpl.version} isn't built right now (deleted to save space). Building it first: about {tpl.build.minutes} minutes more.", "muted")
+
+
+def request_build(tpl: catalogue.LiveTemplate, by: str) -> None:
+    try:
+        jobs.enqueue_build(tpl.template, tpl.version, by)
+    except Exception as e:
+        raise HTTPException(503, f"Couldn't queue the template's build: {e}") from e
 
 
 def resolve_extras(tpl: catalogue.LiveTemplate, chosen: list[dict], name: str) -> list[dict]:
@@ -754,8 +782,13 @@ def deploy_instance(req: InstanceRequest, db: Db) -> dict:
             raise HTTPException(409, f"{cfg.max_permanent} machines can be kept permanently, and {lab.title} has {len(planned)}. Set an expiry instead.")
     if not cfg.vcenter_configured:
         raise HTTPException(503, "vCenter isn't configured yet, so nothing can be deployed.")
+    unbuilt = {(tpl.template, tpl.version): tpl for _, tpl, _ in planned if not builds.is_built(db, tpl)}
+    if no_recipe := [f"{t.template} {t.version}" for t in unbuilt.values() if t.build is None]:
+        raise HTTPException(409, f"{', '.join(no_recipe)} isn't built, and has no build recipe to build it from.")
     blocker = capacity_blocker(
-        db, sum(extras.memory_gb(tpl.memory_gb, chosen) for _, tpl, chosen in planned), sum(extras.disk_gb(chosen) for *_, chosen in planned)
+        db,
+        sum(extras.memory_gb(tpl.memory_gb, chosen) for _, tpl, chosen in planned),
+        sum(extras.disk_gb(chosen) for *_, chosen in planned) + sum(t.build.size_gb for t in unbuilt.values()),
     )
     if blocker:
         raise HTTPException(409, blocker)
@@ -793,8 +826,13 @@ def deploy_instance(req: InstanceRequest, db: Db) -> dict:
         if lm.boot_order > first_turn:
             earlier = ", ".join(o.name for o, *_ in planned if o.boot_order < lm.boot_order)
             add_log(db, m, f"Waits for {earlier} to be ready first", "muted")
+        builds.note_deployed(db, tpl)
+        if (tpl.template, tpl.version) in unbuilt:
+            hold_for_build(db, m, tpl)
     db.commit()
     actions.generate_flags(instance_id, lab)
+    for tpl in unbuilt.values():
+        request_build(tpl, owner)
     try:
         actions.advance_instance(instance_id, jobs.enqueue)
     except Exception as e:
@@ -875,6 +913,96 @@ def cancel_instance(instance_id: str, db: Db, who: Actor) -> dict:
         raise HTTPException(409, "The lab has nothing waiting or running to cancel.")
     db.commit()
     return instance_out(db, instance_id)
+
+
+# Templates on demand (builds.py) ----------------------------------------------------------------
+
+
+def template_out(db: Session, tpl: catalogue.LiveTemplate, info: dict, isos: set[str] | None) -> dict:
+    """A template version for the admin page. `info`: VCenter.templates(); `isos`: the ISO folder's
+    files, or None if vCenter couldn't list them."""
+    r = builds.row(db, tpl.template, tpl.version)
+    state = r.state if r else "built"
+    path = builds.vsphere_path(db, tpl)
+    found = info.get(path.rsplit("/", 1)[-1]) if state == "built" else None
+    job = builds.active_build(db, tpl.template, tpl.version)
+    out = {
+        "template": tpl.template,
+        "version": tpl.version,
+        "state": state,
+        "vsphere": path if state == "built" else "",
+        "sizeGB": round(found.size_gb, 1) if found else None,
+        "machines": builds.users(db, tpl),
+        "lastDeployedAt": ms(r.last_deployed_at) if r else None,
+        "builtAt": ms(r.built_at) if r else None,
+        "rebuildable": tpl.build is not None,
+    }
+    if tpl.build:
+        out["build"] = {
+            "minutes": tpl.build.minutes,
+            "sizeGB": tpl.build.size_gb,
+            "rolling": tpl.build.rolling,
+            "isos": [{"name": i, **({"present": i in isos} if isos is not None else {})} for i in tpl.build.isos],
+        }
+    if state == "built" and not found and info:
+        out["problem"] = f"Not found in vCenter at {path}."
+    if job:
+        out["job"] = job_out(job)
+    if r and r.detail:
+        out["detail"] = r.detail
+    reason = builds.delete_problem(db, tpl, isos or set()) if isos is not None else "Couldn't list the datastore's ISO folder."
+    out["deletable"] = reason is None and not out.get("problem")
+    if reason:
+        out["cantDelete"] = reason
+    return out
+
+
+@router.get("/templates")
+def list_templates(db: Db) -> list[dict]:
+    """Every deployable template version: built or not, its size, the machines from it, and whether
+    it can be deleted (and built again on the next deploy)."""
+    try:
+        with connect() as vc:
+            info, isos = vc.templates(), vc.iso_files()
+    except VSphereError as e:
+        raise HTTPException(503, str(e)) from e
+    return [template_out(db, t, info, isos) for t in catalogue.catalogue().values()]
+
+
+def find_template(template: str, version: str) -> catalogue.LiveTemplate:
+    tpl = catalogue.find(template, version)
+    if tpl is None:
+        raise HTTPException(404, f"There's no template {template} {version} in the catalogue.")
+    return tpl
+
+
+@router.delete("/templates/{template}/{version}")
+def delete_template(template: str, version: str, db: Db, who: Actor) -> dict:
+    """Deletes a template no machine uses, keeping its ISOs; the next deploy of it builds it again."""
+    tpl = find_template(template, version)
+    try:
+        with connect() as vc:
+            builds.delete(db, vc, tpl, who)
+            db.commit()
+            info, isos = vc.templates(), vc.iso_files()
+    except VSphereError as e:
+        db.rollback()
+        raise HTTPException(409, str(e)) from e
+    forget_capacity()
+    return template_out(db, tpl, info, isos)
+
+
+@router.post("/templates/{template}/{version}/build", status_code=202)
+def build_template(template: str, version: str, db: Db, who: Actor) -> dict:
+    """Builds a deleted (or failed) template now, rather than at its next deploy."""
+    tpl = find_template(template, version)
+    if tpl.build is None:
+        raise HTTPException(409, f"{template} {version} has no build recipe in templates.yaml.")
+    if builds.is_built(db, tpl):
+        raise HTTPException(409, f"{template} {version} is built already.")
+    request_build(tpl, who)
+    job = builds.active_build(db, template, version)
+    return job_out(job) if job else {}
 
 
 # Leftover VMs -------------------------------------------------------------------------------------

@@ -492,6 +492,15 @@
 				{#if room}
 					<div><dt>Room</dt><dd class="room" class:short={!room.fits}>{room.text}</dd></div>
 				{/if}
+				{#if live?.built === false}
+					<div>
+						<dt>Template</dt>
+						<dd class="room short">
+							Not built right now (deleted to save space): it's built first, so the deploy takes about {live.buildMinutes} minutes
+							longer
+						</dd>
+					</div>
+				{/if}
 				<div><dt>Network</dt><dd>The LAN, with an address from DHCP</dd></div>
 				<div><dt>Sign in with</dt><dd>{signInWays.join(', ')}</dd></div>
 				{#if chosen.length}
