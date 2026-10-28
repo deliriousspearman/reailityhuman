@@ -188,6 +188,19 @@
   access: [rdp, ssh, console]
   extras: [iis, mssql, outlook, domain-controller, join-domain]
 - template: windows-server
+  version: "2016"
+  # Built by Packer (packer/build.sh windows-server -var version=2016) on 2026-10-28: the 180-day
+  # evaluation, with OpenSSH from Win32-OpenSSH (legacy.ps1). No SQL Server or Outlook: SQL Server 2025
+  # and Microsoft 365 Apps don't support 2016.
+  vsphere: Labs/Templates/tpl-windows-server-2016-20261028
+  cpu: 2
+  memoryGB: 4
+  diskGB: 60
+  username: labadmin
+  family: windows
+  access: [rdp, ssh, console]
+  extras: [iis, domain-controller, join-domain]
+- template: windows-server
   version: "2025 Core"
   # Built by Packer (packer/build.sh windows-server -var edition=core) on 2026-10-21, with SQL Server's files
   # (and the media folder: the offline install's second rehearsal).
