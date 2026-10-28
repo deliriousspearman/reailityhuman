@@ -9,7 +9,8 @@ as Administrator. It:
   - installs Cloudbase-Init from its MSI, and configures it to read each clone's data from vCenter
     (VMware guestinfo): the computer name during sysprep, then the panel's first-boot script;
   - turns on Remote Desktop (with Network Level Authentication) and its firewall rules;
-  - turns on OpenSSH Server, if Windows has it, with PowerShell as its shell;
+  - turns on OpenSSH Server, if Windows has it (as a feature from 2019, or installed from
+    Win32-OpenSSH's MSI on 2016 and 2012 R2), with PowerShell as its shell;
   - stops Server Manager opening at every sign-in, and never sleeps;
   - with -Office, copies Office's install files in, for the panel's Outlook extra;
   - with -SqlServer, copies SQL Server's install files in, with the Chinook sample database, for
@@ -122,9 +123,10 @@ if (-not [Environment]::Is64BitOperatingSystem) {
     throw 'Cloudbase-Init only supports 64-bit Windows.'
 }
 $os = Get-CimInstance Win32_OperatingSystem
-# 10.0 covers Windows 10 and 11, and Server 2016 to 2025.
-if ([Version]$os.Version -lt [Version]'10.0') {
-    throw "$($os.Caption) is too old: the scripts support Windows 10 and Server 2016 or later."
+# 6.3 is Server 2012 R2 (with PowerShell 5.1 added: packer/windows-server/legacy.ps1); 10.0 covers
+# Windows 10 and 11, and Server 2016 to 2025.
+if ([Version]$os.Version -lt [Version]'6.3') {
+    throw "$($os.Caption) is too old: the scripts support Windows 10 and Server 2012 R2 or later."
 }
 $server = $os.ProductType -ne 1
 $tools = Get-Service -Name VMTools -ErrorAction SilentlyContinue
@@ -166,14 +168,21 @@ if ($SqlServer -and -not (Test-Path (Join-Path $SqlServer 'setup.exe'))) {
     throw "$SqlServer has no setup.exe. Give the folder (or mounted ISO) with SQL Server's install media."
 }
 $sshCapability = $null
+# Win32-OpenSSH from its MSI (2016 and 2012 R2, which have no such feature): already installed.
+$sshMsi = $false
 if (-not $NoSsh) {
-    $sshCapability = Get-WindowsCapability -Online | Where-Object { $_.Name -like 'OpenSSH.Server*' } | Select-Object -First 1
+    if (Get-Command Get-WindowsCapability -ErrorAction SilentlyContinue) {
+        $sshCapability = Get-WindowsCapability -Online | Where-Object { $_.Name -like 'OpenSSH.Server*' } | Select-Object -First 1
+    }
+    $sshMsi = -not $sshCapability -and [bool](Get-Service -Name sshd -ErrorAction SilentlyContinue)
 }
 
 Step "Found $($os.Caption) ($($os.Version)), VMware Tools running"
 Note "Cloudbase-Init: $(if ($installed) { 'installed' } else { "to install from $Msi" })"
 if ($NoSsh) {
     Note 'OpenSSH Server: skipped (-NoSsh)'
+} elseif ($sshMsi) {
+    Note 'OpenSSH Server: installed (Win32-OpenSSH)'
 } elseif (-not $sshCapability) {
     Note 'OpenSSH Server: not available on this Windows; machines get Remote Desktop only'
 } else {
@@ -277,9 +286,9 @@ Enable-NetFirewallRule -Group '@FirewallAPI.dll,-28752'
 
 # OpenSSH Server ------------------------------------------------------------------------------------------
 
-if ($sshCapability) {
+if ($sshCapability -or $sshMsi) {
     Step 'Turning on OpenSSH Server'
-    if ($sshCapability.State -ne 'Installed') {
+    if ($sshCapability -and $sshCapability.State -ne 'Installed') {
         # Needs the Features on Demand source: Windows Update, or media on an offline network.
         try {
             Add-WindowsCapability -Online -Name $sshCapability.Name | Out-Null

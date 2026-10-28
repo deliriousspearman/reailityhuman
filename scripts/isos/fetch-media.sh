@@ -11,8 +11,9 @@
 #              template's other packages come from a mirror of repo.zimbra.com), and MinIO and mc
 #              (built here from source: 5-15 minutes, 3 GB free), for prepare.sh. Serve this folder's
 #              parent on a LAN web server and pass the address to the Linux builds: -var media_url=http://…
-#   windows/   Cloudbase-Init, Chinook's SQL Server script and Exchange's prerequisites (Visual C++
-#              2012 and 2013, URL Rewrite). Pass the folder to the Windows build:
+#   windows/   Cloudbase-Init, Chinook's SQL Server script, Exchange's prerequisites (Visual C++
+#              2012 and 2013, URL Rewrite), and what Windows Server 2016 and 2012 R2 lack
+#              (windows/legacy: OpenSSH, the C runtime, .NET 4.8, WMF 5.1). Pass the folder to the Windows build:
 #              -var media_dir=<folder>. Office's files go in windows/office (see its README.txt).
 #   freebsd/   VMware Tools for OPNsense 26.7 and pfSense 2.7.2, with their dependencies (fetch-pkgs.py),
 #              which their builds install from here offline (media_url).
@@ -30,7 +31,7 @@ images=0
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 prepare=$here/../template/prepare.sh
 packer_dir=$here/../../packer
-mkdir -p "$out"/{linux/{wordpress,wp-cli,nextcloud,chinook,docker,python,iredmail,minio,zimbra,wazuh},windows/{cloudbase-init,chinook,office,exchange},packer}
+mkdir -p "$out"/{linux/{wordpress,wp-cli,nextcloud,chinook,docker,python,iredmail,minio,zimbra,wazuh},windows/{cloudbase-init,chinook,office,exchange,legacy},packer}
 out=$(cd "$out" && pwd)
 
 # What prepare.sh and the Windows build use: keep in step with them.
@@ -156,6 +157,12 @@ grep -oE "'[A-Za-z0-9_.-]+' += @\('https://[^']+', '[0-9A-F]{64}'\)" "$here/../t
 	sed -E "s/'([^']+)' += @\('([^']+)', '([0-9A-F]{64})'\)/\1 \2 \3/" | while read -r file url sum; do
 		get "$url" "$out/windows/exchange/$file"
 		check "$out/windows/exchange/$file" "${sum,,}" sha256
+	done
+step "Windows: what Windows Server 2016 and 2012 R2 lack, as legacy.ps1 pins it"
+grep -oE "'[A-Za-z0-9_.-]+' += @\('https://[^']+', '[0-9A-F]{64}'\)" "$here/../../packer/windows-server/legacy.ps1" |
+	sed -E "s/'([^']+)' += @\('([^']+)', '([0-9A-F]{64})'\)/\1 \2 \3/" | while read -r file url sum; do
+		get "$url" "$out/windows/legacy/$file"
+		check "$out/windows/legacy/$file" "${sum,,}" sha256
 	done
 
 cat >"$out/windows/office/README.txt" <<'EOF'

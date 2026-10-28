@@ -7,6 +7,8 @@
 # LAB_SQLSERVER yes/no; LAB_EXCHANGE yes/no.
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'   # Invoke-WebRequest is many times slower with it
+# 2016's and 2012 R2's PowerShell asks for TLS 1.0, which GitHub and Microsoft refuse.
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
 $Build = 'C:\LabBuild'
 $CloudbaseUrl = 'https://github.com/cloudbase/cloudbase-init/releases/download/1.1.9/CloudbaseInitSetup_1_1_9_x64.msi'

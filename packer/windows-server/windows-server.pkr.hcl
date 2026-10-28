@@ -1,11 +1,14 @@
-# Windows Server templates for the panel (2025, 2022 or 2019), built unattended (docs/build-templates.md):
+# Windows Server templates for the panel (2025, 2022, 2019, 2016 or 2012 R2), built unattended
+# (docs/build-templates.md):
 #
 #   packer/build.sh windows-server                       # Desktop Experience, with Outlook and SQL Server
 #   packer/build.sh windows-server -var edition=core     # Server Core, with SQL Server
 #   packer/build.sh windows-server -var version=2022     # 2022 or 2019 (either edition): their evaluations
+#   packer/build.sh windows-server -var version=2016     # 2016 or 2012r2: no Office or SQL Server (neither
+#                                                        # supports them); legacy.ps1 adds what they lack
 #
 # Installs from the evaluation ISO with autounattend.xml, installs VMware Tools and opens WinRM
-# (bootstrap.ps1), runs scripts/template/prepare.ps1 (provision.ps1 gathers Cloudbase-Init, Office's
+# (bootstrap.ps1), adds what 2016 and 2012 R2 lack (legacy.ps1, then a restart), runs scripts/template/prepare.ps1 (provision.ps1 gathers Cloudbase-Init, Office's
 # files and SQL Server's), then clean.ps1's sysprep as the shutdown (finish.ps1), and leaves a template
 # in Labs/Templates with its "clean" snapshot: docs/setup-vsphere.md part 5, by hand.
 
@@ -72,8 +75,8 @@ variable "version" {
   type    = string
   default = "2025"
   validation {
-    condition     = contains(["2025", "2022", "2019"], var.version)
-    error_message = "The version is 2025, 2022 or 2019."
+    condition     = contains(["2025", "2022", "2019", "2016", "2012r2"], var.version)
+    error_message = "The version is 2025, 2022, 2019, 2016 or 2012r2."
   }
 }
 # Empty: the version's evaluation ISO, named as in isos.txt.
@@ -85,7 +88,8 @@ variable "sql_server_iso" {
   type    = string
   default = "SQLServer2025-x64-ENU-EntDev.iso"
 }
-# What to bake in: the Outlook extra's Office files (desktop only), SQL Server's media.
+# What to bake in: the Outlook extra's Office files (desktop only), SQL Server's media. Neither on 2016
+# or 2012 R2: Microsoft 365 Apps and SQL Server 2025 don't support them.
 variable "office" {
   type    = bool
   default = true
@@ -127,24 +131,31 @@ locals {
   suffix  = local.core ? "-core" : ""
   suffix2 = var.exchange ? "-exchange" : local.suffix
   vm_name = var.vm_name != "" ? var.vm_name : "tpl-windows-server-${var.version}${local.suffix2}-${formatdate("YYYYMMDD", timestamp())}"
-  # 2025's images go by these names; 2022's and 2019's have other names inside (Setup then asks), so
-  # those go by number: 1 Standard (Core), 2 Standard (Desktop Experience).
+  # 2016 and 2012 R2: what legacy.ps1 adds, and nothing baked in that they don't support.
+  legacy = contains(["2016", "2012r2"], var.version)
+  # 2025's images go by these names; the older ones have other names inside (Setup then asks), so
+  # those go by number: 1 Standard (Core), 2 Standard (Desktop Experience; on 2012 R2, "with a GUI").
   image_key  = var.version == "2025" ? "/IMAGE/NAME" : "/IMAGE/INDEX"
   image_name = var.version != "2025" ? (local.core ? "1" : "2") : (local.core ? "Windows Server 2025 Standard Evaluation" : "Windows Server 2025 Standard Evaluation (Desktop Experience)")
   iso = var.iso != "" ? var.iso : {
-    "2025" = "windows-server-2025-eval-26100.1742.iso"
-    "2022" = "windows-server-2022-eval.iso"
-    "2019" = "windows-server-2019-eval.iso"
+    "2025"   = "windows-server-2025-eval-26100.1742.iso"
+    "2022"   = "windows-server-2022-eval.iso"
+    "2019"   = "windows-server-2019-eval.iso"
+    "2016"   = "windows-server-2016-eval.iso"
+    "2012r2" = "windows-server-2012r2-eval.iso"
   }[var.version]
   guest_os_type = {
-    "2025" = "windows2022srvNext_64Guest"
-    "2022" = "windows2019srvNext_64Guest"
-    "2019" = "windows2019srv_64Guest"
+    "2025"   = "windows2022srvNext_64Guest"
+    "2022"   = "windows2019srvNext_64Guest"
+    "2019"   = "windows2019srv_64Guest"
+    "2016"   = "windows9Server64Guest"
+    "2012r2" = "windows8Server64Guest"
   }[var.version]
-  office = var.office && !local.core
+  office     = var.office && !local.core && !local.legacy
+  sql_server = var.sql_server && !local.legacy
   iso_paths = concat(
     ["[${var.datastore}] ${var.iso_folder}/${local.iso}", "[] /vmimages/tools-isoimages/windows.iso"],
-    var.sql_server ? ["[${var.datastore}] ${var.iso_folder}/${var.sql_server_iso}"] : [],
+    local.sql_server ? ["[${var.datastore}] ${var.iso_folder}/${var.sql_server_iso}"] : [],
     var.exchange ? ["[${var.datastore}] ${var.iso_folder}/${var.exchange_iso}"] : [],
   )
 }
@@ -221,12 +232,24 @@ source "vsphere-iso" "windows" {
 build {
   sources = ["source.vsphere-iso.windows"]
 
+  # 2016 and 2012 R2: OpenSSH, and on 2012 R2 PowerShell 5.1 and what it and Cloudbase-Init need. On
+  # 2019 and later it says so and does nothing, and the restart is only an echo.
+  provisioner "powershell" {
+    script            = "${path.root}/legacy.ps1"
+    elevated_user     = "Administrator"
+    elevated_password = var.build_password
+  }
+  provisioner "windows-restart" {
+    restart_command = local.legacy ? "shutdown /r /f /t 5 /c \"Packer: legacy.ps1's updates\"" : "cmd /c echo No restart needed"
+    restart_timeout = "30m"
+  }
+
   provisioner "powershell" {
     script = "${path.root}/provision.ps1"
     environment_vars = [
       "LAB_EDITION=${var.edition}",
       "LAB_OFFICE=${local.office ? "yes" : "no"}",
-      "LAB_SQLSERVER=${var.sql_server ? "yes" : "no"}",
+      "LAB_SQLSERVER=${local.sql_server ? "yes" : "no"}",
       "LAB_EXCHANGE=${var.exchange ? "yes" : "no"}",
     ]
     elevated_user     = "Administrator"
@@ -242,7 +265,7 @@ build {
     custom_data = {
       vm_name    = local.vm_name
       office     = local.office
-      sql_server = var.sql_server
+      sql_server = local.sql_server
     }
   }
 }
