@@ -467,8 +467,13 @@ class VCenter:
         return {f.path for f in (getattr(result, "file", None) or [])}
 
     def delete_template(self, path: str) -> None:
-        """Deletes a template and its files (templates are never powered on)."""
-        wait(self.template(path).Destroy_Task(), "Delete template")
+        """Deletes a template and its files. vCenter won't delete a template with snapshots (every one
+        has "clean"), so it's made a VM again first, in the machines' pool, then deleted."""
+        tpl = self.template(path)
+        if self.props(tpl, "config.template").get("config.template"):
+            hosts = [h for h in getattr(self.cluster, "host", []) if self.props(h, "runtime.connectionState").get("runtime.connectionState") == "connected"]
+            tpl.MarkAsVirtualMachine(pool=self.pool, host=hosts[0] if hosts else None)
+        wait(tpl.Destroy_Task(), "Delete template")
 
     def powered_on(self, vm: vim.VirtualMachine) -> bool:
         return self.power_state(vm) == "poweredOn"
