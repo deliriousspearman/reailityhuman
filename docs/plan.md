@@ -1,5 +1,10 @@
 # Pro Lab Deployment Platform ("lab-deploy") — Plan
 
+The original design (sections 1–8) and the designs added since (9, 10). What's built and what comes
+next is in [roadmap.md](roadmap.md). As of 2026-10-28: single machines (§9) and the first Pro Lab
+(Brookfield) are live and the browser console is built; per-instance networks with WireGuard (§2),
+sign-in and roles, and Exercises (§10) are not started.
+
 ## Context
 
 The LMS (`/home/user/coding/lms`) already advertises Pro Labs (`src/content/docs/labs/meridian.md`, `harbourside.md`). Each page lists machines, OS, roles and network segments, and tells learners to "submit flags on the lab platform" and that "the lab is reset regularly". That platform doesn't exist yet. `lab-deploy` is it: a web panel that deploys, resets and tears down Pro Lab environments on on-prem VMware vSphere and gives learners network access.
@@ -10,7 +15,7 @@ Constraints and decisions so far:
 - **Scope:** deploy and control only. No flag scoring or leaderboard for now, but the data model should leave room to add them.
 - **vSphere edition:** unknown. Plan for vCenter with Standard/Distributed vSwitch as the baseline, and keep networking behind an adapter so NSX can be added later.
 - **Look and feel:** match the LMS "Hacklab" theme.
-- **Greenfield:** `/home/user/coding/lab-deploy` is empty.
+- **Greenfield:** `/home/user/coding/lab-deploy` was empty when this was written.
 
 ---
 
@@ -94,7 +99,7 @@ For learners the cost is small: download a `.conf` from the panel and import it 
 
 ### Later
 - Learners vote for a reset on shared labs (HTB-style).
-- Admin-only in-browser VM console through vSphere WebMKS tickets or Guacamole.
+- In-browser VM console through vSphere WebMKS tickets: built 2026-10-19 (open to everyone until there's sign-in).
 - Guacamole attack box.
 - NSX adapter.
 - GitLab OIDC.
@@ -111,7 +116,7 @@ For learners the cost is small: download a `.conf` from the panel and import it 
 - **Windows licensing offline:** evaluation ISOs expire after 180 days, and there's no internet activation. You'll need KMS or volume licensing, or to rebuild templates before they expire.
 - **Shared-instance resets disrupt everyone** connected at the time, so resets need announcements and schedules.
 - **One WireGuard lab connection at a time per learner:** every copy of a lab uses the same IP ranges.
-- **Browser VM consoles** need the browser to reach ESXi hosts directly (WebMKS), which is awkward on segregated networks. That's why they're deferred and admin-only.
+- **Browser VM consoles** need the browser to reach ESXi hosts directly (WebMKS), which is awkward on segregated networks. Solved by relaying the stream through the panel (built 2026-10-19).
 - **Keeping the air-gapped server updated:** each release is a new offline bundle (images, OVAs, checksums). No automatic updates.
 - **LMS CSP:** LMS pages can only **link** to the panel, not fetch from or embed it (`lms/scripts/csp.mjs`, and `X-Frame-Options DENY` in the Caddyfile). Plain links are enough.
 
@@ -201,13 +206,14 @@ Added after the first design pass. Alongside Pro Labs, people can deploy **one m
 - **Other actions:** start, stop, reboot, reset to the clean snapshot, redeploy (a new VM with the same settings, e.g. after a failed deploy), "deploy another like this", and destroy.
 
 ### Personal network
+Not built yet: machines sit on the LAN with DHCP until "Networks" (roadmap, "Later").
 - **Layout:** each person gets one network (a VLAN slot plus a small gateway VM, like a lab instance). It's created with their first machine and removed with their last.
 - **Access:** all their machines join it, so a pfSense, a Windows server and a Kali box can reach each other. One WireGuard file reaches everything.
 - **Isolation:** kept apart from other people's networks and from the labs.
 - **Later:** let people add extra private segments, so a pfSense can sit *between* networks rather than beside them.
 
 ### Templates
-- **Catalogue:** 22 templates in 9 categories, each an operating system or a complete system image: firewalls and routers, Linux, Windows, Windows Server (including a ready-made Active Directory domain), hypervisors, mail (Exchange, with its own domain controller), storage, security tools and practice targets. Apps installed on an OS are services, chosen under "By service" and added as extras: WordPress, Nextcloud, databases and mail today, and planned ones such as Vaultwarden, Keycloak, GitLab, Jenkins, Wazuh, Zimbra, Juice Shop and DVWA (frontend/src/lib/services.ts).
+- **Catalogue:** 27 templates in 9 categories (as of 2026-10-28), each an operating system or a complete system image: firewalls and routers, Linux, Windows, Windows Server (including a ready-made Active Directory domain), hypervisors, mail (Exchange, with its own domain controller, and Zimbra; listed with the mail services under "By service"), storage, security tools and practice targets. Apps installed on an OS are services, chosen under "By service" and added as extras: WordPress, Nextcloud, databases and mail today, and planned ones such as Vaultwarden, Keycloak, GitLab, Jenkins, Wazuh, Zimbra, Juice Shop and DVWA (frontend/src/lib/services.ts).
   - The catalogue (names, descriptions, categories, versions) is `frontend/src/lib/templates.ts`. What can actually be deployed, and how, is `backend/templates.yaml`, which the API serves; a test checks every entry there is in the catalogue too.
   - Practice targets (Metasploitable, Juice Shop, DVWA) are vulnerable on purpose. Like everything else, they're only reachable inside their owner's personal network.
 - **Apps:** app templates are Ubuntu with the app installed. The machine page separates the app's own sign-in from the SSH user, and knows each app's web address (e.g. MinIO's console on port 9001).
@@ -227,7 +233,7 @@ Added after the first design pass. Alongside Pro Labs, people can deploy **one m
 
 ### What this changes elsewhere
 - **Browser console becomes necessary rather than "later".** Appliances are set up from their console on first boot (pfSense interface assignment, ESXi's DCUI), and a firewall misconfiguration can lock out SSH and the web UI.
-  - Plan a WebMKS console proxied through the panel, so browsers never need to reach ESXi hosts directly.
+  - A WebMKS console proxied through the panel, so browsers never need to reach ESXi hosts directly: built 2026-10-19.
 - **The expiry sweep is a scheduled worker job.** It powers off expired machines, deletes those past the grace period, and warns owners. Browser notifications are an option; email only if the offline network has a mail relay.
 - **Capacity:** machines share the ProLabs resource pool with lab instances and appear in the admin meters.
 
@@ -307,6 +313,7 @@ per instance (see "Networks" in the roadmap's "Later").
 5. **The rest** as wanted: traffic analysis, incident response, containers and automation.
 
 ### Open questions for Jake
+Still open on 2026-10-28; phase 1 waits on them.
 - Instructions in the LMS (recommended, as above) or in the panel?
 - Progress and scores per learner: these need sign-in, so until then results belong to the instance.
 - Hints: free, or shown after a number of failed checks?

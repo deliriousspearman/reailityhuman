@@ -1,6 +1,6 @@
 # Roadmap
 
-Where lab-deploy stands and what comes next. Last updated 2026-10-27. The original design is in
+Where lab-deploy stands and what comes next. Last updated 2026-10-28. The original design is in
 [plan.md](plan.md); building templates is in [build-templates.md](build-templates.md).
 
 ## Where things stand
@@ -20,14 +20,14 @@ deployed by CI.
 | Enterprise Linux | Rocky 10, 9 and 8; AlmaLinux 10, 9 and 8; CentOS Stream 9; CentOS 8, 7, 6 (legacy) |
 | Fedora | Server 44 (with Cockpit), Workstation 44 (GNOME over Remote Desktop) |
 | Arch-based | CachyOS (rolling; KDE Plasma on the console) |
-| Windows Server | 2025 (desktop and Core), 2022, 2019 |
+| Windows Server | 2025 (desktop and Core); 2022 and 2019 retired 2026-10-27 to make room for Brookfield (shown as planned; to rebuild when wanted) |
 | Windows | 11 Enterprise (90-day evaluation; TPM checks skipped) |
 | Security | Kali 2026.2, Parrot 7.4 |
 | Firewalls and routers | OPNsense 26.7, pfSense CE 2.7.2, VyOS (rolling), MikroTik CHR 7.24 and 6.49 |
 | Hypervisors | Proxmox VE 9.2, 8.4, 7.4; XCP-ng 8.3 (all nested) |
 | Mail | Exchange Server SE (its own template; joins a domain controller's domain), Zimbra 8.8.15 |
 | Storage | TrueNAS SCALE 25.10, TrueNAS CORE 13.3 |
-| Practice targets | Metasploitable 2 and 3 (Linux), Metasploitable 3 (Windows; shuts down hourly), as complete images |
+| Practice targets | Metasploitable 2 and 3 (Linux), as complete images; Metasploitable 3 (Windows) retired 2026-10-27, as Windows Server 2019/2022 |
 
 **Extras:** web servers (Apache with a choice of PHP 5.6 to 8.5 on Ubuntu 22.04 and 24.04),
 WordPress, Nextcloud, databases with sample data, mail (and iRedMail), FTP, desktop and RDP, IIS,
@@ -44,11 +44,18 @@ Zabbix, each as a server and an agent that picks its server machine and register
 - Tested live: a Server 2025 controller and a Server 2025 Core member, with the controller's user
   signing in to the member as a domain user.
 
-**Browser console** (finished 2026-10-19). Open console on a machine's page shows its screen, keyboard
-and mouse in the browser.
+**Browser console** (finished 2026-10-19, controls reworked 2026-10-27). Open console on a machine's
+page shows its screen, keyboard and mouse in the browser.
 - **How it works:** the panel gets a WebMKS ticket from vCenter and relays the stream from ESXi.
   noVNC shows it.
-- **Buttons:** Ctrl+Alt+Del, Type password, full screen, reconnect.
+- **Controls:** a collapsible dock that stays on screen in full screen and fades when the mouse is
+  still: Ctrl+Alt+Del, Paste (types the clipboard into the machine), Type password, Send keys (Esc,
+  Tab, Alt+Tab, Ctrl+Alt+F2–F6), Fit/1:1, Screenshot, Full screen, Open in new tab. A dropped console
+  reconnects by itself up to 4 times.
+- **New tab:** `/machines/{id}/console?view=tab` shows just the screen, filling the tab; the machine
+  page has a New tab button.
+- **Clipboard out of the machine** is best effort only: WebMKS doesn't send it, and VMware Tools'
+  clipboard sync needs a desktop session that guest operations don't have.
 - **Access:** open to everyone for now; to be limited once there's sign-in (see below).
 - **Tested:** in Chrome and Firefox with Ubuntu 26.04.
 - **Known behaviour:**
@@ -56,6 +63,15 @@ and mouse in the browser.
   - ESXi presses the key a character is on without Shift, so Type password holds Shift itself
     (US layout).
   - The ticket path only works if the API runs as a single process.
+  - **Ubuntu Desktop (GNOME on Wayland) sometimes shows a black screen** (ESXi itself has a 1×1
+    framebuffer; Kali on Xorg never does). Possible fixes are noted but parked unless it comes back;
+    those desktops are used over Remote Desktop anyway.
+
+**Remote Desktop file** (2026-10-28). The machine page's `.rdp` download has a size picker (full
+screen, or a window from 1024x768 to 2560x1440; the last pick is kept in the browser, 1280x720 by
+default), with the clipboard shared, 32-bit colour, reconnecting and dynamic resolution. **Live
+resizing doesn't work yet** from Windows' client to Kali's xrdp 0.10: mstsc sends no resizes. Parked;
+the next step (an xrdp debug log while resizing) is agreed.
 
 **Also done:**
 - OS and distribution logos on the catalogue, the deploy page, the machines list and machine pages.
@@ -64,6 +80,8 @@ and mouse in the browser.
   `default` queue; the per-minute sweep and quick actions (start, stop, reboot, expire, destroy) on a
   `quick` queue, served by a second worker, `sweeper`. Before, four long deploys (Exchange takes about an
   hour) filled every slot, and expiry, lost-job recovery and a lab's next machines waited for them.
+- **Lighter polling** (2026-10-27): each open page polls one `GET /api/state`; passwords only come
+  with a single machine, and its log sends only new lines (two of the review's smaller items).
 - The [project review of 2026-10-23](review-2026-10-23.md): its five top priorities (a datastore
   reserve, machines that depend on each other, cancelling a stuck job, expired machines out of the
   quota, capacity on the deploy form). The rest is kept for later.
@@ -79,8 +97,14 @@ and mouse in the browser.
 | Workstation snapshot | Delete the snapshot of the ESXi VM taken before the datastore was extended | — |
 | `parrot-base-7.4` | Choose: convert it to a vSphere template (recommended; it stays, for Parrot rebuilds) or delete it (frees 12.7 GB; rebuilding then means re-importing the OVA) | One line in `packer/parrot/import-base.sh` so new bases are templates |
 | Off-host backups | Somewhere to copy the daily database dump: a network share or another machine | A copy job in `deploy/compose.yaml` |
+| RDP live resize | A go-ahead to set xrdp's log to DEBUG on kali01 (restarting xrdp drops the RDP window; the session stays), then a connect and resize | Read whether resize messages arrive, and fix xrdp or the desktop side |
+| Brookfield `i-9547` | Done looking at it? It was left running after the 2026-10-27 test | Destroy it (frees about 18 GB of memory) |
+| Exercises | Answers to the open questions in [plan.md](plan.md#open-questions-for-jake) and a go-ahead | Phase 1: the engine and the iptables track |
 
 ## Next, in order
+
+Items 1, 2 and 4 are finished or dropped and kept for the record. **Up next: item 3, the services
+batch**, then 5 to 7.
 
 ### 1. ProLabs: the first multi-machine lab (large) — done 2026-10-27
 
@@ -103,12 +127,13 @@ pass-the-ticket, SMB signing off. Plus file shares, users and sample emails.
   controller first). Reset and destroy act on the whole lab.
 - **Build approach (changed 2026-10-26):** the machines **reuse the base templates** (`windows-server
   2025` + `exchange SE` + `windows 11`) with extras, rather than pre-built golden templates. This saves
-  about 90 GB and keeps them current, at the cost of a long deploy (Exchange is about 2.5 hours). The
+  about 90 GB and keeps them current, at the cost of a long deploy (Exchange took about an hour in the
+  2026-10-27 test). The
   members join the instance's own domain controller through `@dc` (cross-machine extra wiring).
 - **Network:** the LAN with DHCP for now; members use the domain controller for DNS. A network per
   instance comes with "Networks" (see "Later").
 - **Size:** about 18 GB of memory, so one instance at a time. **Disk:** about 75 GB while it deploys
-  (Exchange's install growth), which is more than the lab's datastore has free — see the blocker below.
+  (Exchange's install growth); the `exchange` extra declares `diskGB: 45` so the capacity check counts it.
 - **Flags:** random `LAB{...}` flags planted per instance (the workstation user's `user.txt`, a share,
   an email, the domain Administrator's `root.txt`), new on each deploy and reset, with a checklist on
   the lab's page.
@@ -236,8 +261,9 @@ the PC, and the DHCP server's lease count.
 
 ### Suggested, not yet scheduled
 
-- **Exercises** (planned 2026-10-27): guided tasks on one to three machines, checked by the panel, starting
-  with an iptables track. The design and catalogue are in [plan.md](plan.md#10-exercises).
+- **Exercises** (planned 2026-10-27, not started): guided tasks on one to three machines, checked by the
+  panel, starting with an iptables track. The design and catalogue are in [plan.md](plan.md#10-exercises);
+  its open questions wait on Jake.
 - **Mail:** Mailpit (a mail catcher for apps) and GoPhish (phishing exercises), both small Docker
   extras; Mailcow for a realistic organisation mail server.
 - **More Docker services:** Jake to pick the ones that matter most to learners.
@@ -254,8 +280,10 @@ the PC, and the DHCP server's lease count.
   - accounts, owners and admins;
   - limit consoles and passwords to a machine's owner and admins;
   - replaces the name people type today.
-- **Networks:** VLANs or a network per user or lab, then a VPN to reach them (the "Download VPN
-  config" button on machine pages is a placeholder for this).
+- **Networks:** VLANs or a network per user or lab, then a WireGuard VPN to reach them (the "Download
+  VPN config" button on machine pages is a placeholder for this). The gateway could be the small Debian
+  VM in [plan.md](plan.md#2-lab-architecture-on-vsphere), or OPNsense as router and WireGuard server
+  (Jake's suggestion; it already has a template). Exercises' routing and appliance tracks need this.
 - **Health tasks:** a periodic check that templates still deploy, and evaluation licences
   (Windows 11 lasts 90 days) are rebuilt in time.
 - **Nested ESXi:** the ISO needs a Broadcom login; Jake may supply it.
@@ -263,8 +291,8 @@ the PC, and the DHCP server's lease count.
 
 ## The lab today
 
-- **Datastore:** datastore1, 583.5 GB over two extents, about 73 GB free on 2026-10-24. The PC's
-  own free disk is the real limit.
+- **Datastore:** datastore1, 583.5 GB over two extents, about 119 GB free on 2026-10-27 after
+  retiring three templates. The PC's own free disk is the real limit.
 - **Memory:** the panel counts 46 GB with overcommit; vCenter uses 14 GB of it.
 - **Deploys:** at most 2 or 3 test machines at once.
 - **Limits on what Claude may do in the lab:**
