@@ -165,10 +165,9 @@
   extras: [iis, mssql, outlook, domain-controller, join-domain, brookfield-dc]   # SQL Server and Outlook: built with prepare.ps1 -SqlServer and -Office
 - template: windows-server
   version: "2022"
-  # Retired 2026-10-27 to free datastore space for the Brookfield Pro Lab; rebuild with
-  # packer/build.sh windows-server -var version=2022 (Office and SQL Server files) when it's needed.
-  planned: true
-  # vsphere: Labs/Templates/tpl-windows-server-2022-20261018
+  # Built by Packer (packer/build.sh windows-server -var version=2022) on 2026-10-28, with Office's and
+  # SQL Server's files (rebuilt after its retirement on 2026-10-27).
+  vsphere: Labs/Templates/tpl-windows-server-2022-20261028
   cpu: 2
   memoryGB: 4
   diskGB: 60
