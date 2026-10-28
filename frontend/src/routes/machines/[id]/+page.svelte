@@ -122,16 +122,18 @@
 
 	/**
 	 * A Remote Desktop file for the machine, with its user filled in (the password is asked for). It
-	 * opens full screen at the monitor's resolution, with the connection bar to restore it to a
-	 * window. Dynamic resolution asks the machine to follow the window's size where it can; no smart
-	 * sizing, which turns that off in Windows' client.
+	 * opens in a 1280×720 window: without a size, Windows' client asks for 800×600 and won't let the
+	 * window grow past it. Dynamic resolution asks the machine to follow the window's size where it
+	 * can; no smart sizing, which turns that off in Windows' client.
 	 */
 	function rdpFile(ip: string, username: string): string {
 		const lines = [
 			`full address:s:${ip}`,
 			`username:s:${username}`,
 			'prompt for credentials:i:1',
-			'screen mode id:i:2',
+			'screen mode id:i:1',
+			'desktopwidth:i:1280',
+			'desktopheight:i:720',
 			'session bpp:i:32',
 			'dynamic resolution:i:1',
 			'displayconnectionbar:i:1',
