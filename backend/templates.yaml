@@ -46,7 +46,8 @@
   version: "26.04"
   # Built by Packer (packer/build.sh ubuntu) on 2026-10-23, with every extra baked in (and the
   # container apps' Docker images).
-  vsphere: Labs/Templates/tpl-ubuntu-26.04-20261023
+  vsphere: Labs/Templates/tpl-ubuntu-26.04-20261028-j1839
+  # Rebuilt by the panel (templates on demand) on 2026-10-28 with Prometheus, Node Exporter, GitLab and Jenkins.
   build:
     packer: ubuntu
     isos: [ubuntu-26.04.1-live-server-amd64.iso]
@@ -57,8 +58,7 @@
   diskGB: 40
   username: ubuntu
   family: debian
-  extras: [nginx, apache, apache-https, wordpress, nextcloud, nextcloud-snap, postgresql, mariadb, mysql, sqlite, mail, ftp, desktop, docker, juice-shop, dvwa, uptime-kuma, grafana, vaultwarden, gitea, iredmail, minio, python, wazuh-agent, zabbix, zabbix-agent]
-  plannedExtras: [prometheus, node-exporter, gitlab, jenkins]   # in prepare.sh since 2026-10-28; move to extras once rebuilt
+  extras: [nginx, apache, apache-https, wordpress, nextcloud, nextcloud-snap, postgresql, mariadb, mysql, sqlite, mail, ftp, desktop, docker, juice-shop, dvwa, uptime-kuma, grafana, prometheus, node-exporter, vaultwarden, gitea, gitlab, jenkins, iredmail, minio, python, wazuh-agent, zabbix, zabbix-agent]
   # PHP versions for the Apache extras: Ubuntu's own, which the template has with the web apps.
   choices: {php: ["8.5"]}
 
