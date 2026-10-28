@@ -237,6 +237,7 @@ def _tail(path: Path, lines: int = TAIL_LINES) -> str:
 
 def _space_problem(s: Session, vc: VCenter, tpl: catalogue.LiveTemplate) -> str | None:
     cfg = settings()
+    vc.refresh_datastore()
     c = vc.capacity()
     deploying = s.scalars(select(Machine).where(Machine.state == "deploying", Machine.pending.is_(None))).all()
     writing = sum(extras.disk_gb(m.extras or []) for m in deploying)

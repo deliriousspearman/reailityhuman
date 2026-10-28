@@ -984,6 +984,7 @@ def delete_template(template: str, version: str, db: Db, who: Actor) -> dict:
         with connect() as vc:
             builds.delete(db, vc, tpl, who)
             db.commit()
+            vc.refresh_datastore()  # so capacity shows the space freed
             info, isos = vc.templates(), vc.iso_files()
     except VSphereError as e:
         db.rollback()

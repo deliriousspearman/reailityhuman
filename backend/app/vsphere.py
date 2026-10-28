@@ -466,6 +466,14 @@ class VCenter:
             raise VSphereError(f"Couldn't list the datastore's {self.cfg.vcenter_iso_folder} folder: {e}") from e
         return {f.path for f in (getattr(result, "file", None) or [])}
 
+    def refresh_datastore(self) -> None:
+        """Asks vCenter to re-read the datastore's free space now: it otherwise does so every few
+        minutes, so a template deleted a moment ago still counts as using space. Best effort."""
+        try:
+            self.datastore.RefreshDatastoreStorageInfo()
+        except vmodl.MethodFault:
+            pass
+
     def delete_template(self, path: str) -> None:
         """Deletes a template and its files. vCenter won't delete a template with snapshots (every one
         has "clean"), so it's made a VM again first, in the machines' pool, then deleted."""
