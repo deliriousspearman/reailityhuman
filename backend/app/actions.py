@@ -555,14 +555,14 @@ HEARTBEAT_TIMEOUT = 60
 _FAIL_STALLED = text(
     """
     UPDATE procrastinate_jobs SET status = 'failed', attempts = attempts + 1
-     WHERE status = 'doing' AND task_name = 'machine_action'
+     WHERE status = 'doing' AND task_name IN ('machine_action', 'template_build')
        AND (worker_id IS NULL OR worker_id IN (
             SELECT id FROM procrastinate_workers WHERE last_heartbeat < now() - make_interval(secs => :secs)))
     """
 )
-# Our job ids that the queue still has waiting or running.
+# Our job ids that the queue still has waiting or running: machines' jobs and template builds.
 _PENDING = text(
-    "SELECT (args->>'job_id')::int FROM procrastinate_jobs WHERE task_name = 'machine_action' AND status IN ('todo', 'doing')"
+    "SELECT (args->>'job_id')::int FROM procrastinate_jobs WHERE task_name IN ('machine_action', 'template_build') AND status IN ('todo', 'doing')"
 )
 
 

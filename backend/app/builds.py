@@ -334,6 +334,10 @@ def run_build(job_id: int, template: str, version: str, enqueue: Callable[[str, 
             job.detail = f"Cancelled by {job.cancelled_by} before it started."
             reason = job.detail
             ok = None
+        elif tpl and is_built(s, tpl):  # another build finished it meanwhile
+            job.state, job.started_at, job.finished_at = "done", utcnow(), utcnow()
+            job.detail = f"{template} {version} is built already."
+            ok = False
         else:
             job.state, job.started_at = "running", utcnow()
             ok = True
@@ -342,6 +346,9 @@ def run_build(job_id: int, template: str, version: str, enqueue: Callable[[str, 
                 r.state, r.job_id, r.detail = "building", job_id, None
     if ok is None:
         fail_waiting(template, version, reason)
+        return
+    if ok is False:
+        release_waiting(template, version, enqueue)
         return
     try:
         if tpl is None or tpl.build is None:

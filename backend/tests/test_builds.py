@@ -290,3 +290,50 @@ def test_the_sweep_queues_a_lost_build_again(builds_queued):
     assert len(builds_queued) == 1
     builds.ensure_builds(jobs.enqueue_build)  # queued now: not again
     assert len(builds_queued) == 1
+
+
+def test_a_running_build_isnt_taken_for_lost(builds_queued):
+    """The queue still has it (doing): the sweep leaves it alone."""
+    import json
+
+    from sqlalchemy import text
+
+    with session() as s:
+        job = Job(kind="build", template="ubuntu/26.04", action="Build ubuntu 26.04", by="system", state="running", queued_at=utcnow() - timedelta(minutes=5))
+        s.add(job)
+        s.flush()
+        worker = s.scalar(text("INSERT INTO procrastinate_workers DEFAULT VALUES RETURNING id"))  # alive: a fresh heartbeat
+        s.execute(
+            text(
+                "INSERT INTO procrastinate_jobs (queue_name, task_name, lock, args, status, worker_id) "
+                "VALUES ('build', 'template_build', 'template-build', CAST(:args AS jsonb), 'doing', :worker)"
+            ),
+            {"args": json.dumps({"job_id": job.id, "template": "ubuntu", "version": "26.04"}), "worker": worker},
+        )
+        job_id = job.id
+    try:
+        actions.recover_lost_jobs()
+        with session() as s:
+            assert s.get(Job, job_id).state == "running"
+    finally:
+        with session() as s:
+            s.execute(text("DELETE FROM procrastinate_jobs"))
+            s.execute(text("DELETE FROM procrastinate_workers"))
+
+
+def test_a_build_of_a_built_template_just_lets_machines_go(queued, builds_queued):
+    with session() as s:
+        s.add(
+            Machine(
+                id="m-wait", name="wait01", template="ubuntu", version="26.04", owner="jo", state="deploying",
+                vm_name="jo-wait01", username="u", password="p", pending="build",
+            )
+        )
+        job = Job(kind="build", template="ubuntu/26.04", action="Build ubuntu 26.04", by="system")
+        s.add(job)
+        s.flush()
+        job_id = job.id
+    builds.run_build(job_id, "ubuntu", "26.04", jobs.enqueue)
+    with session() as s:
+        assert s.get(Job, job_id).state == "done"
+    assert [d["machine_id"] for d in queued] == ["m-wait"]
