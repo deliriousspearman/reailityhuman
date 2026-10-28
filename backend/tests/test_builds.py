@@ -117,7 +117,8 @@ def throwaway(monkeypatch):
     with connect() as vc:
         for name in vc.templates():
             if name.startswith("tpl-throwaway"):
-                wait(vc.template(f"Labs/Templates/{name}").Destroy_Task(), "Delete")
+                # As the panel does: a template destroyed as one leaves vcsim's hosts listing it.
+                vc.delete_template(f"Labs/Templates/{name}")
 
 
 @pytest.fixture

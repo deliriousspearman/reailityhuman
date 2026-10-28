@@ -471,8 +471,14 @@ class VCenter:
         has "clean"), so it's made a VM again first, in the machines' pool, then deleted."""
         tpl = self.template(path)
         if self.props(tpl, "config.template").get("config.template"):
-            hosts = [h for h in getattr(self.cluster, "host", []) if self.props(h, "runtime.connectionState").get("runtime.connectionState") == "connected"]
-            tpl.MarkAsVirtualMachine(pool=self.pool, host=hosts[0] if hosts else None)
+            try:
+                tpl.MarkAsVirtualMachine(pool=self.pool)  # vCenter picks the host (DRS, or a single host)
+            except vmodl.MethodFault:
+                # A cluster without DRS wants the host named.
+                hosts = [h for h in getattr(self.cluster, "host", []) if self.props(h, "runtime.connectionState").get("runtime.connectionState") == "connected"]
+                if not hosts:
+                    raise
+                tpl.MarkAsVirtualMachine(pool=self.pool, host=hosts[0])
         wait(tpl.Destroy_Task(), "Delete template")
 
     def powered_on(self, vm: vim.VirtualMachine) -> bool:
