@@ -154,7 +154,9 @@ locals {
   }[var.version]
   # The CD's windows folder: an offline build's media folder; else, for 2012 R2 (which can't download
   # them: its TLS is too old), what fetch-legacy.sh downloaded, which 2016 uses too when it's there.
-  legacy_media = "${path.root}/media/windows"
+  # Absolute, as media_dir is: Packer keeps a relative path's folders on the CD (media\windows), and
+  # only the last one (windows) of an absolute path.
+  legacy_media = abspath("${path.root}/media/windows")
   media = var.media_dir != "" ? ["${var.media_dir}/windows"] : (
     var.version == "2012r2" || (local.legacy && fileexists("${local.legacy_media}/cloudbase-init/CloudbaseInitSetup_x64.msi")) ? [local.legacy_media] : []
   )

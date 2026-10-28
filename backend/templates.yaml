@@ -201,6 +201,19 @@
   access: [rdp, ssh, console]
   extras: [iis, domain-controller, join-domain]
 - template: windows-server
+  version: "2012 R2"
+  # Built by Packer (packer/build.sh windows-server -var version=2012r2, after fetch-legacy.sh) on
+  # 2026-10-28: the 180-day evaluation, end of life since October 2023, with PowerShell 5.1 (WMF 5.1),
+  # .NET 4.8 and OpenSSH from Win32-OpenSSH (legacy.ps1). No SQL Server or Outlook, as on 2016.
+  vsphere: Labs/Templates/tpl-windows-server-2012r2-20261028
+  cpu: 2
+  memoryGB: 4
+  diskGB: 60
+  username: labadmin
+  family: windows
+  access: [rdp, ssh, console]
+  extras: [iis, domain-controller, join-domain]
+- template: windows-server
   version: "2025 Core"
   # Built by Packer (packer/build.sh windows-server -var edition=core) on 2026-10-21, with SQL Server's files
   # (and the media folder: the offline install's second rehearsal).

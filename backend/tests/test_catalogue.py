@@ -74,6 +74,7 @@ def test_offered_by_says_what_is_ready(monkeypatch, a_planned_template):
         {"template": "windows-server", "version": "2022", "ready": True},
         {"template": "windows-server", "version": "2019", "ready": True},
         {"template": "windows-server", "version": "2016", "ready": True},
+        {"template": "windows-server", "version": "2012 R2", "ready": True},
         {"template": "windows-server", "version": "2025 Core", "ready": True},
         {"template": "windows", "version": "11", "ready": True},
     ]
