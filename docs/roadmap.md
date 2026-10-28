@@ -202,6 +202,12 @@ full offline install run on a server — the changes are output only, so the ins
 Asked 2026-10-23, each with an option for example data: GitLab CE, Jenkins, Prometheus, FreeBSD,
 Alpine, FreeIPA (on Rocky), ELK, Graylog, k3s, Redis, MongoDB and Tomcat.
 
+**Done 2026-10-28:** Prometheus (with Node Exporter as its own extra), GitLab CE and Jenkins, each with
+example data, and example dashboards for Grafana. Prometheus and Node Exporter are baked into every
+template that has Grafana; GitLab and Jenkins (4 GB of images) only into Ubuntu 24.04 and 26.04. Each
+template lists them under `plannedExtras` until it's rebuilt. **Next:** FreeBSD, Alpine, FreeIPA, ELK,
+Graylog, k3s, Redis, MongoDB, Tomcat.
+
 ### 4. Keep a vCenter session open in the API — not needed (checked 2026-10-27)
 
 This was planned because signing in to vCenter took 14 to 20 seconds, which made opening a console
