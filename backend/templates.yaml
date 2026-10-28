@@ -66,7 +66,8 @@
   version: "24.04"
   # Built by Packer (packer/build.sh ubuntu -var version=24.04 -var iso=ubuntu-24.04.5-live-server-amd64.iso) on 2026-10-22, with every
   # extra baked in.
-  vsphere: Labs/Templates/tpl-ubuntu-24.04-20261023
+  vsphere: Labs/Templates/tpl-ubuntu-24.04-20261028-j1856
+  # Rebuilt by the panel (templates on demand) on 2026-10-28 with Prometheus, Node Exporter, GitLab and Jenkins.
   build:
     packer: ubuntu
     vars: {version: "24.04", iso: ubuntu-24.04.5-live-server-amd64.iso}
@@ -78,8 +79,7 @@
   diskGB: 40
   username: ubuntu
   family: debian
-  extras: [nginx, apache, apache-https, wordpress, nextcloud, nextcloud-snap, postgresql, mariadb, mysql, sqlite, mail, ftp, desktop, docker, juice-shop, dvwa, uptime-kuma, grafana, vaultwarden, gitea, iredmail, minio, python, wazuh, wazuh-agent, zabbix, zabbix-agent]
-  plannedExtras: [prometheus, node-exporter, gitlab, jenkins]   # in prepare.sh since 2026-10-28; move to extras once rebuilt
+  extras: [nginx, apache, apache-https, wordpress, nextcloud, nextcloud-snap, postgresql, mariadb, mysql, sqlite, mail, ftp, desktop, docker, juice-shop, dvwa, uptime-kuma, grafana, prometheus, node-exporter, vaultwarden, gitea, gitlab, jenkins, iredmail, minio, python, wazuh, wazuh-agent, zabbix, zabbix-agent]
   # PHP versions for the Apache extras: Ondřej Surý's PPA's, baked in (prepare.sh's PHP_VERSIONS).
   choices: {php: ["5.6", "7.0", "7.1", "7.2", "7.3", "7.4", "8.0", "8.1", "8.2", "8.3", "8.4", "8.5"]}
 - template: ubuntu
