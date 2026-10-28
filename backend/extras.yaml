@@ -1230,7 +1230,7 @@
       TOKEN, USER, SAMPLE = os.environ["LAB_TOKEN"], os.environ["LAB_USER"], os.environ["LAB_SAMPLE"] == "yes"
 
 
-      def call(method, path, **data):
+      def call(method, path, /, **data):
           req = urllib.request.Request(API + path, method=method, headers={"PRIVATE-TOKEN": TOKEN, "Content-Type": "application/json"},
                                        data=json.dumps(data).encode() if data else None)
           for attempt in range(10):
