@@ -972,19 +972,176 @@
       lab_docker uptime-kuma -p 80:3001 -v uptime-kuma:/app/data louislam/uptime-kuma:2.5.6
       lab_wait_http http://127.0.0.1/
 
+- id: node-exporter
+  name: Node Exporter
+  category: Monitoring
+  description: Prometheus's Node Exporter (in Docker), reporting this machine's CPU, memory, disks and network on port 9100, for a Prometheus to collect.
+  ports: [9100]
+  links: ["http://{ip}:9100/metrics"]
+  notes:
+    - "Add {ip}:9100 to a Prometheus machine's targets (its Targets option when you deploy it, or its prometheus.yml)."
+  debian:
+    packages: [docker.io]
+    script: |
+      lab_docker node-exporter --network host --pid host -v /:/host:ro,rslave prom/node-exporter:v1.12.1 --path.rootfs=/host
+      lab_wait_http http://127.0.0.1:9100/metrics
+
+- id: prometheus
+  name: Prometheus
+  category: Monitoring
+  description: Prometheus (in Docker), collecting metrics and evaluating alert rules, with its web interface on port 9090. Optionally with example data, and other machines to collect from.
+  ports: [9090]
+  links: ["http://{ip}:9090/"]
+  notes:
+    - "Its web interface has no sign-in: keep it on the lab network. Its settings are in /etc/prometheus-lab/prometheus.yml; after changing them, run sudo docker kill -s HUP prometheus."
+    - text: "Example data: Node Exporter on this machine (port 9100, job node) reports its CPU, memory, disks and network, with example recording rules (instance:node_cpu_utilisation:ratio, …) and alerts (TargetDown, HighCPU, DiskAlmostFull, and Watchdog, always firing) under Alerts. Try node_load1 in the Query page."
+      when: {sample_data: ["yes"]}
+    - "With Grafana on the same machine, Grafana has it as its data source."
+  options:
+    - id: sample_data
+      label: Add example data
+      help: Node Exporter on this machine, so there are real metrics to query from the start, and example recording and alert rules.
+      type: boolean
+      default: "no"
+    - id: targets
+      label: Other machines to collect from
+      help: "Addresses of machines with Node Exporter (or anything else Prometheus can read), separated by commas, e.g. 192.0.2.10, 192.0.2.11:9100. Port 9100 if none is given."
+      type: text
+      pattern: "[A-Za-z0-9.:, -]*"
+  debian:
+    packages: [docker.io]
+    script: |
+      conf=/etc/prometheus-lab
+      mkdir -p "$conf"
+      extra=""
+      for t in $(printf '%s' "$targets" | tr ',' ' '); do
+        case $t in *:*) ;; *) t="$t:9100" ;; esac
+        extra="$extra'$t', "
+      done
+      {
+        printf 'global:\n  scrape_interval: 15s\n  evaluation_interval: 15s\nrule_files: [/etc/prometheus/rules.yml]\n'
+        printf 'scrape_configs:\n  - job_name: prometheus\n    static_configs: [{targets: [localhost:9090]}]\n'
+        if [ "$sample_data" = yes ]; then
+          printf '  - job_name: node\n    static_configs: [{targets: [localhost:9100], labels: {machine: %s}}]\n' "$hostname"
+        fi
+        if [ -n "$extra" ]; then
+          printf '  - job_name: targets\n    static_configs: [{targets: [%s]}]\n' "${extra%, }"
+        fi
+      } >"$conf/prometheus.yml"
+      if [ "$sample_data" = yes ]; then
+        cat >"$conf/rules.yml" <<'EOF'
+      groups:
+        - name: lab-examples
+          rules:
+            - record: instance:node_cpu_utilisation:ratio
+              expr: 1 - avg without (cpu, mode) (rate(node_cpu_seconds_total{mode="idle"}[1m]))
+            - record: instance:node_memory_utilisation:ratio
+              expr: 1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes
+            - alert: TargetDown
+              expr: up == 0
+              for: 1m
+              labels: {severity: critical}
+              annotations: {summary: "{{ $labels.instance }} ({{ $labels.job }}) is down"}
+            - alert: HighCPU
+              expr: instance:node_cpu_utilisation:ratio > 0.8
+              for: 5m
+              labels: {severity: warning}
+              annotations: {summary: "CPU above 80% on {{ $labels.instance }} for 5 minutes"}
+            - alert: DiskAlmostFull
+              expr: node_filesystem_avail_bytes{fstype!~"tmpfs|overlay|squashfs"} / node_filesystem_size_bytes < 0.1
+              for: 5m
+              labels: {severity: warning}
+              annotations: {summary: "Less than 10% free on {{ $labels.mountpoint }} ({{ $labels.instance }})"}
+            - alert: Watchdog
+              expr: vector(1)
+              labels: {severity: none}
+              annotations: {summary: "Always firing, to show alerting works"}
+      EOF
+        lab_docker node-exporter --network host --pid host -v /:/host:ro,rslave prom/node-exporter:v1.12.1 --path.rootfs=/host
+      else
+        echo 'groups: []' >"$conf/rules.yml"
+      fi
+      chmod 644 "$conf"/*.yml
+      lab_docker prometheus --network host -v prometheus:/prometheus -v "$conf:/etc/prometheus:ro" prom/prometheus:v3.15.1
+      lab_wait_http http://127.0.0.1:9090/-/ready
+
 - id: grafana
   name: Grafana
   category: Monitoring
-  description: Grafana dashboards as the machine's website (in Docker), with its user as the administrator.
+  description: Grafana dashboards as the machine's website (in Docker), with its user as the administrator. With Prometheus on the same machine, that's its data source. Optionally with example dashboards.
   ports: [80]
   password: true
   links: ["http://{ip}/"]
   notes:
     - "Sign in as {username}, with the machine's password."
+    - text: "Example data: the dashboards in the folder Lab examples. Lab demo draws from Grafana's TestData source (no other machine needed); with Prometheus and its example data on this machine, This machine shows its CPU, memory, disk and network."
+      when: {sample_data: ["yes"]}
+  options:
+    - id: sample_data
+      label: Add example dashboards
+      help: A TestData data source and a demo dashboard; with Prometheus here too, a dashboard of this machine's metrics.
+      type: boolean
+      default: "no"
   debian:
     packages: [docker.io]
     script: |
+      prov=/etc/grafana-lab
+      rm -rf "$prov"
+      mkdir -p "$prov/datasources" "$prov/dashboards" "$prov/dashboard-files"
+      # Prometheus on this machine (its extra runs first): Grafana's default data source.
+      prometheus=no
+      if docker inspect prometheus >/dev/null 2>&1; then
+        prometheus=yes
+        printf 'apiVersion: 1\ndatasources:\n  - {name: Prometheus, uid: lab-prometheus, type: prometheus, access: proxy, url: "http://%s:9090", isDefault: true}\n' \
+          "$(lab_ip)" >"$prov/datasources/prometheus.yml"
+      fi
+      if [ "$sample_data" = yes ]; then
+        printf 'apiVersion: 1\ndatasources:\n  - {name: TestData, uid: lab-testdata, type: grafana-testdata-datasource}\n' >"$prov/datasources/testdata.yml"
+        printf 'apiVersion: 1\nproviders:\n  - {name: lab, folder: Lab examples, type: file, options: {path: /var/lib/grafana-dashboards}}\n' >"$prov/dashboards/lab.yml"
+        cat >"$prov/dashboard-files/lab-demo.json" <<'EOF'
+      {"uid": "lab-demo", "title": "Lab demo", "time": {"from": "now-6h", "to": "now"}, "refresh": "30s", "schemaVersion": 39,
+       "panels": [
+        {"type": "timeseries", "title": "Requests per second (random walk)", "gridPos": {"x": 0, "y": 0, "w": 12, "h": 8},
+         "datasource": {"type": "grafana-testdata-datasource", "uid": "lab-testdata"},
+         "targets": [{"refId": "A", "scenarioId": "random_walk", "seriesCount": 3, "alias": "web0$seriesIndex"}]},
+        {"type": "gauge", "title": "CPU", "gridPos": {"x": 12, "y": 0, "w": 6, "h": 8},
+         "datasource": {"type": "grafana-testdata-datasource", "uid": "lab-testdata"},
+         "fieldConfig": {"defaults": {"unit": "percent", "min": 0, "max": 100}},
+         "targets": [{"refId": "A", "scenarioId": "random_walk", "min": 0, "max": 100, "startValue": 40}]},
+        {"type": "stat", "title": "Errors today", "gridPos": {"x": 18, "y": 0, "w": 6, "h": 8},
+         "datasource": {"type": "grafana-testdata-datasource", "uid": "lab-testdata"},
+         "targets": [{"refId": "A", "scenarioId": "random_walk", "min": 0, "startValue": 12}]},
+        {"type": "table", "title": "Servers", "gridPos": {"x": 0, "y": 8, "w": 24, "h": 7},
+         "datasource": {"type": "grafana-testdata-datasource", "uid": "lab-testdata"},
+         "targets": [{"refId": "A", "scenarioId": "csv_content",
+                      "csvContent": "server,role,status,uptime_days\nweb01,web,up,41\nweb02,web,up,41\ndb01,database,up,97\nbackup01,backup,down,0"}]}
+       ]}
+      EOF
+        if [ "$prometheus" = yes ]; then
+          cat >"$prov/dashboard-files/this-machine.json" <<'EOF'
+      {"uid": "lab-node", "title": "This machine", "time": {"from": "now-1h", "to": "now"}, "refresh": "30s", "schemaVersion": 39,
+       "panels": [
+        {"type": "timeseries", "title": "CPU used", "gridPos": {"x": 0, "y": 0, "w": 12, "h": 8},
+         "datasource": {"type": "prometheus", "uid": "lab-prometheus"}, "fieldConfig": {"defaults": {"unit": "percentunit", "min": 0, "max": 1}},
+         "targets": [{"refId": "A", "expr": "1 - avg by (instance) (rate(node_cpu_seconds_total{mode=\"idle\"}[1m]))", "legendFormat": "{{instance}}"}]},
+        {"type": "timeseries", "title": "Memory used", "gridPos": {"x": 12, "y": 0, "w": 12, "h": 8},
+         "datasource": {"type": "prometheus", "uid": "lab-prometheus"}, "fieldConfig": {"defaults": {"unit": "percentunit", "min": 0, "max": 1}},
+         "targets": [{"refId": "A", "expr": "1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes", "legendFormat": "{{instance}}"}]},
+        {"type": "bargauge", "title": "Disk free", "gridPos": {"x": 0, "y": 8, "w": 12, "h": 8},
+         "datasource": {"type": "prometheus", "uid": "lab-prometheus"}, "fieldConfig": {"defaults": {"unit": "bytes"}},
+         "targets": [{"refId": "A", "expr": "node_filesystem_avail_bytes{fstype!~\"tmpfs|overlay|squashfs\"}", "legendFormat": "{{mountpoint}}"}]},
+        {"type": "timeseries", "title": "Network", "gridPos": {"x": 12, "y": 8, "w": 12, "h": 8},
+         "datasource": {"type": "prometheus", "uid": "lab-prometheus"}, "fieldConfig": {"defaults": {"unit": "Bps"}},
+         "targets": [{"refId": "A", "expr": "rate(node_network_receive_bytes_total{device!=\"lo\"}[1m])", "legendFormat": "in {{device}}"},
+                     {"refId": "B", "expr": "rate(node_network_transmit_bytes_total{device!=\"lo\"}[1m])", "legendFormat": "out {{device}}"}]}
+       ]}
+      EOF
+        fi
+      fi
+      chmod -R a+rX "$prov"
       lab_docker grafana -p 80:3000 -v grafana:/var/lib/grafana \
+        -v "$prov/datasources:/etc/grafana/provisioning/datasources:ro" -v "$prov/dashboards:/etc/grafana/provisioning/dashboards:ro" \
+        -v "$prov/dashboard-files:/var/lib/grafana-dashboards:ro" \
         -e GF_SECURITY_ADMIN_USER="$username" -e GF_SECURITY_ADMIN_PASSWORD="$password" grafana/grafana:13.2.4
       lab_wait_http http://127.0.0.1/
 
@@ -1025,6 +1182,270 @@
       lab_wait_http http://127.0.0.1/
       docker exec -u git gitea gitea admin user create --admin --username "$username" --password "$password" \
         --email "$username@$hostname.lab.example" --must-change-password=false
+
+- id: gitlab
+  name: GitLab CE
+  category: Developer tools
+  description: GitLab Community Edition (in Docker), Git hosting with issues, merge requests and CI/CD, as the machine's website, with its user as an administrator. Git over SSH on port 2222. Optionally with example projects. It needs 8 GB of memory and takes about ten minutes to start.
+  ports: [80, 2222]
+  minMemoryGB: 8
+  minCPU: 4
+  diskGB: 10
+  setupMinutes: 20
+  password: true
+  links: ["http://{ip}/"]
+  notes:
+    - "Sign in as {username} (or root), with the machine's password. Clone over SSH with ssh://git@{ip}:2222/<group>/<project>.git. There are no CI runners: pipelines wait."
+    - text: "Example data: the group lab-examples with webapp (a small Flask app with CI settings, issues, labels, a milestone and an open merge request) and infrastructure (deployment scripts, with a password committed and then removed, still in its history), and a CI/CD variable."
+      when: {sample_data: ["yes"]}
+  options:
+    - id: sample_data
+      label: Add example projects
+      help: A group with two projects, their issues, labels, a milestone, a merge request and a CI/CD variable; one project has a password left in its Git history, to find.
+      type: boolean
+      default: "no"
+  debian:
+    packages: [docker.io]
+    script: |
+      ip=$(lab_ip)
+      lab_docker gitlab --hostname "$hostname" -p 80:80 -p 2222:22 --shm-size 256m \
+        -v gitlab-config:/etc/gitlab -v gitlab-logs:/var/log/gitlab -v gitlab-data:/var/opt/gitlab \
+        -e GITLAB_ROOT_PASSWORD="$password" \
+        -e GITLAB_OMNIBUS_CONFIG="external_url 'http://$ip'; gitlab_rails['gitlab_shell_ssh_port'] = 2222; puma['worker_processes'] = 0; sidekiq['concurrency'] = 10; prometheus_monitoring['enable'] = false; gitlab_rails['usage_ping_enabled'] = false" \
+        gitlab/gitlab-ce:19.5.1-ce.0
+      # Ready once every part of it answers (from inside: the check only answers to localhost).
+      for _ in $(seq 180); do
+        docker exec gitlab curl -fs -o /dev/null 'http://localhost/-/readiness?all=1' 2>/dev/null && break
+        sleep 10
+      done
+      docker exec gitlab curl -fs -o /dev/null 'http://localhost/-/readiness?all=1' || { echo "GitLab didn't start in 30 minutes."; exit 1; }
+      # A token for root, for an hour, to set the rest up through GitLab's API; deleted at the end.
+      token="glpat-$(head -c 24 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c 20)"
+      docker exec -e LAB_TOKEN="$token" gitlab gitlab-rails runner \
+        "t = User.find_by_username('root').personal_access_tokens.create!(name: 'lab-panel-setup', scopes: ['api', 'sudo'], expires_at: 1.day.from_now); t.set_token(ENV['LAB_TOKEN']); t.save!"
+      LAB_TOKEN=$token LAB_USER=$username LAB_PASSWORD=$password LAB_HOST=$hostname LAB_SAMPLE=$sample_data python3 - <<'EOF'
+      import json, os, sys, time, urllib.error, urllib.parse, urllib.request
+
+      API = "http://127.0.0.1/api/v4"
+      TOKEN, USER, SAMPLE = os.environ["LAB_TOKEN"], os.environ["LAB_USER"], os.environ["LAB_SAMPLE"] == "yes"
+
+
+      def call(method, path, **data):
+          req = urllib.request.Request(API + path, method=method, headers={"PRIVATE-TOKEN": TOKEN, "Content-Type": "application/json"},
+                                       data=json.dumps(data).encode() if data else None)
+          for attempt in range(10):
+              try:
+                  with urllib.request.urlopen(req, timeout=60) as r:
+                      body = r.read()
+                      return json.loads(body) if body else None
+              except urllib.error.HTTPError as e:
+                  if e.code >= 500 and attempt < 9:
+                      time.sleep(10)
+                      continue
+                  sys.exit(f"GitLab refused {method} {path}: {e.code} {e.read().decode(errors='replace')[:300]}")
+
+
+      users = call("GET", "/users?username=" + urllib.parse.quote(USER))
+      user = users[0] if users else call(
+          "POST", "/users", username=USER, name=USER, email=f"{USER}@{os.environ['LAB_HOST']}.lab.example",
+          password=os.environ["LAB_PASSWORD"], admin=True, skip_confirmation=True)
+      call("PUT", "/application/settings", signup_enabled=False)
+      if not SAMPLE:
+          sys.exit(0)
+
+      group = call("POST", "/groups", name="Lab examples", path="lab-examples", visibility="internal")
+      call("POST", f"/groups/{group['id']}/members", user_id=user["id"], access_level=50)
+
+
+      def project(name, description, files, message):
+          p = call("POST", "/projects", name=name, namespace_id=group["id"], description=description, visibility="internal",
+                   initialize_with_readme=False)
+          call("POST", f"/projects/{p['id']}/repository/commits", branch="main", commit_message=message,
+               actions=[{"action": "create", "file_path": f, "content": c} for f, c in files.items()])
+          return p
+
+
+      web = project("webapp", "A small Flask web app, with tests and CI settings.", {
+          "README.md": "# webapp\n\nA small Flask app. Run it with `flask --app app run`.\n",
+          "app.py": "from flask import Flask\n\napp = Flask(__name__)\n\n\n@app.get('/')\ndef index():\n    return 'Hello from webapp'\n",
+          "requirements.txt": "flask==3.1.2\npytest==8.4.2\n",
+          "tests/test_app.py": "from app import app\n\n\ndef test_index():\n    assert app.test_client().get('/').status_code == 200\n",
+          ".gitlab-ci.yml": "stages: [test, build]\n\ntest:\n  stage: test\n  image: python:3.12\n  script:\n    - pip install -r requirements.txt\n    - pytest\n\nbuild:\n  stage: build\n  image: python:3.12\n  script:\n    - echo Building webapp\n",
+      }, "First version of webapp")
+      pid = web["id"]
+      for name, color in (("bug", "#d9534f"), ("feature", "#5cb85c"), ("security", "#f0ad4e")):
+          call("POST", f"/projects/{pid}/labels", name=name, color=color)
+      milestone = call("POST", f"/projects/{pid}/milestones", title="v1.0", description="The first release.")
+      issues = [
+          ("Login page returns 500 with an empty password", "Steps: open /login, leave the password empty, submit.", "bug"),
+          ("Add a login page", "Users need to sign in before they see their dashboard.", "feature"),
+          ("Session cookie is missing the Secure flag", "Found in the last security review.", "security"),
+          ("Write the deployment guide", "How to run webapp behind nginx.", "feature"),
+          ("Typo on the home page", "'Helo' should be 'Hello'.", "bug"),
+      ]
+      for title, text, label in issues:
+          issue = call("POST", f"/projects/{pid}/issues", title=title, description=text, labels=label, milestone_id=milestone["id"])
+      call("PUT", f"/projects/{pid}/issues/{issue['iid']}", state_event="close")
+      call("POST", f"/projects/{pid}/repository/branches", branch="feature/login", ref="main")
+      call("POST", f"/projects/{pid}/repository/commits", branch="feature/login", commit_message="Add a login page",
+           actions=[{"action": "create", "file_path": "templates/login.html",
+                     "content": "<form method=\"post\">\n  <input name=\"user\">\n  <input name=\"password\" type=\"password\">\n  <button>Sign in</button>\n</form>\n"}])
+      call("POST", f"/projects/{pid}/merge_requests", source_branch="feature/login", target_branch="main", title="Add a login page",
+           description="Closes #2.", labels="feature", milestone_id=milestone["id"])
+      call("POST", f"/projects/{pid}/variables", key="DEPLOY_TOKEN", value="lab-example-not-a-real-token", masked=False)
+
+      infra = project("infrastructure", "Deployment scripts for webapp.", {
+          "README.md": "# infrastructure\n\nScripts that deploy webapp.\n",
+          "deploy.sh": "#!/bin/sh\nset -e\n. ./secrets.env\nscp -r app/ deploy@web01:/srv/webapp\n",
+          "secrets.env": "DB_PASSWORD=Summer2024!\nAPI_KEY=lab-example-key-123\n",
+      }, "Add deployment scripts")
+      call("POST", f"/projects/{infra['id']}/repository/commits", branch="main", commit_message="Remove secrets from the repository",
+           actions=[{"action": "delete", "file_path": "secrets.env"}])
+      EOF
+      # The setup token goes: only the people signing in remain.
+      docker exec gitlab gitlab-rails runner "PersonalAccessToken.where(name: 'lab-panel-setup').each(&:revoke!)" >/dev/null
+
+- id: jenkins
+  name: Jenkins
+  category: Developer tools
+  description: Jenkins LTS (in Docker) on port 8080, with pipelines, configuration as code and Job DSL, and its user as the administrator. Optionally with example jobs and their builds.
+  ports: [8080]
+  minMemoryGB: 4
+  diskGB: 3
+  setupMinutes: 5
+  password: true
+  links: ["http://{ip}:8080/"]
+  notes:
+    - "Sign in as {username}, with the machine's password. Its settings are configuration as code: /etc/jenkins-lab/jenkins.yaml, applied at each start."
+    - text: "Example jobs, each built once: hello-pipeline, parameterized-deploy (dev, staging or prod), flaky-tests (fails half the time), uses-a-secret (the credential deploy-api-key) and nightly-backup (a freestyle job on a schedule)."
+      when: {sample_data: ["yes"]}
+  options:
+    - id: sample_data
+      label: Add example jobs
+      help: Five jobs (pipelines, parameters, a flaky one, one using a stored credential, a scheduled freestyle job), each built once so there's history.
+      type: boolean
+      default: "no"
+  debian:
+    packages: [docker.io]
+    script: |
+      ip=$(lab_ip)
+      conf=/etc/jenkins-lab
+      mkdir -p "$conf"
+      # Configuration as code: the user and password come from the container's environment (${...} is
+      # read by Jenkins, not here), so nothing in them can change the file.
+      cat >"$conf/jenkins.yaml" <<'EOF'
+      jenkins:
+        systemMessage: "Jenkins on a lab machine, set up by the lab panel."
+        numExecutors: 2
+        securityRealm:
+          local:
+            allowsSignup: false
+            users:
+              - id: "${LAB_USER}"
+                password: "${LAB_PASSWORD}"
+        authorizationStrategy:
+          loggedInUsersCanDoAnything:
+            allowAnonymousRead: false
+      unclassified:
+        location:
+          url: "${LAB_URL}"
+      EOF
+      if [ "$sample_data" = yes ]; then
+        cat >>"$conf/jenkins.yaml" <<'EOF'
+      credentials:
+        system:
+          domainCredentials:
+            - credentials:
+                - string:
+                    scope: GLOBAL
+                    id: deploy-api-key
+                    description: An example secret for uses-a-secret
+                    secret: lab-example-not-a-real-key
+      jobs:
+        - script: |
+            pipelineJob('hello-pipeline') {
+              description('A pipeline in stages, with an artifact.')
+              definition { cps { sandbox(true); script('''
+                pipeline {
+                  agent any
+                  stages {
+                    stage('Checkout') { steps { echo 'Checking out the code' } }
+                    stage('Build') { steps { sh 'echo Building; sleep 2' } }
+                    stage('Test') { steps { sh 'echo 12 tests passed' } }
+                    stage('Package') { steps { writeFile file: 'app.txt', text: 'build output'; archiveArtifacts 'app.txt' } }
+                  }
+                }
+              ''') } }
+            }
+            pipelineJob('parameterized-deploy') {
+              description('Choose where to deploy.')
+              parameters {
+                choiceParam('TARGET', ['dev', 'staging', 'prod'], 'Where to deploy')
+                booleanParam('DRY_RUN', true, 'Only show what would happen')
+              }
+              definition { cps { sandbox(true); script('''
+                pipeline {
+                  agent any
+                  stages {
+                    stage('Deploy') { steps { echo 'Deploying to ' + params.TARGET + (params.DRY_RUN ? ' (dry run)' : '') } }
+                  }
+                }
+              ''') } }
+            }
+            pipelineJob('flaky-tests') {
+              description('Fails about half the time.')
+              definition { cps { sandbox(true); script('''
+                pipeline {
+                  agent any
+                  stages {
+                    stage('Test') { steps { sh 'test $(( $$ % 2 )) -eq 0 || { echo One test failed; exit 1; }' } }
+                  }
+                }
+              ''') } }
+            }
+            pipelineJob('uses-a-secret') {
+              description('Uses the credential deploy-api-key.')
+              definition { cps { sandbox(true); script('''
+                pipeline {
+                  agent any
+                  stages {
+                    stage('Call the API') {
+                      steps {
+                        withCredentials([string(credentialsId: 'deploy-api-key', variable: 'KEY')]) {
+                          sh 'echo Calling the API with a key of $(printf %s "$KEY" | wc -c) characters'
+                        }
+                      }
+                    }
+                  }
+                }
+              ''') } }
+            }
+            freeStyleJob('nightly-backup') {
+              description('A freestyle job on a schedule.')
+              triggers { cron('H 2 * * *') }
+              steps { shell('echo Backing up; tar czf backup.tgz --files-from /dev/null') }
+            }
+      EOF
+      fi
+      chmod 644 "$conf/jenkins.yaml"
+      lab_docker jenkins -p 8080:8080 -v jenkins:/var/jenkins_home -v "$conf:/var/jenkins_casc:ro" \
+        -e CASC_JENKINS_CONFIG=/var/jenkins_casc/jenkins.yaml -e LAB_USER="$username" -e LAB_PASSWORD="$password" \
+        -e LAB_URL="http://$ip:8080/" lab-deploy/jenkins:2.580.2
+      lab_wait_http http://127.0.0.1:8080/login 600
+      for _ in $(seq 120); do
+        [ "$(curl -s -o /dev/null -w '%{http_code}' -u "$username:$password" http://127.0.0.1:8080/api/json)" = 200 ] && break
+        sleep 5
+      done
+      if [ "$sample_data" = yes ]; then
+        # Each job built once, so there's history (a crumb with its session cookie, as Jenkins asks).
+        jar=$(mktemp)
+        crumb=$(curl -fsS -c "$jar" -u "$username:$password" 'http://127.0.0.1:8080/crumbIssuer/api/xml?xpath=concat(//crumbRequestField,":",//crumb)')
+        for job in hello-pipeline flaky-tests uses-a-secret nightly-backup; do
+          curl -fsS -b "$jar" -u "$username:$password" -H "$crumb" -X POST "http://127.0.0.1:8080/job/$job/build" -o /dev/null
+        done
+        curl -fsS -b "$jar" -u "$username:$password" -H "$crumb" -X POST "http://127.0.0.1:8080/job/parameterized-deploy/buildWithParameters?TARGET=staging" -o /dev/null
+        rm -f "$jar"
+      fi
 
 - id: minio
   name: MinIO

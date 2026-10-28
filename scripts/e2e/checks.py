@@ -166,6 +166,47 @@ CASES: dict[str, list[dict]] = {
                 ("http", "http", 80, "/login", "Grafana"),
                 ("ssh", "curl -s -u {username}:{password} http://127.0.0.1/api/user", '"isGrafanaAdmin":true'),
             ],
+        },
+        {
+            "options": {"sample_data": "yes"},
+            "checks": [("ssh", "curl -s -u {username}:{password} 'http://127.0.0.1/api/search?query=Lab%20demo'", '"title":"Lab demo"')],
+        },
+    ],
+    "node-exporter": [{"options": {}, "checks": [("http", "http", 9100, "/metrics", "node_cpu_seconds_total")]}],
+    "prometheus": [
+        {"options": {}, "checks": [("http", "http", 9090, "/-/ready", "Ready")]},
+        {
+            "options": {"sample_data": "yes"},
+            "checks": [
+                ("http", "http", 9100, "/metrics", "node_cpu_seconds_total"),
+                ("ssh", "curl -s http://127.0.0.1:9090/api/v1/rules", '"name":"Watchdog"'),
+                ("ssh", "sleep 20; curl -s 'http://127.0.0.1:9090/api/v1/query?query=up%7Bjob%3D%22node%22%7D'", '"job":"node"'),
+            ],
+        },
+    ],
+    "gitlab": [
+        {
+            "options": {"sample_data": "yes"},
+            "checks": [
+                ("http", "http", 80, "/users/sign_in", "GitLab"),
+                ("tcp", 2222),
+                (
+                    "ssh",
+                    "echo {password} | sudo -S -p '' docker exec gitlab gitlab-rails runner "
+                    "'puts Project.where(path: %w[webapp infrastructure]).count, User.find_by_username(\"{username}\").admin'",
+                    "2\ntrue",
+                ),
+            ],
+        }
+    ],
+    "jenkins": [
+        {
+            "options": {"sample_data": "yes"},
+            "checks": [
+                ("http", "http", 8080, "/login", "Jenkins"),
+                ("ssh", "curl -s -u {username}:{password} 'http://127.0.0.1:8080/api/json?tree=jobs%5Bname%5D'", '"hello-pipeline"'),
+                ("ssh", "sleep 30; curl -s -u {username}:{password} http://127.0.0.1:8080/job/hello-pipeline/lastBuild/api/json", '"result":"SUCCESS"'),
+            ],
         }
     ],
     "vaultwarden": [{"options": {}, "checks": [("http", "https", 443, "/", "Vaultwarden")]}],

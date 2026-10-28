@@ -50,14 +50,15 @@
   build:
     packer: ubuntu
     isos: [ubuntu-26.04.1-live-server-amd64.iso]
-    minutes: 15
-    sizeGB: 18
+    minutes: 25
+    sizeGB: 23
   cpu: 2
   memoryGB: 2
   diskGB: 40
   username: ubuntu
   family: debian
   extras: [nginx, apache, apache-https, wordpress, nextcloud, nextcloud-snap, postgresql, mariadb, mysql, sqlite, mail, ftp, desktop, docker, juice-shop, dvwa, uptime-kuma, grafana, vaultwarden, gitea, iredmail, minio, python, wazuh-agent, zabbix, zabbix-agent]
+  plannedExtras: [prometheus, node-exporter, gitlab, jenkins]   # in prepare.sh since 2026-10-28; move to extras once rebuilt
   # PHP versions for the Apache extras: Ubuntu's own, which the template has with the web apps.
   choices: {php: ["8.5"]}
 
@@ -70,14 +71,15 @@
     packer: ubuntu
     vars: {version: "24.04", iso: ubuntu-24.04.5-live-server-amd64.iso}
     isos: [ubuntu-24.04.5-live-server-amd64.iso]
-    minutes: 40
-    sizeGB: 21
+    minutes: 45
+    sizeGB: 26
   cpu: 2
   memoryGB: 2
   diskGB: 40
   username: ubuntu
   family: debian
   extras: [nginx, apache, apache-https, wordpress, nextcloud, nextcloud-snap, postgresql, mariadb, mysql, sqlite, mail, ftp, desktop, docker, juice-shop, dvwa, uptime-kuma, grafana, vaultwarden, gitea, iredmail, minio, python, wazuh, wazuh-agent, zabbix, zabbix-agent]
+  plannedExtras: [prometheus, node-exporter, gitlab, jenkins]   # in prepare.sh since 2026-10-28; move to extras once rebuilt
   # PHP versions for the Apache extras: Ondřej Surý's PPA's, baked in (prepare.sh's PHP_VERSIONS).
   choices: {php: ["5.6", "7.0", "7.1", "7.2", "7.3", "7.4", "8.0", "8.1", "8.2", "8.3", "8.4", "8.5"]}
 - template: ubuntu
@@ -98,6 +100,7 @@
   family: debian
   # Not Nextcloud: it needs PHP 8.3, and 22.04 has 8.1 (the snap brings its own).
   extras: [nginx, apache, apache-https, wordpress, nextcloud-snap, postgresql, mariadb, mysql, sqlite, mail, ftp, desktop, docker, juice-shop, dvwa, uptime-kuma, grafana, vaultwarden, gitea, minio, python, wazuh, wazuh-agent, zabbix, zabbix-agent]
+  plannedExtras: [prometheus, node-exporter]   # in prepare.sh since 2026-10-28; move to extras once rebuilt
   # PHP versions for the Apache extras: Ondřej Surý's PPA's, baked in (prepare.sh's PHP_VERSIONS).
   choices: {php: ["5.6", "7.0", "7.1", "7.2", "7.3", "7.4", "8.0", "8.1", "8.2", "8.3", "8.4", "8.5"]}
 
@@ -118,6 +121,7 @@
   username: labuser
   family: debian
   extras: [nginx, apache, apache-https, wordpress, nextcloud, nextcloud-snap, postgresql, mariadb, sqlite, mail, ftp, desktop, docker, juice-shop, dvwa, uptime-kuma, grafana, vaultwarden, gitea, iredmail, minio, python, wazuh-agent, zabbix, zabbix-agent]
+  plannedExtras: [prometheus, node-exporter]   # in prepare.sh since 2026-10-28; move to extras once rebuilt
 - template: debian
   version: "12"
   # Built by Packer (packer/build.sh debian -var version=12 -var iso=debian-12.15.0-amd64-netinst.iso) on 2026-10-23.
@@ -135,6 +139,7 @@
   family: debian
   # Not Nextcloud: it needs PHP 8.3, and 12 has 8.2 (the snap brings its own).
   extras: [nginx, apache, apache-https, wordpress, nextcloud-snap, postgresql, mariadb, sqlite, mail, ftp, desktop, docker, juice-shop, dvwa, uptime-kuma, grafana, vaultwarden, gitea, iredmail, minio, python, wazuh, wazuh-agent, zabbix, zabbix-agent]
+  plannedExtras: [prometheus, node-exporter]   # in prepare.sh since 2026-10-28; move to extras once rebuilt
 
 # Debian 11 and 10 (and 9, 8): legacy practice targets, out of support. Their cloud-init can't read the
 # panel's data, so they get lab-firstboot (family legacy) and no extras; 10 and older install from
@@ -658,6 +663,7 @@
   access: [ssh, rdp, console]
   always: [gnome-remote-login]
   extras: [python, docker, juice-shop, dvwa, uptime-kuma, grafana, vaultwarden, gitea, wazuh-agent, zabbix-agent]
+  plannedExtras: [prometheus, node-exporter]   # in prepare.sh since 2026-10-28; move to extras once rebuilt
 - template: ubuntu-desktop
   version: "24.04"
   # Built by Packer (packer/build.sh ubuntu -var desktop=true -var version=24.04 -var iso=ubuntu-24.04.5-live-server-amd64.iso) on 2026-10-23.
@@ -675,6 +681,7 @@
   family: debian
   access: [ssh, rdp, console]
   extras: [python, docker, juice-shop, dvwa, uptime-kuma, grafana, vaultwarden, gitea, wazuh-agent, zabbix-agent]
+  plannedExtras: [prometheus, node-exporter]   # in prepare.sh since 2026-10-28; move to extras once rebuilt
 - template: ubuntu-desktop
   version: "22.04"
   # Built by Packer (packer/build.sh ubuntu -var desktop=true -var version=22.04 -var iso=ubuntu-22.04.5-live-server-amd64.iso) on 2026-10-23.
@@ -692,6 +699,7 @@
   family: debian
   access: [ssh, rdp, console]
   extras: [python, docker, juice-shop, dvwa, uptime-kuma, grafana, vaultwarden, gitea, wazuh-agent, zabbix-agent]
+  plannedExtras: [prometheus, node-exporter]   # in prepare.sh since 2026-10-28; move to extras once rebuilt
 
 # Kali Linux and Parrot Security: attack boxes, reached over Remote Desktop to their own desktop
 # (packer/kali, or by hand: docs/setup-vsphere.md, "Kali Linux and Parrot Security templates"). Not
@@ -712,6 +720,7 @@
   family: debian
   access: [ssh, rdp, console]
   extras: [nginx, apache, apache-https, wordpress, nextcloud, nextcloud-snap, postgresql, mariadb, sqlite, mail, ftp, docker, juice-shop, dvwa, uptime-kuma, grafana, vaultwarden, gitea, minio, python, wazuh-agent, zabbix-agent]
+  plannedExtras: [prometheus, node-exporter]   # in prepare.sh since 2026-10-28; move to extras once rebuilt
 - template: parrot
   version: "7"
   # Built by Packer (packer/parrot) on 2026-10-23, from Parrot Security 7.4's own image.
@@ -723,6 +732,7 @@
   family: debian
   access: [ssh, rdp, console]
   extras: [nginx, apache, apache-https, wordpress, nextcloud, nextcloud-snap, postgresql, mariadb, sqlite, mail, ftp, docker, juice-shop, dvwa, uptime-kuma, grafana, vaultwarden, gitea, minio, python, wazuh-agent, zabbix-agent]
+  plannedExtras: [prometheus, node-exporter]   # in prepare.sh since 2026-10-28; move to extras once rebuilt
 
 # The RHEL family: CentOS Stream, Rocky Linux, AlmaLinux (packer/rhel, kickstart from the boot ISO).
 # Its extras so far are the web servers. Planned until each template is built.

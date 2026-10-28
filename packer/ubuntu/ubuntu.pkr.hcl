@@ -80,7 +80,7 @@ variable "desktop" {
 }
 variable "desktop_extras" {
   type    = string
-  default = "python,docker,juice-shop,dvwa,uptime-kuma,grafana,vaultwarden,gitea,wazuh-agent,zabbix-agent"
+  default = "python,docker,juice-shop,dvwa,uptime-kuma,grafana,prometheus,node-exporter,vaultwarden,gitea,wazuh-agent,zabbix-agent"
 }
 variable "zimbra_mirror" {
   type    = string

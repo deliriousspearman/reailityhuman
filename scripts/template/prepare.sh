@@ -74,6 +74,11 @@ declare -A EXTRA_PACKAGES_DEBIAN=(
 	[grafana]="docker.io"
 	[vaultwarden]="docker.io"
 	[gitea]="docker.io"
+	[prometheus]="docker.io"
+	[node-exporter]="docker.io"
+	# Big (GitLab's image is 3.5 GB): only baked in on Ubuntu 24.04 and 26.04 servers (BIG_HERE).
+	[gitlab]="docker.io"
+	[jenkins]="docker.io"
 	# Not packages: built from source (bake_minio).
 	[minio]=""
 	# The Zimbra template's own (bake_zimbra), never baked in with the rest.
@@ -124,6 +129,10 @@ declare -A EXTRA_SERVICES=(
 	[grafana]="docker containerd"
 	[vaultwarden]="docker containerd"
 	[gitea]="docker containerd"
+	[prometheus]="docker containerd"
+	[node-exporter]="docker containerd"
+	[gitlab]="docker containerd"
+	[jenkins]="docker containerd"
 	[zabbix]="zabbix-server zabbix-agent2 apache2 postgresql"
 	[zabbix-agent]="zabbix-agent2"
 )
@@ -142,7 +151,15 @@ declare -A DOCKER_IMAGES=(
 	[grafana]="grafana/grafana:13.2.4"
 	[vaultwarden]="vaultwarden/server:1.37.4-alpine"
 	[gitea]="gitea/gitea:28.1.0"
+	[prometheus]="prom/prometheus:v3.15.1"
+	[node-exporter]="prom/node-exporter:v1.12.1"
+	[gitlab]="gitlab/gitlab-ce:19.5.1-ce.0"
+	# Built here (bake_jenkins), from JENKINS_BASE with JENKINS_PLUGINS: a clone can't fetch plugins.
+	[jenkins]="lab-deploy/jenkins:2.580.2"
 )
+JENKINS_BASE=jenkins/jenkins:2.580.2-lts-jdk21
+# Pipelines, configuration as code (the extra's users and jobs), Job DSL (its example jobs), Git.
+JENKINS_PLUGINS="configuration-as-code workflow-aggregator job-dsl git pipeline-stage-view"
 # Images whose tag isn't a version: the digest they must have when pulled (DVWA's last build, 2018).
 declare -A DOCKER_DIGESTS=(
 	[dvwa]="sha256:dae203fe11646a86937bf04db0079adef295f426da68a92b40e3b181f337daa7"
@@ -288,6 +305,27 @@ bake_uptime_kuma() { docker_image uptime-kuma; }
 bake_grafana() { docker_image grafana; }
 bake_vaultwarden() { docker_image vaultwarden; }
 bake_gitea() { docker_image gitea; }
+bake_prometheus() { docker_image prometheus; }
+bake_node_exporter() { docker_image node-exporter; }
+bake_gitlab() { docker_image gitlab; }
+# Jenkins with its plugins, as an image of its own; offline, that image is what jenkins.tar holds
+# (scripts/isos/fetch-media.sh builds it the same way).
+bake_jenkins() {
+	local image=${DOCKER_IMAGES[jenkins]}
+	systemctl start docker
+	if [[ $DOCKER_IMAGES_FROM == http* ]]; then
+		curl -fsSL "$DOCKER_IMAGES_FROM/jenkins.tar" | docker load -q
+	elif [[ -n $DOCKER_IMAGES_FROM ]]; then
+		docker load -q -i "$DOCKER_IMAGES_FROM/jenkins.tar"
+	else
+		docker pull -q "$JENKINS_BASE"
+		printf 'FROM %s\nRUN jenkins-plugin-cli --plugins %s\nENV JAVA_OPTS=-Djenkins.install.runSetupWizard=false\n' \
+			"$JENKINS_BASE" "$JENKINS_PLUGINS" | docker build -q -t "$image" - >/dev/null
+		docker rmi -f "$JENKINS_BASE" >/dev/null
+	fi
+	docker image inspect "$image" >/dev/null
+	systemctl disable -q docker.socket 2>/dev/null || true
+}
 
 bake_nextcloud() {
 	mkdir -p /opt/lab-deploy
@@ -575,6 +613,9 @@ case $ID-${VERSION_ID:-} in ubuntu-24.04 | ubuntu-26.04 | debian-12 | debian-13)
 # Releases Wazuh 4.14's server supports (its bundle is 1 GB: only baked in there).
 WAZUH_HERE=0
 case $ID-${VERSION_ID:-} in ubuntu-22.04 | ubuntu-24.04 | debian-12) WAZUH_HERE=1 ;; esac
+# The big container apps (GitLab, Jenkins: 4 GB of images): Ubuntu 24.04 and 26.04 servers only.
+BIG_HERE=0
+case $ID-${VERSION_ID:-} in ubuntu-24.04 | ubuntu-26.04) ((UBUNTU_DESKTOP)) || BIG_HERE=1 ;; esac
 
 # The extras to bake in, and their packages.
 declare -n EXTRA_PACKAGES="EXTRA_PACKAGES_${FAMILY^^}"
@@ -588,6 +629,7 @@ if [[ $WANT_EXTRAS == all ]]; then
 	mapfile -t CHOSEN < <(printf '%s\n' "${CHOSEN[@]}" | grep -vx zimbra)
 	if ! ((GNOME_DESKTOP)); then mapfile -t CHOSEN < <(printf '%s\n' "${CHOSEN[@]}" | grep -vx gnome-remote-login); fi
 	if ! ((WAZUH_HERE)); then mapfile -t CHOSEN < <(printf '%s\n' "${CHOSEN[@]}" | grep -vx wazuh); fi
+	if ! ((BIG_HERE)); then mapfile -t CHOSEN < <(printf '%s\n' "${CHOSEN[@]}" | grep -vxE 'gitlab|jenkins'); fi
 	# Zabbix's server: not on Kali or Parrot (see preseed_zabbix).
 	if [[ $ID == kali || $ID == parrot ]]; then mapfile -t CHOSEN < <(printf '%s\n' "${CHOSEN[@]}" | grep -vx zabbix); fi
 	# A family with no extras (CachyOS) leaves one empty line.

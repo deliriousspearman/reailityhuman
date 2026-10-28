@@ -99,9 +99,10 @@ def test_container_extras_run_the_images_prepare_sh_bakes():
     for x in extras.extras().values():
         script = x.families.get("debian", ("", ""))[1]
         if "lab_docker" in script:
-            # The image is the last word of the lab_docker command (continued over "\" lines).
-            command = re.search(r"lab_docker .*?(?<!\\)\n", script, re.S).group(0)
-            run[x.id] = command.split()[-1]
+            # The extra's own container (lab_docker <its id> ..., continued over "\" lines): its image is
+            # the last word that isn't an option, before the container's own arguments (--path.rootfs=…).
+            command = re.search(rf"lab_docker {re.escape(x.id)} .*?(?<!\\)\n", script, re.S).group(0)
+            run[x.id] = [w for w in command.split() if not w.startswith("-") and w != "\\"][-1]
     assert run, "no extra runs a container"
     assert run == images
     for extra_id in images:
@@ -130,7 +131,7 @@ def test_catalogue_conflicts_are_worked_out():
     it only clashes with what uses 443."""
     found = {i: set(x.conflicts) for i, x in extras.extras().items()}
     web = {"nginx", "apache", "apache-https", "wordpress", "nextcloud", "nextcloud-snap", "mail", "iredmail", "zimbra", "iis",
-           "juice-shop", "dvwa", "uptime-kuma", "grafana", "gitea", "zabbix"}
+           "juice-shop", "dvwa", "uptime-kuma", "grafana", "gitea", "gitlab", "zabbix"}
     https = {"apache-https", "wordpress", "nextcloud", "nextcloud-snap", "mail", "iredmail", "zimbra", "vaultwarden", "wazuh"}
     mysql_port = {"wordpress", "nextcloud", "mariadb", "mysql"}
     for i in web | mysql_port:
@@ -141,7 +142,8 @@ def test_catalogue_conflicts_are_worked_out():
     # Remote Desktop's port: the desktop extra, and Ubuntu Desktop 26.04's own Remote Login (never both
     # on one template).
     assert found["desktop"] == {"gnome-remote-login"} and found["gnome-remote-login"] == {"desktop"}
-    for i in ("ftp", "outlook", "postgresql", "sqlite", "mssql", "docker", "python", "minio", "wazuh-agent", "zabbix-agent"):
+    for i in ("ftp", "outlook", "postgresql", "sqlite", "mssql", "docker", "python", "minio", "wazuh-agent", "zabbix-agent",
+              "prometheus", "node-exporter", "jenkins"):
         assert found[i] == set(), i
 
 
@@ -296,7 +298,7 @@ def test_parse_status():
 def test_config_lists_extras_for_templates_that_have_them(offered):
     t = client.get("/api/config").json()["templates"][0]
     https = next(x for x in t["extras"] if x["id"] == "apache-https")
-    assert https["conflicts"] == ["nginx", "apache", "wordpress", "nextcloud", "nextcloud-snap", "mail", "iredmail", "zimbra", "juice-shop", "dvwa", "uptime-kuma", "grafana", "vaultwarden", "gitea", "wazuh", "zabbix", "iis"]
+    assert https["conflicts"] == ["nginx", "apache", "wordpress", "nextcloud", "nextcloud-snap", "mail", "iredmail", "zimbra", "juice-shop", "dvwa", "uptime-kuma", "grafana", "vaultwarden", "gitea", "gitlab", "wazuh", "zabbix", "iis"]
     assert https["options"][0]["id"] == "domain" and https["options"][0]["default"] == "{fqdn}"
 
 

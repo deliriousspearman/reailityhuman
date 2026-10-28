@@ -20,28 +20,10 @@ const planned: Planned[] = [
 		description: 'Team chat, similar to Slack, with PostgreSQL.',
 	},
 	{
-		id: 'prometheus',
-		name: 'Prometheus',
-		category: 'Monitoring',
-		description: 'Metrics collection and alerting, to pair with Grafana.',
-	},
-	{
 		id: 'pihole',
 		name: 'Pi-hole',
 		category: 'Network services',
 		description: 'DNS server that blocks ads and trackers. Handy as the DNS server for your other machines.',
-	},
-	{
-		id: 'gitlab',
-		name: 'GitLab CE',
-		category: 'Developer tools',
-		description: 'Git hosting with CI/CD. Build servers and their secrets are a common target.',
-	},
-	{
-		id: 'jenkins',
-		name: 'Jenkins',
-		category: 'Developer tools',
-		description: 'Automation server for builds and deployments, with its plugin ecosystem.',
 	},
 	{
 		id: 'wazuh',
