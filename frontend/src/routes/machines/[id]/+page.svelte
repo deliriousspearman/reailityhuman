@@ -122,22 +122,21 @@
 
 	/**
 	 * A Remote Desktop file for the machine, with its user filled in (the password is asked for). It
-	 * opens in a window most of this screen's size, whose resolution follows the window as it's
-	 * resized where the machine can (Windows, GNOME, xrdp 0.10). Without a size, Windows' client
-	 * asks for 800×600 and won't let the window grow past it; and no smart sizing, which turns off
-	 * dynamic resolution there.
+	 * opens full screen at the monitor's resolution, with the connection bar to restore it to a
+	 * window. Dynamic resolution asks the machine to follow the window's size where it can; no smart
+	 * sizing, which turns that off in Windows' client.
 	 */
 	function rdpFile(ip: string, username: string): string {
-		// In device pixels, even (some servers want that), and within RDP's 200–8192.
-		const size = (px: number) => Math.min(8192, Math.max(200, Math.round((px * 0.85 * devicePixelRatio) / 2) * 2));
 		const lines = [
 			`full address:s:${ip}`,
 			`username:s:${username}`,
 			'prompt for credentials:i:1',
-			'screen mode id:i:1',
-			`desktopwidth:i:${size(screen.availWidth)}`,
-			`desktopheight:i:${size(screen.availHeight)}`,
+			'screen mode id:i:2',
+			'session bpp:i:32',
 			'dynamic resolution:i:1',
+			'displayconnectionbar:i:1',
+			'redirectclipboard:i:1',
+			'autoreconnection enabled:i:1',
 		];
 		return `data:application/x-rdp;charset=utf-8,${encodeURIComponent(lines.join('\r\n') + '\r\n')}`;
 	}
