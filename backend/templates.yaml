@@ -177,10 +177,9 @@
   extras: [iis, mssql, outlook, domain-controller, join-domain]
 - template: windows-server
   version: "2019"
-  # Retired 2026-10-27 to free datastore space for the Brookfield Pro Lab; rebuild with
-  # packer/build.sh windows-server -var version=2019 (Office and SQL Server files) when it's needed.
-  planned: true
-  # vsphere: Labs/Templates/tpl-windows-server-2019-20261018
+  # Built by Packer (packer/build.sh windows-server -var version=2019) on 2026-10-28, with Office's and
+  # SQL Server's files (rebuilt after its retirement on 2026-10-27).
+  vsphere: Labs/Templates/tpl-windows-server-2019-20261028
   cpu: 2
   memoryGB: 4
   diskGB: 60

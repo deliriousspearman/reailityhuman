@@ -117,6 +117,18 @@ CASES: dict[str, list[dict]] = {
             "checks": [("ssh", "systemctl is-active zabbix-agent2", "active"), ("tcp", 10050)],
         }
     ],
+    # Active Directory: a new forest (DomainRole 5, a primary domain controller); a member joins one
+    # deployed first, as the agents' servers are.
+    "domain-controller": [
+        {"options": {}, "checks": [("ssh", "(Get-CimInstance Win32_ComputerSystem).DomainRole", "5")]}
+    ],
+    "join-domain": [
+        {
+            "options": {},
+            "server": {"extra": "domain-controller", "option": "dc"},
+            "checks": [("ssh", "(Get-CimInstance Win32_ComputerSystem).PartOfDomain", "True")],
+        }
+    ],
     "zabbix": [
         {
             "options": {},
