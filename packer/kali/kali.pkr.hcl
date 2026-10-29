@@ -77,9 +77,11 @@ variable "media_url" {
   type    = string
   default = ""
 }
+# The extras baked in: an attack box needs only web servers, FTP, Docker and Python (to host payloads
+# and run tools), not the web apps, databases, mail, monitoring and practice targets servers get.
 variable "extras" {
   type    = string
-  default = ""
+  default = "nginx,apache,apache-https,ftp,docker,python"
 }
 variable "vm_name" {
   type    = string

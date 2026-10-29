@@ -44,7 +44,8 @@ def test_the_attack_boxes_and_windows_load_as_built():
     for box in (catalogue.find("kali", "2026.2"), catalogue.find("parrot", "7")):
         assert box.family == "debian" and "rdp" in box.access
         assert "desktop" not in box.extras  # they have their own, over RDP
-        assert "mysql" not in box.extras and "mariadb" in box.extras  # Debian has only MariaDB
+        # Attack boxes: web servers, FTP, Docker and Python only (packer/kali and packer/parrot's extras default)
+        assert box.extras == ("nginx", "apache", "apache-https", "ftp", "docker", "python")
 
 
 def test_planned_templates_are_listed_but_not_deployable():

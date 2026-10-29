@@ -703,7 +703,8 @@
 
 # Kali Linux and Parrot Security: attack boxes, reached over Remote Desktop to their own desktop
 # (packer/kali, or by hand: docs/setup-vsphere.md, "Kali Linux and Parrot Security templates"). Not
-# the desktop extra: they have their own; nor MySQL: Debian has only MariaDB.
+# the desktop extra: they have their own. Only web servers, FTP, Docker and Python (packer/kali and
+# packer/parrot's extras default): not the web apps, databases, mail, monitoring and practice targets.
 - template: kali
   version: "2026.2"
   # Built by Packer (packer/build.sh kali) on 2026-10-23.
@@ -719,8 +720,7 @@
   username: kali
   family: debian
   access: [ssh, rdp, console]
-  extras: [nginx, apache, apache-https, wordpress, nextcloud, nextcloud-snap, postgresql, mariadb, sqlite, mail, ftp, docker, juice-shop, dvwa, uptime-kuma, grafana, vaultwarden, gitea, minio, python, wazuh-agent, zabbix-agent]
-  plannedExtras: [prometheus, node-exporter]   # in prepare.sh since 2026-10-28; move to extras once rebuilt
+  extras: [nginx, apache, apache-https, ftp, docker, python]
 - template: parrot
   version: "7"
   # Built by Packer (packer/parrot) on 2026-10-23, from Parrot Security 7.4's own image.
@@ -731,8 +731,7 @@
   username: labuser
   family: debian
   access: [ssh, rdp, console]
-  extras: [nginx, apache, apache-https, wordpress, nextcloud, nextcloud-snap, postgresql, mariadb, sqlite, mail, ftp, docker, juice-shop, dvwa, uptime-kuma, grafana, vaultwarden, gitea, minio, python, wazuh-agent, zabbix-agent]
-  plannedExtras: [prometheus, node-exporter]   # in prepare.sh since 2026-10-28; move to extras once rebuilt
+  extras: [nginx, apache, apache-https, ftp, docker, python]
 
 # The RHEL family: CentOS Stream, Rocky Linux, AlmaLinux (packer/rhel, kickstart from the boot ISO).
 # Its extras so far are the web servers. Planned until each template is built.
