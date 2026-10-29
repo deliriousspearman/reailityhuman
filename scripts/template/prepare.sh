@@ -76,7 +76,6 @@ declare -A EXTRA_PACKAGES_DEBIAN=(
 	[gitea]="docker.io"
 	[prometheus]="docker.io"
 	[node-exporter]="docker.io"
-	# Big (GitLab's image is 3.5 GB): only baked in on Ubuntu 24.04 and 26.04 servers (BIG_HERE).
 	[gitlab]="docker.io"
 	[jenkins]="docker.io"
 	# Not packages: built from source (bake_minio).
@@ -140,31 +139,8 @@ declare -A EXTRA_SERVICES=(
 WORDPRESS_URL=${WORDPRESS_URL:-https://wordpress.org/latest.tar.gz}
 WP_CLI_URL=${WP_CLI_URL:-https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar}
 NEXTCLOUD_URL=${NEXTCLOUD_URL:-https://download.nextcloud.com/server/releases/latest.tar.bz2}
-# The container apps' images (backend/extras.yaml runs them by these exact names; a backend test
-# checks), pulled into the template's Docker. Offline: DOCKER_IMAGES_FROM=<URL or folder> holding
-# each as <extra id>.tar (docker save; scripts/isos/fetch-media.sh makes them in linux/docker),
-# loaded instead of pulled.
-declare -A DOCKER_IMAGES=(
-	[juice-shop]="bkimminich/juice-shop:v20.3.0"
-	[dvwa]="vulnerables/web-dvwa:latest"
-	[uptime-kuma]="louislam/uptime-kuma:2.5.6"
-	[grafana]="grafana/grafana:13.2.4"
-	[vaultwarden]="vaultwarden/server:1.37.4-alpine"
-	[gitea]="gitea/gitea:28.1.0"
-	[prometheus]="prom/prometheus:v3.15.1"
-	[node-exporter]="prom/node-exporter:v1.12.1"
-	[gitlab]="gitlab/gitlab-ce:19.5.1-ce.0"
-	# Built here (bake_jenkins), from JENKINS_BASE with JENKINS_PLUGINS: a clone can't fetch plugins.
-	[jenkins]="lab-deploy/jenkins:2.580.2"
-)
-JENKINS_BASE=jenkins/jenkins:2.580.2-lts-jdk21
-# Pipelines, configuration as code (the extra's users and jobs), Job DSL (its example jobs), Git.
-JENKINS_PLUGINS="configuration-as-code workflow-aggregator job-dsl git pipeline-stage-view"
-# Images whose tag isn't a version: the digest they must have when pulled (DVWA's last build, 2018).
-declare -A DOCKER_DIGESTS=(
-	[dvwa]="sha256:dae203fe11646a86937bf04db0079adef295f426da68a92b40e3b181f337daa7"
-)
-DOCKER_IMAGES_FROM=${DOCKER_IMAGES_FROM:-}
+# The container apps' images aren't baked in: each comes on a CD of its own at deploy
+# (scripts/isos/fetch-images.sh; extras.py's lab_images). Their extras need only Docker here.
 # The Chinook sample database, the databases' dummy data: a pinned release (checksums below).
 CHINOOK_URL=${CHINOOK_URL:-https://github.com/lerocha/chinook-database/releases/download/v1.4.5}
 
@@ -278,53 +254,6 @@ bake_wordpress() {
 	fetch "$WORDPRESS_URL" /opt/lab-deploy/wordpress.tar.gz "$WORDPRESS_URL.sha1" sha1
 	fetch "$WP_CLI_URL" /usr/local/bin/wp "$WP_CLI_URL.sha512" sha512
 	chmod 755 /usr/local/bin/wp
-}
-
-# docker_image <extra id>: its image into Docker's store (pulled, or loaded from DOCKER_IMAGES_FROM).
-# Docker only runs for this; the socket that would start it on demand is switched off too.
-docker_image() {
-	local image=${DOCKER_IMAGES[$1]}
-	systemctl start docker
-	if [[ $DOCKER_IMAGES_FROM == http* ]]; then
-		curl -fsSL "$DOCKER_IMAGES_FROM/$1.tar" | docker load -q
-	elif [[ -n $DOCKER_IMAGES_FROM ]]; then
-		docker load -q -i "$DOCKER_IMAGES_FROM/$1.tar"
-	else
-		docker pull -q "$image"
-		if [[ -n ${DOCKER_DIGESTS[$1]:-} ]] && ! docker image inspect -f '{{join .RepoDigests " "}}' "$image" | grep -q "@${DOCKER_DIGESTS[$1]}"; then
-			echo "$image isn't the image expected (its digest differs)." >&2
-			return 1
-		fi
-	fi
-	docker image inspect "$image" >/dev/null
-	systemctl disable -q docker.socket 2>/dev/null || true
-}
-bake_juice_shop() { docker_image juice-shop; }
-bake_dvwa() { docker_image dvwa; }
-bake_uptime_kuma() { docker_image uptime-kuma; }
-bake_grafana() { docker_image grafana; }
-bake_vaultwarden() { docker_image vaultwarden; }
-bake_gitea() { docker_image gitea; }
-bake_prometheus() { docker_image prometheus; }
-bake_node_exporter() { docker_image node-exporter; }
-bake_gitlab() { docker_image gitlab; }
-# Jenkins with its plugins, as an image of its own; offline, that image is what jenkins.tar holds
-# (scripts/isos/fetch-media.sh builds it the same way).
-bake_jenkins() {
-	local image=${DOCKER_IMAGES[jenkins]}
-	systemctl start docker
-	if [[ $DOCKER_IMAGES_FROM == http* ]]; then
-		curl -fsSL "$DOCKER_IMAGES_FROM/jenkins.tar" | docker load -q
-	elif [[ -n $DOCKER_IMAGES_FROM ]]; then
-		docker load -q -i "$DOCKER_IMAGES_FROM/jenkins.tar"
-	else
-		docker pull -q "$JENKINS_BASE"
-		printf 'FROM %s\nRUN jenkins-plugin-cli --plugins %s\nENV JAVA_OPTS=-Djenkins.install.runSetupWizard=false\n' \
-			"$JENKINS_BASE" "$JENKINS_PLUGINS" | docker build -q -t "$image" - >/dev/null
-		docker rmi -f "$JENKINS_BASE" >/dev/null
-	fi
-	docker image inspect "$image" >/dev/null
-	systemctl disable -q docker.socket 2>/dev/null || true
 }
 
 bake_nextcloud() {
@@ -613,9 +542,6 @@ case $ID-${VERSION_ID:-} in ubuntu-24.04 | ubuntu-26.04 | debian-12 | debian-13)
 # Releases Wazuh 4.14's server supports (its bundle is 1 GB: only baked in there).
 WAZUH_HERE=0
 case $ID-${VERSION_ID:-} in ubuntu-22.04 | ubuntu-24.04 | debian-12) WAZUH_HERE=1 ;; esac
-# The big container apps (GitLab, Jenkins: 4 GB of images): Ubuntu 24.04 and 26.04 servers only.
-BIG_HERE=0
-case $ID-${VERSION_ID:-} in ubuntu-24.04 | ubuntu-26.04) ((UBUNTU_DESKTOP)) || BIG_HERE=1 ;; esac
 
 # The extras to bake in, and their packages.
 declare -n EXTRA_PACKAGES="EXTRA_PACKAGES_${FAMILY^^}"
@@ -629,7 +555,6 @@ if [[ $WANT_EXTRAS == all ]]; then
 	mapfile -t CHOSEN < <(printf '%s\n' "${CHOSEN[@]}" | grep -vx zimbra)
 	if ! ((GNOME_DESKTOP)); then mapfile -t CHOSEN < <(printf '%s\n' "${CHOSEN[@]}" | grep -vx gnome-remote-login); fi
 	if ! ((WAZUH_HERE)); then mapfile -t CHOSEN < <(printf '%s\n' "${CHOSEN[@]}" | grep -vx wazuh); fi
-	if ! ((BIG_HERE)); then mapfile -t CHOSEN < <(printf '%s\n' "${CHOSEN[@]}" | grep -vxE 'gitlab|jenkins'); fi
 	# Zabbix's server: not on Kali or Parrot (see preseed_zabbix).
 	if [[ $ID == kali || $ID == parrot ]]; then mapfile -t CHOSEN < <(printf '%s\n' "${CHOSEN[@]}" | grep -vx zabbix); fi
 	# A family with no extras (CachyOS) leaves one empty line.

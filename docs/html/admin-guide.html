@@ -148,7 +148,7 @@ blockquote.warn strong:first-child { color: var(--medium); }
 <div class="layout">
   <nav class="toc" aria-label="On this page">
     <p class="toc-title">On this page</p>
-    <ul><li><a href="#1-overview">1. Overview</a></li><li><a href="#2-the-admin-page">2. The Admin page</a><ul><li><a href="#capacity">Capacity</a></li><li><a href="#machines">Machines</a></li><li><a href="#templates">Templates</a></li><li><a href="#leftover-vms">Leftover VMs</a></li><li><a href="#jobs">Jobs</a></li></ul></li><li><a href="#3-day-to-day-machine-management">3. Day-to-day machine management</a></li><li><a href="#4-settings-lab-deployenv">4. Settings (lab-deploy.env)</a></li><li><a href="#5-adding-a-machine-template-by-hand">5. Adding a machine (template) by hand</a><ul><li><a href="#51-choose-how-to-build-it">5.1 Choose how to build it</a></li><li><a href="#52-build-it-with-packer">5.2 Build it with Packer</a></li><li><a href="#53-build-it-by-hand-linux">5.3 Build it by hand (Linux)</a></li><li><a href="#54-import-a-complete-image">5.4 Import a complete image</a></li><li><a href="#55-add-it-to-the-catalogue">5.5 Add it to the catalogue</a></li><li><a href="#56-test-ship-and-check">5.6 Test, ship, and check</a></li><li><a href="#57-updating-and-retiring-a-template">5.7 Updating and retiring a template</a></li></ul></li><li><a href="#6-adding-an-extra-service">6. Adding an extra (service)</a></li><li><a href="#7-adding-a-pro-lab-by-hand">7. Adding a Pro Lab by hand</a><ul><li><a href="#71-before-you-start">7.1 Before you start</a></li><li><a href="#72-define-it-in-labsyaml">7.2 Define it in labs.yaml</a></li><li><a href="#73-the-catalogue-card-optional">7.3 The catalogue card (optional)</a></li><li><a href="#74-ship-and-test-it">7.4 Ship and test it</a></li></ul></li><li><a href="#8-vcenter-setup-and-privileges">8. vCenter setup and privileges</a></li><li><a href="#9-capacity-and-datastore-space">9. Capacity and datastore space</a></li><li><a href="#10-backups-and-restore">10. Backups and restore</a></li><li><a href="#11-deploying-and-updating-the-panel">11. Deploying and updating the panel</a></li><li><a href="#12-troubleshooting">12. Troubleshooting</a></li></ul>
+    <ul><li><a href="#1-overview">1. Overview</a></li><li><a href="#2-the-admin-page">2. The Admin page</a><ul><li><a href="#capacity">Capacity</a></li><li><a href="#machines">Machines</a></li><li><a href="#templates">Templates</a></li><li><a href="#leftover-vms">Leftover VMs</a></li><li><a href="#jobs">Jobs</a></li></ul></li><li><a href="#3-day-to-day-machine-management">3. Day-to-day machine management</a></li><li><a href="#4-settings-lab-deployenv">4. Settings (lab-deploy.env)</a></li><li><a href="#5-adding-a-machine-template-by-hand">5. Adding a machine (template) by hand</a><ul><li><a href="#51-choose-how-to-build-it">5.1 Choose how to build it</a></li><li><a href="#52-build-it-with-packer">5.2 Build it with Packer</a></li><li><a href="#53-build-it-by-hand-linux">5.3 Build it by hand (Linux)</a></li><li><a href="#54-import-a-complete-image">5.4 Import a complete image</a></li><li><a href="#55-add-it-to-the-catalogue">5.5 Add it to the catalogue</a></li><li><a href="#56-test-ship-and-check">5.6 Test, ship, and check</a></li><li><a href="#57-updating-and-retiring-a-template">5.7 Updating and retiring a template</a></li></ul></li><li><a href="#6-adding-an-extra-service">6. Adding an extra (service)</a><ul><li><a href="#the-docker-extras-image-isos">The Docker extras' image ISOs</a></li></ul></li><li><a href="#7-adding-a-pro-lab-by-hand">7. Adding a Pro Lab by hand</a><ul><li><a href="#71-before-you-start">7.1 Before you start</a></li><li><a href="#72-define-it-in-labsyaml">7.2 Define it in labs.yaml</a></li><li><a href="#73-the-catalogue-card-optional">7.3 The catalogue card (optional)</a></li><li><a href="#74-ship-and-test-it">7.4 Ship and test it</a></li></ul></li><li><a href="#8-vcenter-setup-and-privileges">8. vCenter setup and privileges</a></li><li><a href="#9-capacity-and-datastore-space">9. Capacity and datastore space</a></li><li><a href="#10-backups-and-restore">10. Backups and restore</a></li><li><a href="#11-deploying-and-updating-the-panel">11. Deploying and updating the panel</a></li><li><a href="#12-troubleshooting">12. Troubleshooting</a></li></ul>
   </nav>
   <main id="top">
     <article class="content">
@@ -753,10 +753,13 @@ comment out <code>vsphere:</code>, with a note saying how to rebuild it. Learner
 <ul>
 <li>packages go in <code>EXTRA_PACKAGES_DEBIAN[redis]</code> (and the RHEL or Arch arrays for those families);</li>
 <li>services go in <code>EXTRA_SERVICES</code>;</li>
-<li>container images go in <code>DOCKER_IMAGES</code>;</li>
 <li>anything more goes in a <code>bake_redis()</code> function.</li>
 </ul>
 <p>The backend tests check this.</p>
+<p><strong>An extra that runs in Docker</strong> needs no baking beyond <code>docker.io</code>: give it <code>dockerImage:</code> (e.g.
+<code>redis:8.2</code>), start it with <code>lab_docker</code>, and put its image on the datastore with
+<code>scripts/isos/fetch-images.sh redis</code>. Any template with Docker can then offer it, without a
+rebuild. The panel marks it "Docker" for learners.</p>
 </li>
 <li>
 <p><strong>Rebuild the templates</strong> that should offer it, then list <code>redis</code> under their <code>extras:</code>. Until
@@ -768,6 +771,18 @@ comment out <code>vsphere:</code>, with a note saying how to rebuild it. Learner
 </ol>
 <p><strong>Windows extras</strong> have only a <code>windows: script:</code> (PowerShell, run as SYSTEM). Nothing needs baking
 unless the script uses installation media.</p>
+<h3 id="the-docker-extras-image-isos">The Docker extras' image ISOs<a class="headerlink" href="#the-docker-extras-image-isos" title="Permanent link">#</a></h3>
+<p>Each Docker extra's image is an ISO in the datastore's ISO folder, <code>lab-image-&lt;extra&gt;-&lt;tag&gt;.iso</code>. A
+deploy with that extra attaches it as a CD, the machine loads the image, and the CD comes out once
+the machine is set up. A deploy fails straight away, before cloning, if one it needs is missing.</p>
+<div class="term"><div class="term-bar"><i></i><i></i><i></i><span>bash</span></div><pre><code>export GOVC_URL=&lt;vCenter address&gt; GOVC_INSECURE=1
+scripts/isos/fetch-images.sh --list                                   # each extra, its image and its ISO
+scripts/isos/fetch-images.sh --missing --credentials &lt;file&gt;           # make and upload any not there
+scripts/isos/fetch-images.sh grafana --credentials &lt;file&gt;             # one, after changing its image</code></pre></div>
+<p><strong>To update an image,</strong> change its <code>dockerImage:</code> in <code>extras.yaml</code>, run <code>fetch-images.sh</code> for that
+extra, and deploy the panel. The new version is a new ISO. Machines deployed with the old one keep
+using it: a reset attaches the same ISO again. Delete the old ISO once none of those machines is
+left; a reset of one fails, saying so, if its ISO is gone, and a redeploy then uses the current one.</p>
 <h2 id="7-adding-a-pro-lab-by-hand">7. Adding a Pro Lab by hand<a class="headerlink" href="#7-adding-a-pro-lab-by-hand" title="Permanent link">#</a></h2>
 <p>A Pro Lab is several machines deployed together as one instance. They come up in boot order, are
 wired to each other, and have flags planted in each instance. Labs are defined in

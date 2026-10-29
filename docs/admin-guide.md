@@ -429,10 +429,14 @@ Extras are services learners tick at deploy. To add one:
 2. **Bake its packages** into templates in `scripts/template/prepare.sh`:
     - packages go in `EXTRA_PACKAGES_DEBIAN[redis]` (and the RHEL or Arch arrays for those families);
     - services go in `EXTRA_SERVICES`;
-    - container images go in `DOCKER_IMAGES`;
     - anything more goes in a `bake_redis()` function.
 
     The backend tests check this.
+
+    **An extra that runs in Docker** needs no baking beyond `docker.io`: give it `dockerImage:` (e.g.
+    `redis:8.2`), start it with `lab_docker`, and put its image on the datastore with
+    `scripts/isos/fetch-images.sh redis`. Any template with Docker can then offer it, without a
+    rebuild. The panel marks it "Docker" for learners.
 
 3. **Rebuild the templates** that should offer it, then list `redis` under their `extras:`. Until
     then, put it under `plannedExtras:`; it shows as "Soon".
@@ -442,6 +446,24 @@ Extras are services learners tick at deploy. To add one:
 
 **Windows extras** have only a `windows: script:` (PowerShell, run as SYSTEM). Nothing needs baking
 unless the script uses installation media.
+
+### The Docker extras' image ISOs
+
+Each Docker extra's image is an ISO in the datastore's ISO folder, `lab-image-<extra>-<tag>.iso`. A
+deploy with that extra attaches it as a CD, the machine loads the image, and the CD comes out once
+the machine is set up. A deploy fails straight away, before cloning, if one it needs is missing.
+
+```bash
+export GOVC_URL=<vCenter address> GOVC_INSECURE=1
+scripts/isos/fetch-images.sh --list                                   # each extra, its image and its ISO
+scripts/isos/fetch-images.sh --missing --credentials <file>           # make and upload any not there
+scripts/isos/fetch-images.sh grafana --credentials <file>             # one, after changing its image
+```
+
+**To update an image,** change its `dockerImage:` in `extras.yaml`, run `fetch-images.sh` for that
+extra, and deploy the panel. The new version is a new ISO. Machines deployed with the old one keep
+using it: a reset attaches the same ISO again. Delete the old ISO once none of those machines is
+left; a reset of one fails, saying so, if its ISO is gone, and a redeploy then uses the current one.
 
 ## 7. Adding a Pro Lab by hand
 

@@ -27,6 +27,10 @@
 #                          name plus MACHINE_DOMAIN (just the name when that's empty)
 #   hidden     optional: true for an extra a template sets up on every machine (its `always` in
 #              templates.yaml): not listed as a service or on the deploy form
+#   dockerImage  optional: the container image it runs with lab_docker, e.g. grafana/grafana:13.2.4.
+#              Not in the templates: the panel attaches it at deploy as a CD from the datastore's ISO
+#              folder (lab-image-<id>-<tag>.iso, made by scripts/isos/fetch-images.sh), and lab_docker
+#              loads it. A new version is a new ISO: run fetch-images.sh after changing it here.
 #   password   true if the script needs the machine's password as it is ($password), e.g. for a web
 #              app's admin; then the panel clears it from vCenter once the machine is set up.
 #              $username (the machine's user) is always set.
@@ -933,6 +937,7 @@
 - id: juice-shop
   name: OWASP Juice Shop
   category: Practice targets
+  dockerImage: bkimminich/juice-shop:v20.3.0
   description: OWASP Juice Shop, a deliberately insecure web shop for practising web attacks, as the machine's website (in Docker).
   ports: [80]
   links: ["http://{ip}/"]
@@ -947,6 +952,7 @@
 - id: dvwa
   name: DVWA
   category: Practice targets
+  dockerImage: vulnerables/web-dvwa:latest
   description: Damn Vulnerable Web Application, PHP and MySQL with security levels to step through, as the machine's website (in Docker).
   ports: [80]
   links: ["http://{ip}/"]
@@ -961,6 +967,7 @@
 - id: uptime-kuma
   name: Uptime Kuma
   category: Monitoring
+  dockerImage: louislam/uptime-kuma:2.5.6
   description: Uptime Kuma, a monitoring dashboard for websites and services, as the machine's website (in Docker).
   ports: [80]
   links: ["http://{ip}/"]
@@ -975,6 +982,7 @@
 - id: node-exporter
   name: Node Exporter
   category: Monitoring
+  dockerImage: prom/node-exporter:v1.12.1
   description: Prometheus's Node Exporter (in Docker), reporting this machine's CPU, memory, disks and network on port 9100, for a Prometheus to collect.
   ports: [9100]
   links: ["http://{ip}:9100/metrics"]
@@ -989,6 +997,7 @@
 - id: prometheus
   name: Prometheus
   category: Monitoring
+  dockerImage: prom/prometheus:v3.15.1
   description: Prometheus (in Docker), collecting metrics and evaluating alert rules, with its web interface on port 9090. Optionally with example data, and other machines to collect from.
   ports: [9090]
   links: ["http://{ip}:9090/"]
@@ -1068,6 +1077,7 @@
 - id: grafana
   name: Grafana
   category: Monitoring
+  dockerImage: grafana/grafana:13.2.4
   description: Grafana dashboards as the machine's website (in Docker), with its user as the administrator. With Prometheus on the same machine, that's its data source. Optionally with example dashboards.
   ports: [80]
   password: true
@@ -1148,6 +1158,7 @@
 - id: vaultwarden
   name: Vaultwarden
   category: Web apps
+  dockerImage: vaultwarden/server:1.37.4-alpine
   description: Vaultwarden, a Bitwarden-compatible password manager, as the machine's website over HTTPS (in Docker; its web vault needs HTTPS).
   ports: [443]
   links: ["https://{ip}/"]
@@ -1165,6 +1176,7 @@
 - id: gitea
   name: Gitea
   category: Developer tools
+  dockerImage: gitea/gitea:28.1.0
   description: Gitea, self-hosted Git with a web interface, as the machine's website (in Docker), with its user as the administrator. Git over SSH on port 2222.
   ports: [80, 2222]
   password: true
@@ -1186,6 +1198,7 @@
 - id: gitlab
   name: GitLab CE
   category: Developer tools
+  dockerImage: gitlab/gitlab-ce:19.5.1-ce.0
   description: GitLab Community Edition (in Docker), Git hosting with issues, merge requests and CI/CD, as the machine's website, with its user as an administrator. Git over SSH on port 2222. Optionally with example projects. It needs 8 GB of memory and takes about ten minutes to start.
   ports: [80, 2222]
   minMemoryGB: 8
@@ -1308,6 +1321,7 @@
 - id: jenkins
   name: Jenkins
   category: Developer tools
+  dockerImage: lab-deploy/jenkins:2.580.2
   description: Jenkins LTS (in Docker) on port 8080, with pipelines, configuration as code and Job DSL, and its user as the administrator. Optionally with example jobs and their builds.
   ports: [8080]
   minMemoryGB: 4

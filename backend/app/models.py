@@ -45,6 +45,9 @@ class Machine(Base):
     ssh_key: Mapped[str | None] = mapped_column(Text)
     # Extras chosen at deploy, with every option filled in: [{"id": "apache-https", "options": {...}}].
     extras: Mapped[list] = mapped_column(JSON, default=list)
+    # The image ISOs it was deployed with (extras.media), one CD each at first boot: a reset attaches
+    # these same ones again, as its first-boot scripts expect those images. None before image CDs.
+    media: Mapped[list | None] = mapped_column(JSON)
     # Pro Labs: the instance it belongs to ("i-xxxx"), its lab's slug and its role name in the lab
     # (labs.yaml); None for a machine deployed on its own.
     instance_id: Mapped[str | None] = mapped_column(String(16), index=True)

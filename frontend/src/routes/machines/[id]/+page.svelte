@@ -3,6 +3,7 @@
 	import { page } from '$app/state';
 	import ActivityLog from '$lib/components/ActivityLog.svelte';
 	import ConfirmDialog, { type ConfirmRequest } from '$lib/components/ConfirmDialog.svelte';
+	import DockerTag from '$lib/components/DockerTag.svelte';
 	import Icon from '$lib/components/Icon.svelte';
 	import OsLogo from '$lib/components/OsLogo.svelte';
 	import Status from '$lib/components/Status.svelte';
@@ -311,7 +312,7 @@
 			<div>
 				<dt>Extras</dt>
 				<dd>
-					{m.extras.map((x) => x.name).join(', ')}
+					{#each m.extras as x, i (x.id)}{i ? ', ' : ''}{x.name}{#if x.docker}{' '}<DockerTag />{/if}{/each}
 					{#each m.extras as x (x.id)}
 						{#each Object.entries(x.options).filter(([, v]) => v) as [k, v] (k)}
 							<span class="stat-note">{k === 'domain' ? 'for' : `${k}:`} <code>{v}</code></span>

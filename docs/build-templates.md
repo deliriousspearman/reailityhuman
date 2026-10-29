@@ -221,10 +221,11 @@ downloads (the box is 7.9 GB), with the disk and adapter types its `.vmx` gives.
 long ago, so Windows shuts it down every hour; the catalogue flags it ("Shuts down hourly"). Sign-in:
 vagrant / vagrant.
 
-**Container apps** (Juice Shop, DVWA, Uptime Kuma, Grafana, Vaultwarden, Gitea): `prepare.sh` pulls
-their pinned images (`DOCKER_IMAGES`) into the template's Docker, so machines start them without
-internet. Offline, `fetch-media.sh` saves them in the media folder's `linux/docker`, and the Linux
-builds load them from there (`media_url`).
+**Container apps** (Juice Shop, DVWA, Uptime Kuma, Grafana, Prometheus, Node Exporter, Vaultwarden,
+Gitea, GitLab, Jenkins): templates have Docker but not the images. Each image is an ISO of its own in
+the datastore's ISO folder, made by `scripts/isos/fetch-images.sh --missing`. The panel attaches a
+machine's at deploy, and it loads them, so they work without internet, and a new or updated image
+needs no template rebuild.
 
 ## 1. Before the first build
 
@@ -324,8 +325,7 @@ internet, gather them first on a machine with internet, and carry them across:
    scripts/isos/fetch-media.sh /path/to/lab-media
    ```
 
-   About 4 GB: WordPress, WP-CLI, Nextcloud, Chinook and the container apps' Docker images (the
-   images only if the machine running it has Docker), the Pythons, iRedMail, Zimbra's tarball, and
+   About 2 GB: WordPress, WP-CLI, Nextcloud, Chinook, the Pythons, iRedMail, Zimbra's tarball, and
    MinIO and `mc` built from source (`linux/`); Cloudbase-Init and Chinook for
    SQL Server (`windows/`); Packer and its plugin (`packer/`); and `SHA256SUMS` of all of it. Check
    the copy on arrival with `cd lab-media && sha256sum -c SHA256SUMS`.

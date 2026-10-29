@@ -104,8 +104,15 @@ def deploy(vc: VCenter, m: Machine) -> None:
         if not builds.is_built(s, tpl):
             raise VSphereError(f"{m.template} {m.version} isn't built right now: deploy it again to build it first")
         path = builds.vsphere_path(s, tpl)
+    media = extras.media(chosen, tpl.family)
+    _check_media(vc, media)
     vm = vc.clone(path, m.vm_name, extras.cpu(tpl.cpu, chosen), extras.memory_gb(tpl.memory_gb, chosen), extra)
     add_log(m.id, f"Cloned from {m.template}/{m.version}")
+    vc.attach_media(vm, media)
+    m.media = media or None  # this copy too: _await_setup takes them out
+    set_machine(m.id, media=m.media)
+    if media:
+        add_log(m.id, f"Attached {len(media)} image CD{'s' if len(media) > 1 else ''}: {', '.join(media)}", "muted")
     vc.power_on(vm)
     add_log(m.id, "Powered on. Waiting for it to get an address…", "muted")
     _record_ip(vc, vm, m.id, settings().ip_timeout_seconds)
@@ -159,6 +166,10 @@ def reset(vc: VCenter, m: Machine) -> None:
     vc.power_off(vm)
     vc.revert_to_clean(vm)
     add_log(m.id, "Reverted to snapshot 'clean'")
+    # The snapshot is from before the image CDs went in: the same ones again, for its first boot.
+    if media := m.media or []:
+        _check_media(vc, media, reset=True)
+        vc.attach_media(vm, media)
     vc.power_on(vm)
     _record_ip(vc, vm, m.id, settings().ip_timeout_seconds)
     _await_setup(vc, vm, m)
@@ -267,6 +278,16 @@ def _await_vyos(vc: VCenter, vm, m: Machine) -> None:
         time.sleep(5)
 
 
+def _check_media(vc: VCenter, media: list[str], reset: bool = False) -> None:
+    """Fails before anything is changed if an image ISO the machine needs isn't in the ISO folder."""
+    if not media:
+        return
+    if missing := sorted(set(media) - vc.iso_files()):
+        folder = settings().vcenter_iso_folder
+        how = "Upload it again with scripts/isos/fetch-images.sh, or redeploy the machine to use the current images" if reset else "An admin can upload it with scripts/isos/fetch-images.sh"
+        raise VSphereError(f"The container image{'s' if len(missing) > 1 else ''} {', '.join(missing)} {'are' if len(missing) > 1 else 'is'} not in the datastore's {folder} folder. {how}.")
+
+
 def _await_setup(vc: VCenter, vm, m: Machine) -> None:
     """Waits for the machine to finish setting up on first boot, and fails the job if any part
     didn't. Every machine writes its status file last (Linux: once cloud-init has set up the user, its
@@ -292,6 +313,12 @@ def _await_setup(vc: VCenter, vm, m: Machine) -> None:
     try:
         text = _wait_for_status(vc, vm, m, family, timeout)
     finally:
+        if m.media:
+            # Loaded (or not): the CDs come out, so the ISOs aren't held open.
+            try:
+                vc.remove_media(vm)
+            except VSphereError as e:
+                add_log(m.id, f"Couldn't take out the image CDs: {e}", "warn")
         if windows or extras.needs_password(chosen):
             # The first-boot data holds the password as it is (Windows' script, or an extra that
             # needs it). Whether it worked or not, it's done with it (a reset puts it back from the

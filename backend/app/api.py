@@ -70,6 +70,7 @@ def machine_out(m: Machine, log: bool = True, machines: list[Machine] | None = N
                 "id": c["id"],
                 "name": x.name if (x := extras.find(c["id"])) else c["id"],
                 "options": c["options"],
+                "docker": bool(x and x.image),
                 **extras.details(c, m.ip or "", m.username, m.name),
             }
             for c in m.extras or []
@@ -148,6 +149,9 @@ def extra_out(x: extras.Extra, choices: dict[str, tuple[str, ...]] | None = None
         "minCPU": x.min_cpu,
         "diskGB": x.disk_gb,
         "ports": sorted(x.ports),
+        # Runs in a Docker container (its image comes on a CD at deploy): the panel says so.
+        "docker": bool(x.image),
+        **({"image": x.image} if x.image else {}),
         "options": [
             {
                 "id": o.id,

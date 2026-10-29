@@ -2,6 +2,7 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import MachineTable from '$lib/components/MachineTable.svelte';
+	import DockerTag from '$lib/components/DockerTag.svelte';
 	import { store } from '$lib/store.svelte';
 	import { categories, findTemplate, flagNotes, isServiceTemplate, templates } from '$lib/templates';
 	import OsLogo from '$lib/components/OsLogo.svelte';
@@ -196,7 +197,7 @@
 						{@const x = item.x}
 						<article class="template service" class:soon={!ready(x)}>
 							<header>
-								<h4>{x.name}</h4>
+								<h4>{x.name}{#if x.docker}{' '}<DockerTag />{/if}</h4>
 								{#if x.ports.length}<span class="ports">{portSummary(x.ports)}</span>{/if}
 							</header>
 							<p>{x.description}</p>

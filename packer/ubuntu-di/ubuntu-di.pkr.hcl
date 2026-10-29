@@ -66,7 +66,7 @@ variable "iso" {
 }
 # Offline: where the media folder from scripts/isos/fetch-media.sh is served on the LAN (its linux/
 # part), e.g. http://mirror.lab.example/lab-media. prepare.sh then downloads WordPress, WP-CLI,
-# Nextcloud, Chinook, the container images, MinIO, the Pythons and iRedMail from there. Empty: from
+# Nextcloud, Chinook, MinIO, the Pythons and iRedMail from there. Empty: from
 # their own sites (MinIO: built from source). (The Nextcloud snap needs the Snap
 # Store: leave it out of offline builds with -var extras=… .)
 # Offline: a mirror of https://repo.zabbix.com, for the Zabbix extras' packages.
@@ -116,7 +116,6 @@ locals {
     "WP_CLI_URL=${local.media}/linux/wp-cli/wp-cli.phar",
     "NEXTCLOUD_URL=${local.media}/linux/nextcloud/latest.tar.bz2",
     "CHINOOK_URL=${local.media}/linux/chinook",
-    "DOCKER_IMAGES_FROM=${local.media}/linux/docker",
     "MINIO_FROM=${local.media}/linux/minio",
     "PYTHON_FROM=${local.media}/linux/python",
     "IREDMAIL_FROM=${local.media}/linux/iredmail",

@@ -45,7 +45,7 @@ OPTION_TYPES = ("hostname", "text", "choice", "boolean", "machine")
 # A "machine" option's value: a machine's id (api.new_id).
 MACHINE_ID_RULE = re.compile(r"^m-[0-9a-f]{4}$")
 # Variables every script already has, so no option may be called one of them.
-RESERVED = ("hostname", "username", "password")
+RESERVED = ("hostname", "username", "password", "lab_image", "lab_image_iso")
 # What a boolean option's value can be given as; it reaches scripts as "yes" or "no".
 _YES, _NO = {"yes", "true", "on", "1"}, {"no", "false", "off", "0"}
 
@@ -159,12 +159,46 @@ lab_sql_string() {
 	printf "'%s'" "$value"
 }
 
-# lab_docker <name> <docker run options and image...>: Docker turned on, then the container (re)made
-# from an image already in the template (prepare.sh's DOCKER_IMAGES), restarting with the machine.
+# lab_images: the container images on the machine's image CDs loaded into Docker, unless it has them.
+# The panel attaches a CD per Docker extra chosen (lab-image-<id>-<tag>.iso, from the datastore's ISO
+# folder: scripts/isos/fetch-images.sh), each holding lab-image.txt (the image's name) and
+# image.tar.gz (docker save). Each CD is unmounted after, so the panel can take it out again.
+lab_images() {
+	[ -e /run/lab-deploy-images ] && return 0
+	local dev dir image
+	dir=$(mktemp -d)
+	for dev in /dev/sr*; do
+		[ -b "$dev" ] || continue
+		mount -o ro "$dev" "$dir" 2>/dev/null || continue
+		if [ -f "$dir/lab-image.txt" ]; then
+			image=$(cat "$dir/lab-image.txt")
+			if ! docker image inspect "$image" >/dev/null 2>&1; then
+				echo "Loading $image from its CD"
+				if ! docker load -q -i "$dir/image.tar.gz" >/dev/null; then
+					umount "$dir"
+					echo "Couldn't load $image from its CD." >&2
+					return 1
+				fi
+			fi
+		fi
+		umount "$dir"
+	done
+	rmdir "$dir"
+	touch /run/lab-deploy-images
+}
+
+# lab_docker <name> <docker run options and image...>: Docker turned on, the extra's image loaded from
+# its CD (lab_images; a template built before images moved to CDs has it already), then the container
+# (re)made, restarting with the machine. $lab_image and $lab_image_iso: the extra's image and its ISO.
 lab_docker() {
 	local name=$1
 	shift
 	systemctl enable -q --now docker
+	lab_images
+	if [ -n "${lab_image:-}" ] && ! docker image inspect "$lab_image" >/dev/null 2>&1; then
+		echo "$lab_image isn't on this machine: its CD ($lab_image_iso) wasn't attached." >&2
+		return 1
+	fi
 	docker rm -f "$name" >/dev/null 2>&1 || true
 	docker run -d --name "$name" --restart unless-stopped --pull never "$@" >/dev/null
 }
@@ -252,6 +286,9 @@ class Extra:
     options: tuple[Option, ...] = ()
     # Minutes a deploy waits for it beyond the usual, e.g. a domain controller's promotion.
     setup_minutes: int = 0
+    # The container image it runs (lab_docker), e.g. "grafana/grafana:13.2.4". Not baked into templates:
+    # the panel attaches it as a CD at deploy (image_iso), and lab_docker loads it.
+    image: str = ""
     # family -> (packages, script)
     families: dict[str, tuple[tuple[str, ...], str]] = field(default_factory=dict)
 
@@ -313,6 +350,7 @@ def extras() -> dict[str, Extra]:
             password=bool(e.get("password", False)),
             options=options,
             setup_minutes=int(e.get("setupMinutes", 0)),
+            image=e.get("dockerImage", ""),
             families={f: (tuple(e[f].get("packages", [])), e[f]["script"]) for f in FAMILIES if f in e},
         )
     return {i: replace(x, conflicts=tuple(y.id for y in out.values() if clashes(x, y))) for i, x in out.items()}
@@ -333,6 +371,23 @@ def clashes(x: Extra, y: Extra) -> bool:
 
 def find(extra_id: str) -> Extra | None:
     return extras().get(extra_id)
+
+
+def image_iso(x: Extra) -> str:
+    """The ISO in the datastore's ISO folder holding the extra's image, named by the extra and the
+    image's tag (scripts/isos/fetch-images.sh makes it): a new version is a new file, so machines
+    deployed with the old one keep it until they're gone. "" for an extra without an image."""
+    if not x.image:
+        return ""
+    tag = x.image.rsplit(":", 1)[1] if ":" in x.image.rsplit("/", 1)[-1] else "latest"
+    return f"lab-image-{x.id}-{re.sub(r'[^A-Za-z0-9._-]', '-', tag)}.iso"
+
+
+def media(chosen: list[dict], family: str) -> list[str]:
+    """The image ISOs a machine with these extras needs attached at first boot (Linux only)."""
+    if family not in ("debian", "rhel", "arch"):
+        return []
+    return [iso for c in chosen if (x := find(c["id"])) and (iso := image_iso(x))]
 
 
 # Choosing -------------------------------------------------------------------------------------------
@@ -512,6 +567,8 @@ def script(x: Extra, family: str, hostname: str, options: dict[str, str], userna
     if x.password:
         lines.append(f"password={shlex.quote(password)}")
     lines += [f"{k}={shlex.quote(v)}" for k, v in options.items()]
+    if x.image:
+        lines += [f"lab_image={shlex.quote(x.image)}", f"lab_image_iso={shlex.quote(image_iso(x))}"]
     lines.append(f". {DIR}/extras/lib.sh")
     return "\n".join(lines) + "\n" + body
 

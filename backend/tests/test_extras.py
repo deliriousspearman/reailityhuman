@@ -88,13 +88,9 @@ def test_prepare_sh_installs_every_extras_packages():
                 assert not missing, f"prepare.sh doesn't install {missing} for {x.id} ({family})"
 
 
-def test_container_extras_run_the_images_prepare_sh_bakes():
-    """Each image an extra runs (lab_docker ... <image>) is the one prepare.sh pulls for that extra, by
-    the same name, as clones can't pull (--pull never), and every image there has its bake step."""
-    text = _prepare_sh().read_text()
-    block = re.search(r"^declare -A DOCKER_IMAGES=\(\n(.*?)^\)", text, re.M | re.S)
-    assert block, "prepare.sh has no DOCKER_IMAGES"
-    images = dict(re.findall(r'^\s*\[([\w-]+)\]="([^"]*)"', block.group(1), re.M))
+def test_container_extras_run_their_image():
+    """Each extra that runs a container (lab_docker <its id> ... <image>) declares that image as its
+    `image`, by the same name: the panel attaches its ISO, and the clone can't pull (--pull never)."""
     run = {}
     for x in extras.extras().values():
         script = x.families.get("debian", ("", ""))[1]
@@ -104,9 +100,35 @@ def test_container_extras_run_the_images_prepare_sh_bakes():
             command = re.search(rf"lab_docker {re.escape(x.id)} .*?(?<!\\)\n", script, re.S).group(0)
             run[x.id] = [w for w in command.split() if not w.startswith("-") and w != "\\"][-1]
     assert run, "no extra runs a container"
-    assert run == images
-    for extra_id in images:
-        assert f"bake_{extra_id.replace('-', '_')}()" in text, f"prepare.sh has no bake step for {extra_id}"
+    assert run == {x.id: x.image for x in extras.extras().values() if x.image}
+
+
+def test_templates_no_longer_bake_images():
+    text = _prepare_sh().read_text()
+    assert "DOCKER_IMAGES" not in text and "docker pull" not in text
+
+
+def test_image_isos_are_named_as_fetch_images_names_them(tmp_path):
+    import os
+    import subprocess
+
+    script = _prepare_sh().parents[1] / "isos" / "fetch-images.sh"
+    out = subprocess.run(
+        ["bash", str(script), "--list"], capture_output=True, text=True, check=True, env={**os.environ, "EXTRAS_YAML": str(extras._path())}
+    ).stdout
+    listed = {line.split()[0]: line.split()[2] for line in out.splitlines()}
+    assert listed == {x.id: extras.image_iso(x) for x in extras.extras().values() if x.image}
+    assert extras.image_iso(replace(extras.find("grafana"), image="registry.lab.example:5000/team/app")) == "lab-image-grafana-latest.iso"
+
+
+def test_docker_extras_get_their_image_and_iso():
+    grafana = extras.find("grafana")
+    text = extras.script(grafana, "debian", "web01", {"sample_data": "no"}, "jo", "pw")
+    assert f"lab_image={grafana.image}" in text and f"lab_image_iso={extras.image_iso(grafana)}" in text
+    assert "lab_image=" not in extras.script(extras.find("nginx"), "debian", "web01", {}, "jo")
+    chosen = [{"id": "grafana", "options": {}}, {"id": "nginx", "options": {}}]
+    assert extras.media(chosen, "debian") == [extras.image_iso(grafana)]
+    assert extras.media(chosen, "windows") == []
 
 
 # Choosing ---------------------------------------------------------------------------------------------
@@ -362,7 +384,7 @@ def test_deploy_waits_for_extras(queued, offered, guest):
     r = deploy(chosen=[{"id": "apache-https", "options": {"domain": "intranet.lab.example"}}])
     assert r.status_code == 201, r.text
     assert r.json()["extras"] == [
-        {"id": "apache-https", "name": "Apache + HTTPS", "options": {"domain": "intranet.lab.example", "php": "none"}, "links": [], "notes": []}
+        {"id": "apache-https", "name": "Apache + HTTPS", "options": {"domain": "intranet.lab.example", "php": "none"}, "docker": False, "links": [], "notes": []}
     ]  # links once it has an address
     run_queued(queued)
     m = client.get(f"/api/machines/{r.json()['id']}").json()
@@ -372,6 +394,57 @@ def test_deploy_waits_for_extras(queued, offered, guest):
     assert "Installing extras: Apache + HTTPS…" in texts
     assert "Apache + HTTPS is ready" in texts
     assert guest["reads"] == [("ubuntu", extras.STATUS_FILE)]
+
+
+@pytest.fixture
+def media(monkeypatch):
+    """The ISO folder's files, and the image CDs attached and taken out, by VM."""
+    state = {"isos": set(), "attached": [], "removed": 0}
+    monkeypatch.setattr(VCenter, "iso_files", lambda self: state["isos"])
+    monkeypatch.setattr(VCenter, "attach_media", lambda self, vm, isos: state["attached"].append(list(isos)) if isos else None)
+
+    def remove(self, vm):
+        state["removed"] += 1
+        return 1
+
+    monkeypatch.setattr(VCenter, "remove_media", remove)
+    key = ("ubuntu", "26.04")
+    monkeypatch.setitem(catalogue.catalogue(), key, replace(catalogue.catalogue()[key], extras=(*ALL, "grafana")))
+    return state
+
+
+def test_docker_extras_get_their_image_cd(queued, guest, media):
+    iso = extras.image_iso(extras.find("grafana"))
+    media["isos"] = {iso}
+    guest["status"] = "ok grafana\n"
+    r = deploy(chosen=[{"id": "grafana"}])
+    run_queued(queued)
+    m = client.get(f"/api/machines/{r.json()['id']}").json()
+    assert m["state"] == "running", m["log"]
+    assert media["attached"] == [[iso]] and media["removed"] == 1
+    assert f"Attached 1 image CD: {iso}" in [line["text"] for line in m["log"]]
+
+    # A reset attaches the same ones again: the snapshot is from before they went in.
+    assert client.post(f"/api/machines/{m['id']}/reset").status_code < 300
+    run_queued(queued)
+    assert media["attached"] == [[iso], [iso]] and media["removed"] == 2
+
+
+def test_a_missing_image_iso_fails_the_deploy_before_cloning(queued, guest, media):
+    r = deploy(chosen=[{"id": "grafana"}])
+    run_queued(queued)
+    m = client.get(f"/api/machines/{r.json()['id']}").json()
+    assert m["state"] == "error"
+    assert f"{extras.image_iso(extras.find('grafana'))} is not in the datastore's ISO folder" in m["log"][-1]["text"]
+    assert media["attached"] == []
+
+
+def test_no_image_cds_without_docker_extras(queued, guest, media):
+    guest["status"] = "ok nginx\n"
+    r = deploy(chosen=[{"id": "nginx"}])
+    run_queued(queued)
+    assert client.get(f"/api/machines/{r.json()['id']}").json()["state"] == "running"
+    assert media["attached"] == [] and media["removed"] == 0
 
 
 def test_failed_extra_fails_the_deploy(queued, offered, guest):

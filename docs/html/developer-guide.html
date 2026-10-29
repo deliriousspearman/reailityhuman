@@ -277,7 +277,7 @@ the browser's WebSocket to ESXi (see <a href="#10-console-relay">Console relay</
 </tr>
 <tr>
 <td><code>scripts/isos/</code></td>
-<td><code>isos.txt</code> and <code>fetch.sh</code>: download, verify and upload ISOs</td>
+<td><code>isos.txt</code> and <code>fetch.sh</code>: download, verify and upload ISOs; <code>fetch-images.sh</code>: an ISO of each Docker extra's image. Everything else downloaded from outside: <a href="../external-resources.md">external-resources.md</a></td>
 </tr>
 <tr>
 <td><code>scripts/e2e/</code></td>
@@ -702,9 +702,16 @@ controller, a Docker app. Extras are defined in <code>backend/extras.yaml</code>
 key; <code>extras.py</code> loads them.</p>
 <p><strong>No downloads at deploy.</strong> An extra's packages are <strong>baked into the template</strong>, installed but
 switched off, by <code>scripts/template/prepare.sh</code>: <code>EXTRA_PACKAGES_&lt;FAMILY&gt;[&lt;id&gt;]</code>, <code>EXTRA_SERVICES</code>,
-<code>DOCKER_IMAGES</code>, and <code>bake_&lt;id&gt;()</code> for anything more. At deploy, only the extra's <code>script</code> runs.
-<code>test_extras.py</code> checks that every Linux extra's packages, images and bake functions are in
-<code>prepare.sh</code>.</p>
+and <code>bake_&lt;id&gt;()</code> for anything more. At deploy, only the extra's <code>script</code> runs.
+<code>test_extras.py</code> checks that every Linux extra's packages and bake functions are in <code>prepare.sh</code>.</p>
+<p><strong>Container images come on CDs.</strong> A Docker extra names its image as <code>dockerImage:</code>. The image isn't in
+the template: <code>scripts/isos/fetch-images.sh</code> puts it on the datastore as an ISO
+(<code>lab-image-&lt;id&gt;-&lt;tag&gt;.iso</code>, named by <code>extras.image_iso</code>). At deploy, <code>actions.deploy</code> checks the ISOs
+the machine needs are there (<code>extras.media</code>), and <code>VCenter.attach_media</code> adds a CD drive for each,
+after the clone's "clean" snapshot, so the snapshot never refers to an ISO. On first boot,
+<code>lab_docker</code> loads the images from the CDs (<code>lab_images</code> in <code>extras.py</code>'s LIB), and once the machine
+is set up <code>VCenter.remove_media</code> takes the drives out. The machine records its ISOs (<code>media</code>), and a
+reset attaches the same ones again.</p>
 <p><strong>How a template offers an extra.</strong> It lists the extra under <code>extras:</code> in <code>templates.yaml</code>. Extras
 prepped in <code>prepare.sh</code> but not yet in that build go under <code>plannedExtras:</code>, and show as "Soon".</p>
 <p><strong>Clashes come from ports alone.</strong> Two extras that list the same port can't be ticked together. The

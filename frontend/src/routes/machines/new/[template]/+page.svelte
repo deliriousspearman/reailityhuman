@@ -2,6 +2,7 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { onMount, untrack } from 'svelte';
+	import DockerTag from '$lib/components/DockerTag.svelte';
 	import Icon from '$lib/components/Icon.svelte';
 	import OsLogo from '$lib/components/OsLogo.svelte';
 	import { clock, hoursLabel, inWords } from '$lib/format';
@@ -313,6 +314,7 @@
 										<label class="extra-head">
 											<input type="checkbox" checked={on} onchange={(e) => toggle(x, e.currentTarget.checked)} />
 											<span class="extra-name">{x.name}</span>
+											{#if x.docker}<DockerTag />{/if}
 										</label>
 										<p class="extra-desc">
 											{x.description}{#if more}{' '}<span class="replaces">{more}</span>{/if}{#if clash && !on}{' '}<span class="replaces">Replaces {clash}: they'd use the same port.</span>{/if}

@@ -175,3 +175,28 @@ def test_first_ipv4_skips_placeholders():
     assert first_ipv4("0.0.0.0", []) is None
     nic = SimpleNamespace(ipAddress=["0.0.0.0", "fe80::1", "169.254.1.1", "192.0.2.7"])
     assert first_ipv4("0.0.0.0", [nic]) == "192.0.2.7"
+
+
+def test_image_cds_go_in_after_the_snapshot_and_come_out_after_setup():
+    from pyVmomi import vim
+
+    def drives(vc, vm):
+        devices = vc.props(vm, "config.hardware.device")["config.hardware.device"]
+        return sorted(
+            d.backing.fileName for d in devices
+            if isinstance(d, vim.vm.device.VirtualCdrom) and isinstance(d.backing, vim.vm.device.VirtualCdrom.IsoBackingInfo)
+            and "/lab-image-" in d.backing.fileName
+        )
+
+    isos = ["lab-image-grafana-13.2.4.iso", "lab-image-prometheus-v3.15.1.iso"]
+    with connect() as vc:
+        vm = vc.clone(TEMPLATE, "media01-test", 1, 1, {})
+        try:
+            vc.attach_media(vm, isos)
+            assert drives(vc, vm) == sorted(f"[{vc.datastore.name}] ISO/{i}" for i in isos)
+            assert vc.remove_media(vm) == 2 and drives(vc, vm) == []
+            assert vc.remove_media(vm) == 0
+            # (Reverting to "clean" takes them out too on a real vCenter, as the snapshot is from before
+            # they went in; vcsim doesn't restore hardware on a revert, so the e2e tests check that.)
+        finally:
+            vc.destroy(vm)

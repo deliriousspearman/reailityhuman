@@ -72,27 +72,8 @@ grep -oE 'fetch_chinook [A-Za-z_]+\.[a-z]+ [0-9a-f]{64}' "$prepare" | sort -u | 
 	check "$out/linux/chinook/$file" "$sum" sha256
 done
 
-step "Linux: the container apps' Docker images (prepare.sh's DOCKER_IMAGES)"
-if command -v docker >/dev/null; then
-	sed -n '/^declare -A DOCKER_IMAGES=(/,/^)/p' "$prepare" | grep -oE '\[[a-z-]+\]="[^"]+"' | tr -d '[]"' | tr '=' ' ' |
-		while read -r id image; do
-			[[ -s $out/linux/docker/$id.tar ]] && continue
-			if [[ $id == jenkins ]]; then
-				# Built, as prepare.sh's bake_jenkins does: Jenkins with its plugins.
-				base=$(grep -oE '^JENKINS_BASE=[^ ]+' "$prepare" | cut -d= -f2)
-				plugins=$(grep -oE '^JENKINS_PLUGINS="[^"]+"' "$prepare" | cut -d'"' -f2)
-				docker pull -q "$base" >/dev/null
-				printf 'FROM %s\nRUN jenkins-plugin-cli --plugins %s\nENV JAVA_OPTS=-Djenkins.install.runSetupWizard=false\n' \
-					"$base" "$plugins" | docker build -q -t "$image" - >/dev/null
-			else
-				docker pull -q "$image" >/dev/null
-			fi
-			docker save -o "$out/linux/docker/$id.tar.part" "$image" && mv "$out/linux/docker/$id.tar.part" "$out/linux/docker/$id.tar"
-			echo "  $id: $image"
-		done
-else
-	echo "  skipped: no Docker here (the container apps' extras need these to build offline)" >&2
-fi
+# The container apps' images aren't baked into templates any more: scripts/isos/fetch-images.sh makes
+# an ISO of each for the datastore, which works offline as it is.
 
 # pinned <name>: a checksum prepare.sh pins, from its line "<name>=<sha256>".
 pinned() { grep -oE "^$1=[0-9a-f]{64}" "$prepare" | cut -d= -f2; }

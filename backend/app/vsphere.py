@@ -403,6 +403,73 @@ class VCenter:
             raise VSphereError(f"'{vm.name}' has no snapshot named '{CLEAN}' to reset to")
         wait(snap.RevertToSnapshot_Task(), "Revert")
 
+    # Image CDs (extras.media): a container image per Docker extra, from the ISO folder -------------
+
+    def _iso_path(self, name: str) -> str:
+        return f"[{self.datastore.name}] {self.cfg.vcenter_iso_folder}/{name}"
+
+    def attach_media(self, vm: vim.VirtualMachine, isos: list[str]) -> None:
+        """Adds a CD drive per ISO, on a SATA controller, connected at power on. Called after the
+        clone's "clean" snapshot (and again after a reset), so the snapshot never refers to an ISO
+        and an old one can be deleted without breaking resets."""
+        if not isos:
+            return
+        devices = self.props(vm, "config.hardware.device").get("config.hardware.device") or []
+        changes = []
+        sata = [d for d in devices if isinstance(d, vim.vm.device.VirtualAHCIController)]
+        if sata:
+            controller_key = sata[0].key
+            used = {d.unitNumber for d in devices if d.controllerKey == controller_key}
+        else:
+            controller_key = -100
+            changes.append(vim.vm.device.VirtualDeviceSpec(
+                operation=vim.vm.device.VirtualDeviceSpec.Operation.add,
+                device=vim.vm.device.VirtualAHCIController(key=controller_key, busNumber=0),
+            ))
+            used = set()
+        units = [u for u in range(30) if u not in used][: len(isos)]
+        if len(units) < len(isos):
+            raise VSphereError(f"'{vm.name}' has no room on its SATA controller for {len(isos)} more CD drives")
+        for i, (iso, unit) in enumerate(zip(isos, units)):
+            changes.append(vim.vm.device.VirtualDeviceSpec(
+                operation=vim.vm.device.VirtualDeviceSpec.Operation.add,
+                device=vim.vm.device.VirtualCdrom(
+                    key=-101 - i,
+                    controllerKey=controller_key,
+                    unitNumber=unit,
+                    backing=vim.vm.device.VirtualCdrom.IsoBackingInfo(fileName=self._iso_path(iso)),
+                    connectable=vim.vm.device.VirtualDevice.ConnectInfo(startConnected=True, connected=False, allowGuestControl=True),
+                ),
+            ))
+        wait(vm.ReconfigVM_Task(vim.vm.ConfigSpec(deviceChange=changes)), "Attach the image CDs")
+
+    def remove_media(self, vm: vim.VirtualMachine) -> int:
+        """Takes out the image CDs attach_media added (once the machine is set up), so the ISOs aren't
+        held open. The guest has unmounted them; should it still hold one's tray locked, vCenter asks
+        whether to override that, and this answers yes. Returns how many it took out."""
+        devices = self.props(vm, "config.hardware.device").get("config.hardware.device") or []
+        drives = [
+            d for d in devices
+            if isinstance(d, vim.vm.device.VirtualCdrom)
+            and isinstance(d.backing, vim.vm.device.VirtualCdrom.IsoBackingInfo)
+            and "/lab-image-" in (d.backing.fileName or "")
+        ]
+        if not drives:
+            return 0
+        task = vm.ReconfigVM_Task(vim.vm.ConfigSpec(deviceChange=[
+            vim.vm.device.VirtualDeviceSpec(operation=vim.vm.device.VirtualDeviceSpec.Operation.remove, device=d) for d in drives
+        ]))
+        deadline = time.monotonic() + 120
+        while task.info.state in (vim.TaskInfo.State.queued, vim.TaskInfo.State.running) and time.monotonic() < deadline:
+            question = self.props(vm, "runtime.question").get("runtime.question")
+            if question and question.choice and question.choice.choiceInfo:
+                yes = next((c for c in question.choice.choiceInfo if c.label.lower().startswith(("yes", "button.yes"))), None)
+                if yes:
+                    vm.AnswerVM(questionId=question.id, answerChoice=yes.key)
+            time.sleep(1)
+        wait(task, "Take out the image CDs", timeout=30)
+        return len(drives)
+
     def destroy(self, vm: vim.VirtualMachine) -> None:
         self.power_off(vm)
         wait(vm.Destroy_Task(), "Delete")

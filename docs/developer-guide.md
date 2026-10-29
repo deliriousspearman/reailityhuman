@@ -71,7 +71,7 @@ All backend services read `lab-deploy.env` (see [Configuration reference](#14-co
 | `deploy/` | Compose file, Caddyfile, `deploy.sh`, `setup-server.sh`, offline bundle and installer |
 | `packer/` | One folder per template build, plus `build.sh`; import scripts for complete images |
 | `scripts/template/` | `prepare.sh`/`clean.sh` (Linux), `prepare.ps1`/`clean.ps1` (Windows), appliance first-boot scripts |
-| `scripts/isos/` | `isos.txt` and `fetch.sh`: download, verify and upload ISOs |
+| `scripts/isos/` | `isos.txt` and `fetch.sh`: download, verify and upload ISOs; `fetch-images.sh`: an ISO of each Docker extra's image. Everything else downloaded from outside: [external-resources.md](external-resources.md) |
 | `scripts/e2e/` | `run.py`: deploys real machines through the panel and checks them |
 | `scripts/setup_vcenter.py` | Creates the vCenter folders, roles and permissions |
 | `docs/` | These guides, the runbooks, the plan and the roadmap |
@@ -278,9 +278,17 @@ key; `extras.py` loads them.
 
 **No downloads at deploy.** An extra's packages are **baked into the template**, installed but
 switched off, by `scripts/template/prepare.sh`: `EXTRA_PACKAGES_<FAMILY>[<id>]`, `EXTRA_SERVICES`,
-`DOCKER_IMAGES`, and `bake_<id>()` for anything more. At deploy, only the extra's `script` runs.
-`test_extras.py` checks that every Linux extra's packages, images and bake functions are in
-`prepare.sh`.
+and `bake_<id>()` for anything more. At deploy, only the extra's `script` runs.
+`test_extras.py` checks that every Linux extra's packages and bake functions are in `prepare.sh`.
+
+**Container images come on CDs.** A Docker extra names its image as `dockerImage:`. The image isn't in
+the template: `scripts/isos/fetch-images.sh` puts it on the datastore as an ISO
+(`lab-image-<id>-<tag>.iso`, named by `extras.image_iso`). At deploy, `actions.deploy` checks the ISOs
+the machine needs are there (`extras.media`), and `VCenter.attach_media` adds a CD drive for each,
+after the clone's "clean" snapshot, so the snapshot never refers to an ISO. On first boot,
+`lab_docker` loads the images from the CDs (`lab_images` in `extras.py`'s LIB), and once the machine
+is set up `VCenter.remove_media` takes the drives out. The machine records its ISOs (`media`), and a
+reset attaches the same ones again.
 
 **How a template offers an extra.** It lists the extra under `extras:` in `templates.yaml`. Extras
 prepped in `prepare.sh` but not yet in that build go under `plannedExtras:`, and show as "Soon".
