@@ -28,4 +28,5 @@ export const adminSections = [
 	{ id: 'machines', label: 'Machines' },
 	{ id: 'leftovers', label: 'Leftover VMs' },
 	{ id: 'jobs', label: 'Jobs' },
+	{ id: 'templates', label: 'Templates' },
 ];

@@ -179,64 +179,6 @@
 <MachineTable machines={store.machines} owners empty={store.loaded ? 'Nobody has deployed a machine.' : 'Loading…'} />
 
 <div class="section-heading">
-	<h2 id="templates">Templates</h2>
-	<p>
-		Delete one no machine uses to free its space; its ISO stays, and the next deploy builds it again{#if freeable}
-			· {freeable} GB could be freed{/if}
-	</p>
-</div>
-{#if templatesProblem}
-	<p class="problem"><strong>Can't list them:</strong> {templatesProblem}</p>
-{:else if !templates}
-	<p class="loading">Asking vCenter…</p>
-{:else}
-	<div class="table-wrap">
-		<table class="table templates">
-			<thead>
-				<tr>
-					<th scope="col">Template</th>
-					<th scope="col">State</th>
-					<th scope="col">Size</th>
-					<th scope="col">Machines</th>
-					<th scope="col">Last deployed</th>
-					<th scope="col">Rebuild</th>
-					<th scope="col"><span class="visually-hidden">Actions</span></th>
-				</tr>
-			</thead>
-			<tbody>
-				{#each templates as t (`${t.template}/${t.version}`)}
-					{@const st = t.job && t.state !== 'building' ? { label: 'Build queued', tone: 'busy' as const } : templateStates[t.state]}
-					<tr>
-						<th scope="row">
-							{templateName(t)}
-							{#if t.vsphere}<span class="path mono">{t.vsphere}</span>{/if}
-						</th>
-						<td>
-							<Status size="sm" {...st} />
-							{#if t.state === 'failed' && t.detail}<span class="why" title={t.detail}>{t.detail}</span>{/if}
-							{#if t.problem}<span class="why">{t.problem}</span>{/if}
-						</td>
-						<td class="mono">{t.sizeGB === null ? '—' : `${Math.round(t.sizeGB)} GB`}</td>
-						<td>{t.machines.length || '—'}</td>
-						<td class="mono">{t.lastDeployedAt ? ago(t.lastDeployedAt, store.now) : '—'}</td>
-						<td class="mono">{t.build ? `~${t.build.minutes} min` : '—'}</td>
-						<td class="toggle-cell">
-							{#if t.deletable}
-								<button class="btn btn-sm" type="button" onclick={() => deleteTemplate(t)}><Icon name="trash" /> Delete</button>
-							{:else if t.rebuildable && (t.state === 'deleted' || t.state === 'failed') && !t.job}
-								<button class="btn btn-sm" type="button" onclick={() => buildTemplate(t)}><Icon name="rebuild" /> Build</button>
-							{:else if t.cantDelete && t.state === 'built'}
-								<span class="why" title={t.cantDelete}>{t.machines.length ? 'In use' : t.rebuildable ? "Can't delete" : 'Kept'}</span>
-							{/if}
-						</td>
-					</tr>
-				{/each}
-			</tbody>
-		</table>
-	</div>
-{/if}
-
-<div class="section-heading">
 	<h2 id="leftovers">Leftover VMs</h2>
 	<p>VMs in the machines folder that no machine owns, e.g. from a deploy that failed partway</p>
 </div>
@@ -343,6 +285,64 @@
 		</tbody>
 	</table>
 </div>
+
+<div class="section-heading">
+	<h2 id="templates">Templates</h2>
+	<p>
+		Delete one no machine uses to free its space; its ISO stays, and the next deploy builds it again{#if freeable}
+			· {freeable} GB could be freed{/if}
+	</p>
+</div>
+{#if templatesProblem}
+	<p class="problem"><strong>Can't list them:</strong> {templatesProblem}</p>
+{:else if !templates}
+	<p class="loading">Asking vCenter…</p>
+{:else}
+	<div class="table-wrap">
+		<table class="table templates">
+			<thead>
+				<tr>
+					<th scope="col">Template</th>
+					<th scope="col">State</th>
+					<th scope="col">Size</th>
+					<th scope="col">Machines</th>
+					<th scope="col">Last deployed</th>
+					<th scope="col">Rebuild</th>
+					<th scope="col"><span class="visually-hidden">Actions</span></th>
+				</tr>
+			</thead>
+			<tbody>
+				{#each templates as t (`${t.template}/${t.version}`)}
+					{@const st = t.job && t.state !== 'building' ? { label: 'Build queued', tone: 'busy' as const } : templateStates[t.state]}
+					<tr>
+						<th scope="row">
+							{templateName(t)}
+							{#if t.vsphere}<span class="path mono">{t.vsphere}</span>{/if}
+						</th>
+						<td>
+							<Status size="sm" {...st} />
+							{#if t.state === 'failed' && t.detail}<span class="why" title={t.detail}>{t.detail}</span>{/if}
+							{#if t.problem}<span class="why">{t.problem}</span>{/if}
+						</td>
+						<td class="mono">{t.sizeGB === null ? '—' : `${Math.round(t.sizeGB)} GB`}</td>
+						<td>{t.machines.length || '—'}</td>
+						<td class="mono">{t.lastDeployedAt ? ago(t.lastDeployedAt, store.now) : '—'}</td>
+						<td class="mono">{t.build ? `~${t.build.minutes} min` : '—'}</td>
+						<td class="toggle-cell">
+							{#if t.deletable}
+								<button class="btn btn-sm" type="button" onclick={() => deleteTemplate(t)}><Icon name="trash" /> Delete</button>
+							{:else if t.rebuildable && (t.state === 'deleted' || t.state === 'failed') && !t.job}
+								<button class="btn btn-sm" type="button" onclick={() => buildTemplate(t)}><Icon name="rebuild" /> Build</button>
+							{:else if t.cantDelete && t.state === 'built'}
+								<span class="why" title={t.cantDelete}>{t.machines.length ? 'In use' : t.rebuildable ? "Can't delete" : 'Kept'}</span>
+							{/if}
+						</td>
+					</tr>
+				{/each}
+			</tbody>
+		</table>
+	</div>
+{/if}
 
 <ConfirmDialog bind:request />
 
