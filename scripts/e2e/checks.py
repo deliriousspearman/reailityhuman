@@ -234,18 +234,19 @@ CASES: dict[str, list[dict]] = {
         }
     ],
     # A Windows machine sending its event logs to an ELK machine deployed first: its service runs and
-    # connects to that machine's Logstash.
+    # reaches that machine's Logstash.
     "winlogbeat": [
         {
             "options": {},
             "server": {"extra": "elk", "option": "elk"},
             "checks": [
                 ("ssh", "(Get-Service winlogbeat).Status", "Running"),
+                # Winlogbeat's own test of its connection to the ELK machine's Logstash.
                 (
                     "ssh",
-                    "Start-Sleep -Seconds 30; Get-ChildItem C:\\ProgramData\\winlogbeat\\logs, 'C:\\Program Files\\Winlogbeat\\logs' -Filter 'winlogbeat*'"
-                    " -ErrorAction SilentlyContinue | Get-Content | Select-String -Pattern 'established' -Quiet",
-                    "True",
+                    "& 'C:\\Program Files\\Winlogbeat\\winlogbeat.exe' test output -c 'C:\\Program Files\\Winlogbeat\\winlogbeat.yml'"
+                    " --path.home 'C:\\Program Files\\Winlogbeat' --path.data C:\\ProgramData\\winlogbeat 2>&1 | Out-String",
+                    "talk to server... OK",
                 ),
             ],
         }

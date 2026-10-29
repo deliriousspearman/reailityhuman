@@ -779,6 +779,10 @@ the machine is set up. A deploy fails straight away, before cloning, if one it n
 scripts/isos/fetch-images.sh --list                                   # each extra, its image and its ISO
 scripts/isos/fetch-images.sh --missing --credentials &lt;file&gt;           # make and upload any not there
 scripts/isos/fetch-images.sh grafana --credentials &lt;file&gt;             # one, after changing its image</code></pre></div>
+<p><strong>Several images, or files rather than images:</strong> an extra can list <code>dockerImages:</code> (ELK's three, on
+one ISO named with a hash of the list) or name a <code>mediaIso:</code> of files (k3s's binary and offline
+images, Winlogbeat for Windows), which <code>fetch-images.sh</code> makes from its own pinned downloads. Media
+CDs work on Windows too.</p>
 <p><strong>To update an image,</strong> change its <code>dockerImage:</code> in <code>extras.yaml</code>, run <code>fetch-images.sh</code> for that
 extra, and deploy the panel. The new version is a new ISO. Machines deployed with the old one keep
 using it: a reset attaches the same ISO again. Delete the old ISO once none of those machines is

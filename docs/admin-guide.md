@@ -460,6 +460,11 @@ scripts/isos/fetch-images.sh --missing --credentials <file>           # make and
 scripts/isos/fetch-images.sh grafana --credentials <file>             # one, after changing its image
 ```
 
+**Several images, or files rather than images:** an extra can list `dockerImages:` (ELK's three, on
+one ISO named with a hash of the list) or name a `mediaIso:` of files (k3s's binary and offline
+images, Winlogbeat for Windows), which `fetch-images.sh` makes from its own pinned downloads. Media
+CDs work on Windows too.
+
 **To update an image,** change its `dockerImage:` in `extras.yaml`, run `fetch-images.sh` for that
 extra, and deploy the panel. The new version is a new ISO. Machines deployed with the old one keep
 using it: a reset attaches the same ISO again. Delete the old ISO once none of those machines is

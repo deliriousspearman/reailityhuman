@@ -20,9 +20,10 @@ deployed by CI.
 | Enterprise Linux | Rocky 10, 9 and 8; AlmaLinux 10, 9 and 8; CentOS Stream 9; CentOS 8, 7, 6 (legacy) |
 | Fedora | Server 44 (with Cockpit), Workstation 44 (GNOME over Remote Desktop) |
 | Arch-based | CachyOS (rolling; KDE Plasma on the console) |
+| Small and BSD | Alpine Linux 3.24, FreeBSD 15.1 (added 2026-10-29; no extras) |
 | Windows Server | 2025 (desktop and Core), 2022, 2019 (rebuilt 2026-10-28); 2016 and 2012 R2 (legacy; added 2026-10-28, no SQL Server or Outlook) |
 | Windows | 11 Enterprise (90-day evaluation; TPM checks skipped) |
-| Security | Kali 2026.2, Parrot 7.4 |
+| Security | Kali 2026.2, Parrot 7.4 (both rebuilt 2026-10-29 with only web servers, FTP, Docker and Python) |
 | Firewalls and routers | OPNsense 26.7, pfSense CE 2.7.2, VyOS (rolling), MikroTik CHR 7.24 and 6.49 |
 | Hypervisors | Proxmox VE 9.2, 8.4, 7.4; XCP-ng 8.3 (all nested) |
 | Mail | Exchange Server SE (its own template; joins a domain controller's domain), Zimbra 8.8.15 |
@@ -91,6 +92,7 @@ the next step (an xrdp debug log while resizing) is agreed.
 | Item | What's needed | Then |
 |---|---|---|
 | Disk space for the next templates | None now: 89 GB free on 2026-10-29 after Jake deleted unused templates. ISOs stay; unused templates are deleted instead (templates on demand), and every ISO a recipe needs is back on the datastore | Windows 10 (~23 GB), Metasploitable 3 Windows (~14 GB), Parrot 6 (~19 GB, plus its import base while building) |
+| CI runner `lms-docker` | Since about 11:45 on 2026-10-29 it takes jobs but never starts them (no output; GitLab shows it online). It's on a host outside the lab, so it waits on Jake. Pushes since then were deployed by hand with `deploy/deploy.sh` from a clean worktree, after the same tests passed locally | CI deploys again; its queued pipelines will redeploy the same commits, which is harmless |
 | Windows 7, Server 2008 R2, ESXi | Their ISOs (not downloadable without a licence or a Broadcom login) | A legacy Windows build; nested ESXi |
 | vuln-ad fixes | A yes to push the fixes to `workstation/vuln-workstation.ps1`, committed locally in the vuln-ad repo | Push to `jake/vuln-ad` |
 | Firefox black screen | Testing on the one affected Firefox: without extensions, then with `privacy.resistFingerprinting` off. Canvas blockers stop the screen drawing | A fix if it isn't the browser's settings |
@@ -210,7 +212,16 @@ setting, off by default, for practising attacks (Redis with no password, MongoDB
 Tomcat's tomcat / tomcat). Tomcat is on 8080, so it can't go with Jenkins. All the Docker extras are on
 every template with Docker, and pass their end-to-end tests on Ubuntu 26.04.
 
-**Next:** FreeBSD, Alpine, FreeIPA, ELK, Graylog, k3s.
+**Done 2026-10-29, later:** the rest of the batch, each passing its end-to-end tests:
+- **ELK** (Elasticsearch, Logstash and Kibana 9.5.5), with Kibana's example data and this machine's
+  syslog; **Send event logs to ELK** for Windows Server 2016 to 2025 and Windows 11 (Winlogbeat into
+  ELK's Logstash, in its own winlogbeat-* indexes and data view);
+- **Graylog** 7.2 with OpenSearch 2.19 and MongoDB 7.0 (8.x won't start on Linux 6.19 and later);
+- **k3s** v1.36.5, offline, with example workloads;
+- **FreeIPA** on Rocky 9 and 10, with example users, groups, sudo and access rules;
+- **Alpine Linux 3.24** and **FreeBSD 15.1** templates, set up per clone like the legacy ones.
+
+The services batch asked for on 2026-10-23 is complete.
 
 ### 3a. Docker images on CDs, not in templates — done 2026-10-29
 
