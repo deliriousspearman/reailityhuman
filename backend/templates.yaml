@@ -1012,6 +1012,26 @@
   adminGroup: wheel
   access: [ssh, console]
 
+# Alpine Linux and FreeBSD (packer/alpine, packer/freebsd): small plain servers. Like the legacy
+# templates, each clone's user, password, SSH key and hostname come from the panel's guestinfo, read
+# by lab-firstboot through VMware Tools (scripts/template/alpine, scripts/template/freebsd). No extras.
+- template: alpine
+  version: "3.24"
+  # Built by Packer (packer/build.sh alpine) on 2026-10-29, from Alpine 3.24.3.
+  vsphere: Labs/Templates/tpl-alpine-3.24-20261029
+  build:
+    packer: alpine
+    isos: [alpine-virt-3.24.3-x86_64.iso]
+    minutes: 5
+    sizeGB: 1
+  cpu: 1
+  memoryGB: 1
+  diskGB: 8
+  username: labuser
+  family: legacy
+  adminGroup: wheel
+  access: [ssh, console]
+
 # Metasploitable 2: a deliberately vulnerable Ubuntu 8.04, deployed as the complete image it is
 # (packer/metasploitable/import-ms2.sh: Rapid7's image, with VMware's frozen Tools 10.0.12 added so
 # the panel sees its address). Its own sign-in, msfadmin / msfadmin, is on every machine: keep these

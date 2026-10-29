@@ -1983,14 +1983,20 @@
         -e ELASTICSEARCH_USERNAME=kibana_system -e ELASTICSEARCH_PASSWORD="$kibana_password" \
         -e XPACK_ENCRYPTEDSAVEDOBJECTS_ENCRYPTIONKEY="$(openssl rand -hex 32)" -e TELEMETRY_OPTIN=false \
         -e SERVER_PUBLICBASEURL="http://$ip:5601" kibana:9.5.5
-      kb() { curl -fsS -u "$username:$password" -H 'kbn-xsrf: lab' -H 'Content-Type: application/json' "$@"; }
+      # Sample data's routes are internal ones: Kibana takes them only with x-elastic-internal-origin.
+      kb() { curl -fsS -u "$username:$password" -H 'kbn-xsrf: lab' -H 'x-elastic-internal-origin: Kibana' -H 'Content-Type: application/json' "$@"; }
       for i in $(seq 300); do
         curl -s -u "$username:$password" http://127.0.0.1:5601/api/status 2>/dev/null | grep -q '"level":"available"' && break
         sleep 2
       done
       curl -s -u "$username:$password" http://127.0.0.1:5601/api/status | grep -q '"level":"available"'
-      kb -o /dev/null -X POST http://127.0.0.1:5601/api/data_views/data_view \
-        -d '{"data_view":{"title":"logstash-*","name":"Logstash","timeFieldName":"@timestamp"}}'
+      # "Available" comes a little before all its APIs answer: the first call, until it does.
+      for i in $(seq 60); do
+        kb -o /dev/null -X POST http://127.0.0.1:5601/api/data_views/data_view \
+          -d '{"data_view":{"title":"logstash-*","name":"Logstash","timeFieldName":"@timestamp"}}' 2>/dev/null && break
+        sleep 2
+      done
+      kb http://127.0.0.1:5601/api/data_views | grep -qF '"title":"logstash-*"'
       # For Windows machines sending their event logs (the Send event logs to ELK extra).
       kb -o /dev/null -X POST http://127.0.0.1:5601/api/data_views/data_view \
         -d '{"data_view":{"title":"winlogbeat-*","name":"Windows event logs","timeFieldName":"@timestamp"}}'
@@ -2017,7 +2023,8 @@
 - id: graylog
   name: Graylog
   category: Monitoring
-  dockerImages: [graylog/graylog:7.2.1, opensearchproject/opensearch:2.19.7, mongo:8.0.34]
+  # MongoDB 7.0: 8.0 and 8.3 refuse to start on Linux 6.19 and later (Ubuntu 26.04's), SERVER-121912.
+  dockerImages: [graylog/graylog:7.2.1, opensearchproject/opensearch:2.19.7, mongo:7.0.45]
   description: Graylog (in Docker), for collecting and searching logs, with OpenSearch and MongoDB, and the machine's user as its administrator. Its web interface on port 9000, syslog on UDP 1514 and GELF on UDP 12201. Optionally with example messages and this machine's own logs. It needs 8 GB of memory.
   ports: [9000, 1514, 12201]
   minMemoryGB: 8
@@ -2045,7 +2052,7 @@
       sysctl -q -w vm.max_map_count=262144
       systemctl enable -q --now docker
       docker network inspect graylog >/dev/null 2>&1 || docker network create graylog >/dev/null
-      lab_docker graylog-mongodb --network graylog -v graylog-mongodb:/data/db mongo:8.0.34
+      lab_docker graylog-mongodb --network graylog -v graylog-mongodb:/data/db mongo:7.0.45
       lab_docker graylog-opensearch --network graylog -v graylog-opensearch:/usr/share/opensearch/data \
         -e discovery.type=single-node -e DISABLE_SECURITY_PLUGIN=true -e DISABLE_INSTALL_DEMO_CONFIG=true \
         -e action.auto_create_index=false -e OPENSEARCH_JAVA_OPTS="-Xms1g -Xmx1g" opensearchproject/opensearch:2.19.7

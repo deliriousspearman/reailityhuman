@@ -138,6 +138,7 @@ export type TemplateFlag = 'nested' | 'licence' | 'vtpm' | 'domain' | 'hourly';
 export type TemplateCategory =
 	| 'Firewalls and routers'
 	| 'Linux'
+	| 'BSD'
 	| 'Windows'
 	| 'Windows Server'
 	| 'Hypervisors'

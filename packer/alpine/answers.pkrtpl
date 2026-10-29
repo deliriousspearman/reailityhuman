@@ -1,0 +1,22 @@
+# setup-alpine's answers (alpine.pkr.hcl): DHCP, OpenSSH and the build's key for root; the disk is
+# set up after. The community repository is on, for open-vm-tools.
+KEYMAPOPTS=none
+HOSTNAMEOPTS=alpine
+DEVDOPTS=mdev
+INTERFACESOPTS="auto lo
+iface lo inet loopback
+
+auto eth0
+iface eth0 inet dhcp
+"
+TIMEZONEOPTS=UTC
+PROXYOPTS=none
+APKREPOSOPTS="-1 -c"
+USEROPTS=none
+SSHDOPTS=openssh
+ROOTSSHKEY="${ssh_public_key}"
+NTPOPTS=chrony
+# The disk comes after, with setup-disk (alpine.pkr.hcl).
+DISKOPTS=none
+LBUOPTS=none
+APKCACHEOPTS=none

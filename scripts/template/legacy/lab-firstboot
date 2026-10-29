@@ -78,7 +78,7 @@ sed -i -E 's/^#?PasswordAuthentication .*/PasswordAuthentication yes/' /etc/ssh/
 if command -v systemctl >/dev/null 2>&1; then
 	systemctl restart sshd 2>/dev/null || systemctl restart ssh
 else
-	service sshd restart 2>/dev/null || service ssh restart
+	service sshd restart 2>/dev/null || service ssh restart 2>/dev/null || rc-service sshd restart
 fi
 
 echo "$instance" >"$DIR/instance"

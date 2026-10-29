@@ -107,6 +107,29 @@ export const templates: MachineTemplate[] = [
 		credentials: 'labuser / set on first deploy',
 	},
 
+	{
+		id: 'alpine',
+		name: 'Alpine Linux',
+		category: 'Linux',
+		os: 'Linux',
+		description: 'Tiny, security-minded Linux, with musl and BusyBox; the base of many container images.',
+		versions: [{ version: '3.24' }],
+		resources: { cpu: 1, memoryGB: 1, diskGB: 8 },
+		access: ['ssh', 'console'],
+		credentials: 'labuser / set on first deploy',
+	},
+	{
+		id: 'freebsd',
+		name: 'FreeBSD',
+		category: 'BSD',
+		os: 'FreeBSD',
+		description: 'The BSD Unix that OPNsense, pfSense and TrueNAS CORE are built on, as a plain server.',
+		versions: [{ version: '15.1' }],
+		resources: { cpu: 2, memoryGB: 2, diskGB: 20 },
+		access: ['ssh', 'console'],
+		credentials: 'labuser / set on first deploy',
+	},
+
 	// Windows
 	{
 		id: 'windows',
@@ -387,6 +410,7 @@ export function templateFor(id: string): MachineTemplate {
 export const categories: MachineTemplate['category'][] = [
 	'Firewalls and routers',
 	'Linux',
+	'BSD',
 	'Windows',
 	'Windows Server',
 	'Hypervisors',

@@ -77,3 +77,7 @@ truenas-scale-25.04  https://download.truenas.com/TrueNAS-SCALE-Fangtooth/25.04.
 truenas-core-13.0    https://download.freenas.org/13.0/STABLE/U6.8/x64/TrueNAS-13.0-U6.8.iso  583d68cfa7054f96c2d61c3b8641eb46705e8a1e3593d72911bbc4f5b64545b2
 # XCP-ng 8.3 LTS (packer/xcp-ng): the full installer ISO.
 xcp-ng-8.3       https://updates.xcp-ng.org/isos/8.3/xcp-ng-8.3.0-20260806.iso    https://updates.xcp-ng.org/isos/8.3/SHA256SUMS
+# FreeBSD 15.1 (packer/freebsd): the disc1 installer.
+freebsd-15.1     https://download.freebsd.org/releases/ISO-IMAGES/15.1/FreeBSD-15.1-RELEASE-amd64-disc1.iso  fa27646f05a1440fd26ffbb85e06a50bc86e128242a4e9cb7bb3ea76e1aa5fd9
+# Alpine Linux 3.24 (packer/alpine): the virt ISO, for virtual machines.
+alpine-3.24      https://dl-cdn.alpinelinux.org/alpine/v3.24/releases/x86_64/alpine-virt-3.24.3-x86_64.iso  cdc1bc0efc64d8d611bf3733f54868172a545888dfd726f518bf279bcb0ff1af

@@ -33,7 +33,7 @@ images are the `dockerImage:` lines in [`backend/extras.yaml`](../backend/extras
 | MongoDB | `mongo:9.0.4` | [Docker Hub](https://hub.docker.com/_/mongo) |
 | Apache Tomcat | `tomcat:11.0.27-jre25-temurin` | [Docker Hub](https://hub.docker.com/_/tomcat) |
 | Elastic Stack (ELK) | `elasticsearch:9.5.5`, `kibana:9.5.5`, `logstash:9.5.5` | Docker Hub ([Elasticsearch](https://hub.docker.com/_/elasticsearch), [Kibana](https://hub.docker.com/_/kibana), [Logstash](https://hub.docker.com/_/logstash)) |
-| Graylog | `graylog/graylog:7.2.1`, `opensearchproject/opensearch:2.19.7`, `mongo:8.0.34` | Docker Hub ([Graylog](https://hub.docker.com/r/graylog/graylog), [OpenSearch](https://hub.docker.com/r/opensearchproject/opensearch), [MongoDB](https://hub.docker.com/_/mongo)) |
+| Graylog | `graylog/graylog:7.2.1`, `opensearchproject/opensearch:2.19.7`, `mongo:7.0.45` | Docker Hub ([Graylog](https://hub.docker.com/r/graylog/graylog), [OpenSearch](https://hub.docker.com/r/opensearchproject/opensearch), [MongoDB](https://hub.docker.com/_/mongo)) |
 | Jenkins | `lab-deploy/jenkins:2.580.2`, built from `jenkins/jenkins:2.580.2-lts-jdk21` | [Docker Hub](https://hub.docker.com/r/jenkins/jenkins), plus plugins from the [Jenkins update site](https://updates.jenkins.io/): configuration-as-code, workflow-aggregator, job-dsl, git, pipeline-stage-view |
 
 Two extras install files rather than images, from media ISOs (`lab-media-<extra>-<version>.iso`) that
