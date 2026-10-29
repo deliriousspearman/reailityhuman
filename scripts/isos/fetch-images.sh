@@ -62,7 +62,7 @@ media_name() {
 }
 
 # media_winlogbeat <folder>
-# shellcheck disable=SC2329 # called as media_<id>
+# shellcheck disable=SC2317,SC2329 # called as media_<id>
 media_winlogbeat() {
 	local zip=winlogbeat-$WINLOGBEAT_VERSION-windows-x86_64.zip
 	curl -fsSL -o "$1/$zip" "https://artifacts.elastic.co/downloads/beats/winlogbeat/$zip"
@@ -72,7 +72,7 @@ media_winlogbeat() {
 }
 
 # media_k3s <folder>
-# shellcheck disable=SC2329 # called as media_<id>
+# shellcheck disable=SC2317,SC2329 # called as media_<id>
 media_k3s() {
 	local base=https://github.com/k3s-io/k3s/releases/download/${K3S_VERSION//+/%2B}
 	curl -fsSL -o "$1/k3s" "$base/k3s"
