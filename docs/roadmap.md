@@ -90,7 +90,7 @@ the next step (an xrdp debug log while resizing) is agreed.
 
 | Item | What's needed | Then |
 |---|---|---|
-| Disk space for the next templates | A yes to delete the ISOs `fetch.sh` can download again (~35 GB) and `parrot-base-7.4` (12.7 GB). 42.9 GB free on 2026-10-28; the panel keeps 30 GB | Windows 10 (~23 GB), Metasploitable 3 Windows (~14 GB), Parrot 6 (~19 GB, plus its import base while building) |
+| Disk space for the next templates | A yes to delete the ISOs `fetch.sh` can download again (~35 GB) and `parrot-base-7.4` (12.7 GB). 60 GB free on 2026-10-29 with no machines running (Ubuntu Desktop 22.04 and 24.04 deleted); the panel keeps 30 GB | Windows 10 (~23 GB), Metasploitable 3 Windows (~14 GB), Parrot 6 (~19 GB, plus its import base while building) |
 | Windows 7, Server 2008 R2, ESXi | Their ISOs (not downloadable without a licence or a Broadcom login) | A legacy Windows build; nested ESXi |
 | vuln-ad fixes | A yes to push the fixes to `workstation/vuln-workstation.ps1`, committed locally in the vuln-ad repo | Push to `jake/vuln-ad` |
 | Firefox black screen | Testing on the one affected Firefox: without extensions, then with `privacy.resistFingerprinting` off. Canvas blockers stop the screen drawing | A fix if it isn't the browser's settings |
@@ -205,7 +205,9 @@ Alpine, FreeIPA (on Rocky), ELK, Graylog, k3s, Redis, MongoDB and Tomcat.
 **Done 2026-10-28:** Prometheus (with Node Exporter as its own extra), GitLab CE and Jenkins, each with
 example data, and example dashboards for Grafana. Prometheus and Node Exporter are baked into every
 template that has Grafana; GitLab and Jenkins (4 GB of images) only into Ubuntu 24.04 and 26.04. Each
-template lists them under `plannedExtras` until it's rebuilt. **Next:** FreeBSD, Alpine, FreeIPA, ELK,
+template lists them under `plannedExtras` until it's rebuilt. All pass their end-to-end tests on both
+Ubuntu servers. Ubuntu Desktop 22.04 and 24.04 were deleted to free space (2026-10-28 and 2026-10-29);
+their next deploy builds them again, with Prometheus and Node Exporter. **Next:** FreeBSD, Alpine, FreeIPA, ELK,
 Graylog, k3s, Redis, MongoDB, Tomcat.
 
 ### 4. Keep a vCenter session open in the API — not needed (checked 2026-10-27)
@@ -304,8 +306,8 @@ unused for 30 days and deleting them after a week unless kept, comes once step 1
 
 ## The lab today
 
-- **Datastore:** datastore1, 583.5 GB over two extents, 42.9 GB free on 2026-10-28 after six new
-  templates (each one's ISO deleted once it passed). The PC's own free disk is the real limit.
+- **Datastore:** datastore1, 583.5 GB over two extents, 60 GB free on 2026-10-29 after six new
+  templates and deleting the two older Ubuntu Desktops (each one's ISO deleted once it passed). The PC's own free disk is the real limit.
 - **Memory:** the panel counts 46 GB with overcommit; vCenter uses 14 GB of it.
 - **Deploys:** at most 2 or 3 test machines at once.
 - **Limits on what Claude may do in the lab:**
