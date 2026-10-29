@@ -1027,7 +1027,7 @@ bundle; see <a href="../offline-install.md">offline-install.md</a>. Its template
 <tr>
 <td><code>BUILD_DIR</code></td>
 <td><code>/build</code></td>
-<td>The builder's copy of <code>packer/</code> and <code>scripts/</code> (deploy.sh puts them there)</td>
+<td>The builder's copy of <code>packer/</code> and <code>scripts/</code> (deploy.sh copies them to <code>build-next/</code>; <code>deploy/update-builder.sh</code> moves them here between builds)</td>
 </tr>
 <tr>
 <td><code>BUILD_LOGS_DIR</code></td>

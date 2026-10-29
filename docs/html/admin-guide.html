@@ -274,8 +274,9 @@ machine waits, its log says it's waiting for the build, and it deploys once the 
 build fails, the machine goes to error with the reason. <strong>Build</strong> builds a deleted or failed template
 straight away instead of waiting for a deploy.</p>
 <p>Builds run on the <code>builder</code> service, one at a time, as the panel's own vCenter account. Each build's
-full output is in <code>/srv/lab-deploy/build-logs/</code>; a failed build's job shows its last lines. A build
-first checks:</p>
+full output is in <code>/srv/lab-deploy/build-logs/</code>; a failed build's job shows its last lines. A deploy
+of the panel doesn't interrupt a build: it updates the builder once no build is queued or running
+(<code>build-logs/update-builder.log</code> says when). A build first checks:</p>
 <ul>
 <li>that its ISOs are there;</li>
 <li>that the datastore has room for it on top of <code>DATASTORE_RESERVE_GB</code>.</li>

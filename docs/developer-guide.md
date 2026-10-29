@@ -497,7 +497,7 @@ All settings come from the environment (`lab-deploy.env` on the server; an examp
 | `PASSWORD_LENGTH` | `16` | Generated passwords |
 | `VCENTER_TEMPLATE_FOLDER` | `Labs/Templates` | Where templates are, and builds put them |
 | `VCENTER_ISO_FOLDER` | `ISO` | The datastore folder builds read their ISOs from |
-| `BUILD_DIR` | `/build` | The builder's copy of `packer/` and `scripts/` (deploy.sh puts them there) |
+| `BUILD_DIR` | `/build` | The builder's copy of `packer/` and `scripts/` (deploy.sh copies them to `build-next/`; `deploy/update-builder.sh` moves them here between builds) |
 | `BUILD_LOGS_DIR` | `/build-logs` | Each build's whole output |
 | `BUILD_HTTP_IP` | — | The address build VMs fetch answer files from (Packer's web server) |
 | `BUILD_MEDIA_DIR` | — | Offline: `fetch-media.sh`'s media folder, for the Windows builds |

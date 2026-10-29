@@ -88,8 +88,9 @@ build fails, the machine goes to error with the reason. **Build** builds a delet
 straight away instead of waiting for a deploy.
 
 Builds run on the `builder` service, one at a time, as the panel's own vCenter account. Each build's
-full output is in `/srv/lab-deploy/build-logs/`; a failed build's job shows its last lines. A build
-first checks:
+full output is in `/srv/lab-deploy/build-logs/`; a failed build's job shows its last lines. A deploy
+of the panel doesn't interrupt a build: it updates the builder once no build is queued or running
+(`build-logs/update-builder.log` says when). A build first checks:
 
 - that its ISOs are there;
 - that the datastore has room for it on top of `DATASTORE_RESERVE_GB`.

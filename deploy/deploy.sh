@@ -37,10 +37,11 @@ echo "==> Copying to $TARGET:$REMOTE"
 rsync -az --delete -e "${SSH[*]}" "$ROOT/frontend/build/" "$TARGET:$REMOTE/site/"
 rsync -az --delete --exclude __pycache__ --exclude .pytest_cache --exclude '*.egg-info' \
 	-e "${SSH[*]}" "$ROOT/backend/" "$TARGET:$REMOTE/backend/"
-rsync -az -e "${SSH[*]}" "$ROOT/deploy/compose.yaml" "$ROOT/deploy/lab-deploy.env.example" "$TARGET:$REMOTE/"
-# The builder's copy of the template builds (app/builds.py), without local settings and results.
+rsync -az -e "${SSH[*]}" "$ROOT/deploy/compose.yaml" "$ROOT/deploy/lab-deploy.env.example" "$ROOT/deploy/update-builder.sh" "$TARGET:$REMOTE/"
+# The builder's copy of the template builds (app/builds.py), without local settings and results. Into
+# build-next/: update-builder.sh moves it to build/ when no build is running.
 rsync -az --delete --mkpath --exclude output/ --exclude lab.pkrvars.hcl --exclude packer_cache/ --exclude 'windows-server/media/' \
-	--exclude __pycache__ -e "${SSH[*]}" "$ROOT/packer" "$ROOT/scripts" "$TARGET:$REMOTE/build/"
+	--exclude __pycache__ -e "${SSH[*]}" "$ROOT/packer" "$ROOT/scripts" "$TARGET:$REMOTE/build-next/"
 rsync -az --mkpath -e "${SSH[*]}" "$ROOT/deploy/Caddyfile" "$TARGET:$REMOTE/caddy/"
 
 echo "==> Starting containers"
@@ -62,12 +63,23 @@ if [[ ! -f lab-deploy.env ]]; then
 fi
 echo "  Building the backend image"
 docker compose build --quiet api
-# Everything but the worker first, so the panel is back within seconds. --wait: fail the deploy if the
-# API doesn't come up healthy (e.g. a migration fails).
-docker compose up -d --remove-orphans --quiet-pull --wait --wait-timeout 180 $(docker compose config --services | grep -vx worker)
+# Everything but the worker and the builder first, so the panel is back within seconds. --wait: fail
+# the deploy if the API doesn't come up healthy (e.g. a migration fails).
+docker compose up -d --remove-orphans --quiet-pull --wait --wait-timeout 180 $(docker compose config --services | grep -vxe worker -e builder)
 # Then the worker, which first finishes the jobs it's running (a machine deploying: up to its 15-minute
 # stop_grace_period). Together, the API waited for it, down (the site answering 502) all that time.
 docker compose up -d --quiet-pull --wait --wait-timeout 1200 worker
+# The builder last, and only between template builds: recreating it would kill one (it can run for
+# hours). During a build, a waiter in the background updates it once the build queue is empty.
+mkdir -p build-next
+rc=0
+./update-builder.sh || rc=$?
+if ((rc == 3)); then
+	setsid nohup ./update-builder.sh --wait >>build-logs/update-builder.log 2>&1 </dev/null &
+	echo "  builder: a template build is queued or running; it's updated once the builds finish (build-logs/update-builder.log)"
+elif ((rc != 0)); then
+	exit "$rc"
+fi
 # Pick up Caddyfile changes without a restart. A bad config fails the deploy here.
 if ! out=$(docker compose exec -T caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile 2>&1); then
 	echo "$out" >&2
