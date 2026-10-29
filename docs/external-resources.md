@@ -29,6 +29,9 @@ images are the `dockerImage:` lines in [`backend/extras.yaml`](../backend/extras
 | Vaultwarden | `vaultwarden/server:1.37.4-alpine` | [Docker Hub](https://hub.docker.com/r/vaultwarden/server) |
 | Gitea | `gitea/gitea:28.1.0` | [Docker Hub](https://hub.docker.com/r/gitea/gitea) |
 | GitLab CE | `gitlab/gitlab-ce:19.5.1-ce.0` | [Docker Hub](https://hub.docker.com/r/gitlab/gitlab-ce) |
+| Redis | `redis:8.10.3` | [Docker Hub](https://hub.docker.com/_/redis) |
+| MongoDB | `mongo:9.0.4` | [Docker Hub](https://hub.docker.com/_/mongo) |
+| Apache Tomcat | `tomcat:11.0.27-jre25-temurin` | [Docker Hub](https://hub.docker.com/_/tomcat) |
 | Jenkins | `lab-deploy/jenkins:2.580.2`, built from `jenkins/jenkins:2.580.2-lts-jdk21` | [Docker Hub](https://hub.docker.com/r/jenkins/jenkins), plus plugins from the [Jenkins update site](https://updates.jenkins.io/): configuration-as-code, workflow-aggregator, job-dsl, git, pipeline-stage-view |
 
 ## Linux template builds

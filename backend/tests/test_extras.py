@@ -90,17 +90,18 @@ def test_prepare_sh_installs_every_extras_packages():
 
 def test_container_extras_run_their_image():
     """Each extra that runs a container (lab_docker <its id> ... <image>) declares that image as its
-    `image`, by the same name: the panel attaches its ISO, and the clone can't pull (--pull never)."""
+    `dockerImage`, by the same name: the panel attaches its ISO, and the clone can't pull (--pull never)."""
     run = {}
     for x in extras.extras().values():
         script = x.families.get("debian", ("", ""))[1]
         if "lab_docker" in script:
-            # The extra's own container (lab_docker <its id> ..., continued over "\" lines): its image is
-            # the last word that isn't an option, before the container's own arguments (--path.rootfs=…).
+            # The extra's own container (lab_docker <its id> ..., continued over "\" lines).
             command = re.search(rf"lab_docker {re.escape(x.id)} .*?(?<!\\)\n", script, re.S).group(0)
-            run[x.id] = [w for w in command.split() if not w.startswith("-") and w != "\\"][-1]
+            run[x.id] = command.split()
     assert run, "no extra runs a container"
-    assert run == {x.id: x.image for x in extras.extras().values() if x.image}
+    assert set(run) == {x.id for x in extras.extras().values() if x.image}
+    for extra_id, words in run.items():
+        assert extras.find(extra_id).image in words, f"{extra_id}'s lab_docker doesn't run its dockerImage"
 
 
 def test_templates_no_longer_bake_images():
@@ -165,8 +166,10 @@ def test_catalogue_conflicts_are_worked_out():
     # on one template).
     assert found["desktop"] == {"gnome-remote-login"} and found["gnome-remote-login"] == {"desktop"}
     for i in ("ftp", "outlook", "postgresql", "sqlite", "mssql", "docker", "python", "minio", "wazuh-agent", "zabbix-agent",
-              "prometheus", "node-exporter", "jenkins"):
+              "prometheus", "node-exporter", "redis", "mongodb"):
         assert found[i] == set(), i
+    # Port 8080: Jenkins and Tomcat.
+    assert found["jenkins"] == {"tomcat"} and found["tomcat"] == {"jenkins"}
 
 
 DATABASES = ("postgresql", "mariadb", "mysql", "sqlite", "mssql")

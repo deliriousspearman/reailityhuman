@@ -154,7 +154,7 @@ CASES: dict[str, list[dict]] = {
     ],
     "desktop": [{"options": {}, "checks": [("tcp", 3389)]}],
     "iis": [{"options": {}, "checks": [("http", "http", 80, "/", None)]}],
-    # Docker and the container apps (their images are in the template; nothing is pulled).
+    # Docker and the container apps (each image comes on its own CD; nothing is pulled).
     "docker": [{"options": {}, "checks": [("ssh", "docker info >/dev/null && echo docker-ok", "docker-ok")]}],
     "juice-shop": [{"options": {}, "checks": [("http", "http", 80, "/", "OWASP Juice Shop")]}],
     "dvwa": [{"options": {}, "checks": [("http", "http", 80, "/login.php", "Damn Vulnerable Web Application")]}],
@@ -210,6 +210,53 @@ CASES: dict[str, list[dict]] = {
         }
     ],
     "vaultwarden": [{"options": {}, "checks": [("http", "https", 443, "/", "Vaultwarden")]}],
+    "redis": [
+        {
+            "options": {"sample_data": "yes"},
+            "checks": [
+                ("tcp", 6379),
+                ("ssh", "echo {password} | sudo -S -p '' docker exec redis redis-cli --no-auth-warning -a {password} ZREVRANGE leaderboard 0 0", "alice"),
+                ("ssh", "echo {password} | sudo -S -p '' docker exec redis redis-cli -h {ip} PING", "NOAUTH"),
+            ],
+        },
+        {"options": {"insecure": "yes"}, "checks": [("ssh", "echo {password} | sudo -S -p '' docker exec redis redis-cli -h {ip} PING", "PONG")]},
+    ],
+    "mongodb": [
+        {
+            "options": {"sample_data": "yes"},
+            "checks": [
+                ("tcp", 27017),
+                (
+                    "ssh",
+                    "echo {password} | sudo -S -p '' docker exec mongodb mongosh --quiet -u {username} -p {password} --authenticationDatabase admin shop"
+                    " --eval 'print(db.orders.countDocuments(), db.customers.countDocuments())'",
+                    "60 20",
+                ),
+                ("ssh", "echo {password} | sudo -S -p '' docker exec mongodb mongosh --quiet mongodb://{ip}:27017/shop --eval 'db.orders.countDocuments()' 2>&1", "requires authentication"),
+            ],
+        },
+        {
+            "options": {"insecure": "yes"},
+            "checks": [("ssh", "echo {password} | sudo -S -p '' docker exec mongodb mongosh --quiet mongodb://{ip}:27017/ --eval 'db.adminCommand({ listDatabases: 1 }).ok'", "1")],
+        },
+    ],
+    "tomcat": [
+        {
+            "options": {"sample_data": "yes"},
+            "checks": [
+                ("http", "http", 8080, "/", "Apache Tomcat"),
+                ("http", "http", 8080, "/lab-notes/", "Lab notes"),
+                ("http", "http", 8080, "/examples/", None),
+                # From the machine's address, not localhost: the Manager answers from anywhere.
+                ("ssh", "curl -s -u {username}:{password} http://{ip}:8080/manager/text/list", "OK - Listed applications"),
+                ("ssh", "curl -s -o /dev/null -w '%{http_code}' -u tomcat:tomcat http://{ip}:8080/manager/text/list", "401"),
+            ],
+        },
+        {
+            "options": {"insecure": "yes"},
+            "checks": [("ssh", "curl -s -u tomcat:tomcat http://{ip}:8080/manager/text/list", "/manager:running")],
+        },
+    ],
     "gitea": [
         {
             "options": {},

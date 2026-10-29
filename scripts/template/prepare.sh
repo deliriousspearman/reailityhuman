@@ -78,6 +78,9 @@ declare -A EXTRA_PACKAGES_DEBIAN=(
 	[node-exporter]="docker.io"
 	[gitlab]="docker.io"
 	[jenkins]="docker.io"
+	[redis]="docker.io"
+	[mongodb]="docker.io"
+	[tomcat]="docker.io"
 	# Not packages: built from source (bake_minio).
 	[minio]=""
 	# The Zimbra template's own (bake_zimbra), never baked in with the rest.

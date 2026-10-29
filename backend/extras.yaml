@@ -162,6 +162,96 @@
       lab_apache
       lab_open 80/tcp 443/tcp
 
+- id: tomcat
+  name: Apache Tomcat
+  category: Web servers
+  dockerImage: tomcat:11.0.27-jre25-temurin
+  description: Apache Tomcat 11 (in Docker) on port 8080, a Java web server, with its Manager app and the machine's user as its administrator. Optionally with example apps, or with the Manager's well-known default login (tomcat / tomcat), to practise attacking it.
+  ports: [8080]
+  password: true
+  links: ["http://{ip}:8080/", "http://{ip}:8080/manager/html"]
+  notes:
+    - "The Manager (deploy, start and stop apps, or upload a WAR) is at /manager/html: sign in as {username}, with the machine's password."
+    - text: "Also signs in as tomcat / tomcat, with every Manager role: the weak login Tomcat's tools and exploits look for."
+      when: {insecure: ["yes"]}
+    - text: "Example apps: Tomcat's own examples (/examples/) and documentation (/docs/), and lab-notes (/lab-notes/), a small JSP app deployed as a WAR."
+      when: {sample_data: ["yes"]}
+  options:
+    - id: sample_data
+      label: Add example apps
+      help: Tomcat's examples and documentation, and a small JSP app deployed as a WAR, for the Manager to manage.
+      type: boolean
+      default: "no"
+    - id: insecure
+      label: Add the default login (tomcat / tomcat), for practice
+      help: A Manager user tomcat with the password tomcat, as Tomcat is often found. Only on a lab network.
+      type: boolean
+      default: "no"
+  debian:
+    packages: [docker.io]
+    script: |
+      conf=/etc/tomcat-lab
+      mkdir -p "$conf"
+      # As an XML attribute value.
+      xml() { printf %s "$1" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g; s/"/\&quot;/g'; }
+      roles=manager-gui,manager-script,manager-status,admin-gui,admin-script
+      {
+        echo '<?xml version="1.0" encoding="UTF-8"?>'
+        echo '<!-- Written by the lab panel. -->'
+        echo '<tomcat-users xmlns="http://tomcat.apache.org/xml" version="1.0">'
+        printf '  <user username="%s" password="%s" roles="%s"/>\n' "$(xml "$username")" "$(xml "$password")" "$roles"
+        [ "$insecure" = yes ] && printf '  <user username="tomcat" password="tomcat" roles="%s"/>\n' "$roles"
+        echo '</tomcat-users>'
+      } >"$conf/tomcat-users.xml"
+      chmod 644 "$conf/tomcat-users.xml"
+      # The Manager answers only on localhost by default: from anywhere, as it's the point here.
+      echo '<Context antiResourceLocking="false" privileged="true"/>' >"$conf/manager-context.xml"
+      apps="ROOT manager host-manager"
+      [ "$sample_data" = yes ] && apps="$apps examples docs"
+      lab_docker tomcat -p 8080:8080 -e LAB_APPS="$apps" \
+        -v "$conf/tomcat-users.xml:/usr/local/tomcat/conf/tomcat-users.xml:ro" \
+        -v "$conf/manager-context.xml:/usr/local/tomcat/webapps.dist/manager/META-INF/context.xml:ro" \
+        -v "$conf/manager-context.xml:/usr/local/tomcat/webapps.dist/host-manager/META-INF/context.xml:ro" \
+        tomcat:11.0.27-jre25-temurin \
+        sh -c 'for a in $LAB_APPS; do [ -e "webapps/$a" ] || cp -r "webapps.dist/$a" webapps/; done; exec catalina.sh run'
+      lab_wait_http http://127.0.0.1:8080/ 180
+      if [ "$sample_data" = yes ]; then
+        app=$(mktemp -d)
+        mkdir -p "$app/WEB-INF"
+        cat >"$app/WEB-INF/web.xml" <<'EOF'
+      <?xml version="1.0" encoding="UTF-8"?>
+      <web-app xmlns="https://jakarta.ee/xml/ns/jakartaee" version="6.0">
+        <display-name>Lab notes</display-name>
+      </web-app>
+      EOF
+        cat >"$app/index.jsp" <<'EOF'
+      <%@ page contentType="text/html; charset=UTF-8" %>
+      <%
+        Integer visits = (Integer) session.getAttribute("visits");
+        visits = visits == null ? 1 : visits + 1;
+        session.setAttribute("visits", visits);
+      %>
+      <!doctype html>
+      <title>Lab notes</title>
+      <h1>Lab notes</h1>
+      <p>A small JSP app, deployed as lab-notes.war. Manage it at <a href="/manager/html">/manager/html</a>.</p>
+      <ul>
+        <li>Server: <%= application.getServerInfo() %></li>
+        <li>Java: <%= System.getProperty("java.version") %></li>
+        <li>Your address: <%= request.getRemoteAddr() %></li>
+        <li>Visits this session: <%= visits %></li>
+      </ul>
+      EOF
+        (cd "$app" && python3 -m zipfile -c /tmp/lab-notes.war WEB-INF index.jsp)
+        docker cp /tmp/lab-notes.war tomcat:/usr/local/tomcat/webapps/lab-notes.war
+        rm -rf "$app" /tmp/lab-notes.war
+        for i in $(seq 60); do
+          curl -fs -o /dev/null http://127.0.0.1:8080/lab-notes/ && break
+          sleep 1
+        done
+        curl -fsS -o /dev/null http://127.0.0.1:8080/lab-notes/
+      fi
+
 - id: wordpress
   name: WordPress
   category: Web apps
@@ -442,6 +532,166 @@
       if [ "$sample_data" = yes ]; then
         home=$(getent passwd "$username" | cut -d: -f6)
         install -o "$username" -g "$(id -gn "$username")" -m 644 /opt/lab-deploy/chinook/Chinook_Sqlite.sqlite "$home/chinook.db"
+      fi
+
+- id: redis
+  name: Redis
+  category: Databases
+  dockerImage: redis:8.10.3
+  description: Redis, the in-memory key-value store (in Docker), on port 6379 with the machine's password. Optionally with example data, or left open with no password, to practise attacking an exposed Redis.
+  ports: [6379]
+  password: true
+  notes:
+    - text: "Connect with redis-cli -h {ip} -a <the machine's password>, or from the machine itself: docker exec -it redis redis-cli -a <the password>."
+      when: {insecure: ["no"]}
+    - text: "Left open: no password and protected mode off, so anyone who can reach port 6379 can read and write it. Connect with redis-cli -h {ip}."
+      when: {insecure: ["yes"]}
+    - text: "Example data: strings and counters, sessions that expire, a hash per user (user:1001 to user:1005), a job queue (queue:emails), tags (sets), a leaderboard (a sorted set), an event stream, store locations (geo), and an app's settings with a password in them (config:app)."
+      when: {sample_data: ["yes"]}
+  options:
+    - id: sample_data
+      label: Add example data
+      help: A few keys of every type (strings, hashes, lists, sets, a sorted set, a stream, geo), some expiring, and one hash with a password in it, to find.
+      type: boolean
+      default: "no"
+    - id: insecure
+      label: Leave it open (no password), for practice
+      help: Redis with no password and protected mode off, reachable from the network, as it's often found exposed. Only on a lab network.
+      type: boolean
+      default: "no"
+  debian:
+    packages: [docker.io]
+    script: |
+      conf=/etc/redis-lab
+      mkdir -p "$conf"
+      {
+        echo "# Written by the lab panel."
+        echo "appendonly yes"
+        if [ "$insecure" = yes ]; then
+          echo "protected-mode no"
+        else
+          # In double quotes, as Redis reads them: backslashes and quotes escaped.
+          printf 'requirepass "%s"\n' "$(printf %s "$password" | sed 's/\\/\\\\/g; s/"/\\"/g')"
+        fi
+      } >"$conf/redis.conf"
+      chmod 600 "$conf/redis.conf"
+      lab_docker redis -p 6379:6379 -v redis:/data -v "$conf/redis.conf:/usr/local/etc/redis/redis.conf:ro" \
+        redis:8.10.3 redis-server /usr/local/etc/redis/redis.conf
+      cli=(docker exec -i redis redis-cli --no-auth-warning)
+      [ "$insecure" = yes ] || cli+=(-a "$password")
+      for i in $(seq 60); do
+        [ "$("${cli[@]}" PING 2>/dev/null)" = PONG ] && break
+        sleep 1
+      done
+      [ "$("${cli[@]}" PING)" = PONG ]
+      if [ "$sample_data" = yes ]; then
+        "${cli[@]}" >/dev/null <<'EOF'
+      SET site:name "Lab Shop"
+      SET site:maintenance off
+      SET page:views:home 1024
+      SET page:views:shop 311
+      INCR page:views:home
+      SET session:7f3a9c2e "{\"user\":\"alice\",\"role\":\"admin\"}" EX 86400
+      SET session:b81d04aa "{\"user\":\"bob\",\"role\":\"user\"}" EX 3600
+      SET cache:product:42 "{\"name\":\"Desk lamp\",\"price\":24.99}" EX 600
+      HSET user:1001 name "Alice Smith" email alice@lab.example role admin
+      HSET user:1002 name "Bob Jones" email bob@lab.example role user
+      HSET user:1003 name "Carol Taylor" email carol@lab.example role user
+      HSET user:1004 name "Dave Brown" email dave@lab.example role support
+      HSET user:1005 name "Eve Wilson" email eve@lab.example role user
+      HSET config:app db_host db01.lab.example db_user shop db_password Spring2026! smtp_host mail.lab.example
+      RPUSH queue:emails "{\"to\":\"alice@lab.example\",\"template\":\"welcome\"}" "{\"to\":\"bob@lab.example\",\"template\":\"reset-password\"}" "{\"to\":\"carol@lab.example\",\"template\":\"order-shipped\"}"
+      SADD tags:post:1 redis databases tutorial
+      SADD tags:post:2 docker redis containers
+      SADD tags:post:3 security redis
+      ZADD leaderboard 4200 alice 3100 bob 2750 carol 1900 dave 1200 eve
+      XADD events * type login user alice
+      XADD events * type purchase user bob product 42
+      XADD events * type logout user alice
+      GEOADD stores -0.1276 51.5072 london -2.2426 53.4808 manchester -1.8904 52.4862 birmingham -3.1883 55.9533 edinburgh
+      EOF
+      fi
+
+- id: mongodb
+  name: MongoDB
+  category: Databases
+  dockerImage: mongo:9.0.4
+  description: MongoDB, the document database (in Docker), on port 27017 with the machine's user as its administrator; mongosh is included. Optionally with an example shop database, or left open with no sign-in, to practise attacking an exposed MongoDB.
+  ports: [27017]
+  minMemoryGB: 2
+  password: true
+  notes:
+    - text: "Connect with mongodb://{username}:<the machine's password>@{ip}:27017/?authSource=admin, or from the machine itself: docker exec -it mongodb mongosh -u {username} -p --authenticationDatabase admin."
+      when: {insecure: ["no"]}
+    - text: "Left open: no sign-in, so anyone who can reach port 27017 can read and change every database. Connect with mongodb://{ip}:27017/."
+      when: {insecure: ["yes"]}
+    - text: "Example data: the database shop, with customers (20), products (15) and orders (60, each referring to its customer and products), and indexes, including a text index on the products' names."
+      when: {sample_data: ["yes"]}
+  options:
+    - id: sample_data
+      label: Add an example database
+      help: A small shop (customers, products, orders that refer to both), with indexes, for finds, aggregations and $lookup.
+      type: boolean
+      default: "no"
+    - id: insecure
+      label: Leave it open (no sign-in), for practice
+      help: MongoDB with authentication off, reachable from the network, as it's often found exposed. Only on a lab network.
+      type: boolean
+      default: "no"
+  debian:
+    packages: [docker.io]
+    script: |
+      auth=()
+      [ "$insecure" = yes ] || auth=(-e MONGO_INITDB_ROOT_USERNAME="$username" -e MONGO_INITDB_ROOT_PASSWORD="$password")
+      lab_docker mongodb -p 27017:27017 -v mongodb:/data/db "${auth[@]}" mongo:9.0.4
+      # Through the published port: on its first start, the image runs a server inside the container only,
+      # to make the administrator, then restarts it.
+      for i in $(seq 180); do
+        (exec 3<>/dev/tcp/127.0.0.1/27017) 2>/dev/null &&
+          [ "$(docker exec mongodb mongosh --quiet --eval 'db.runCommand({ ping: 1 }).ok' 2>/dev/null)" = 1 ] && break
+        sleep 1
+      done
+      [ "$(docker exec mongodb mongosh --quiet --eval 'db.runCommand({ ping: 1 }).ok')" = 1 ]
+      if [ "$sample_data" = yes ]; then
+        sh=(docker exec -i mongodb mongosh --quiet)
+        [ "$insecure" = yes ] || sh+=(-u "$username" -p "$password" --authenticationDatabase admin)
+        "${sh[@]}" shop >/dev/null <<'EOF'
+      const first = ["Alice", "Bob", "Carol", "Dave", "Eve", "Frank", "Grace", "Heidi", "Ivan", "Judy",
+        "Mallory", "Niaj", "Olivia", "Peggy", "Rupert", "Sybil", "Trent", "Victor", "Walter", "Yasmin"];
+      const last = ["Smith", "Jones", "Taylor", "Brown", "Wilson"];
+      const cities = ["London", "Manchester", "Birmingham", "Leeds", "Glasgow", "Bristol"];
+      db.customers.drop(); db.products.drop(); db.orders.drop();
+      db.customers.insertMany(first.map((n, i) => ({
+        _id: i + 1, name: `${n} ${last[i % last.length]}`, email: `${n.toLowerCase()}@lab.example`,
+        city: cities[i % cities.length], tier: ["bronze", "silver", "gold"][i % 3], joined: new Date(Date.UTC(2025, i % 12, 1 + i)),
+      })));
+      const products = [
+        ["Desk lamp", "home", 24.99], ["Office chair", "furniture", 149.0], ["Standing desk", "furniture", 329.0],
+        ["USB-C hub", "electronics", 39.5], ["Mechanical keyboard", "electronics", 89.99], ["Wireless mouse", "electronics", 24.0],
+        ["Monitor arm", "furniture", 59.0], ["Notebook", "stationery", 4.5], ["Fountain pen", "stationery", 32.0],
+        ["Coffee mug", "home", 9.99], ["Desk plant", "home", 14.0], ["Headphones", "electronics", 119.0],
+        ["Webcam", "electronics", 64.0], ["Whiteboard", "stationery", 45.0], ["Cable tidy", "home", 7.5],
+      ];
+      db.products.insertMany(products.map(([name, category, price], i) => ({ _id: i + 1, name, category, price, stock: (i * 7) % 40 })));
+      const orders = [];
+      for (let i = 0; i < 60; i++) {
+        const items = [];
+        for (let j = 0; j <= i % 3; j++) {
+          const p = (i * 3 + j * 5) % products.length;
+          items.push({ productId: p + 1, name: products[p][0], qty: 1 + ((i + j) % 3), price: products[p][2] });
+        }
+        orders.push({
+          _id: 1000 + i, customerId: ((i * 7) % first.length) + 1, date: new Date(Date.UTC(2026, i % 10, 1 + (i % 27))),
+          status: ["placed", "shipped", "delivered", "cancelled"][i % 4], items,
+          total: Math.round(items.reduce((sum, x) => sum + x.qty * x.price, 0) * 100) / 100,
+        });
+      }
+      db.orders.insertMany(orders);
+      db.customers.createIndex({ email: 1 }, { unique: true });
+      db.orders.createIndex({ customerId: 1 });
+      db.orders.createIndex({ date: -1 });
+      db.products.createIndex({ name: "text" });
+      EOF
       fi
 
 - id: mail
