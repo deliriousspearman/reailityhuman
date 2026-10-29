@@ -90,7 +90,7 @@ the next step (an xrdp debug log while resizing) is agreed.
 
 | Item | What's needed | Then |
 |---|---|---|
-| Disk space for the next templates | A yes to delete the ISOs `fetch.sh` can download again (~35 GB) and `parrot-base-7.4` (12.7 GB). 60 GB free on 2026-10-29 with no machines running (Ubuntu Desktop 22.04 and 24.04 deleted); the panel keeps 30 GB | Windows 10 (~23 GB), Metasploitable 3 Windows (~14 GB), Parrot 6 (~19 GB, plus its import base while building) |
+| Disk space for the next templates | None now: 89 GB free on 2026-10-29 after Jake deleted unused templates. ISOs stay; unused templates are deleted instead (templates on demand), and every ISO a recipe needs is back on the datastore | Windows 10 (~23 GB), Metasploitable 3 Windows (~14 GB), Parrot 6 (~19 GB, plus its import base while building) |
 | Windows 7, Server 2008 R2, ESXi | Their ISOs (not downloadable without a licence or a Broadcom login) | A legacy Windows build; nested ESXi |
 | vuln-ad fixes | A yes to push the fixes to `workstation/vuln-workstation.ps1`, committed locally in the vuln-ad repo | Push to `jake/vuln-ad` |
 | Firefox black screen | Testing on the one affected Firefox: without extensions, then with `privacy.resistFingerprinting` off. Canvas blockers stop the screen drawing | A fix if it isn't the browser's settings |
@@ -203,12 +203,34 @@ Asked 2026-10-23, each with an option for example data: GitLab CE, Jenkins, Prom
 Alpine, FreeIPA (on Rocky), ELK, Graylog, k3s, Redis, MongoDB and Tomcat.
 
 **Done 2026-10-28:** Prometheus (with Node Exporter as its own extra), GitLab CE and Jenkins, each with
-example data, and example dashboards for Grafana. Prometheus and Node Exporter are baked into every
-template that has Grafana; GitLab and Jenkins (4 GB of images) only into Ubuntu 24.04 and 26.04. Each
-template lists them under `plannedExtras` until it's rebuilt. All pass their end-to-end tests on both
-Ubuntu servers. Ubuntu Desktop 22.04 and 24.04 were deleted to free space (2026-10-28 and 2026-10-29);
-their next deploy builds them again, with Prometheus and Node Exporter. **Next:** FreeBSD, Alpine, FreeIPA, ELK,
-Graylog, k3s, Redis, MongoDB, Tomcat.
+example data, and example dashboards for Grafana.
+
+**Done 2026-10-29:** Redis, MongoDB and Tomcat, each with example data and a deliberately insecure
+setting, off by default, for practising attacks (Redis with no password, MongoDB with no sign-in,
+Tomcat's tomcat / tomcat). Tomcat is on 8080, so it can't go with Jenkins. All the Docker extras are on
+every template with Docker, and pass their end-to-end tests on Ubuntu 26.04.
+
+**Next:** FreeBSD, Alpine, FreeIPA, ELK, Graylog, k3s.
+
+### 3a. Docker images on CDs, not in templates — done 2026-10-29
+
+Templates have Docker but no images. Each Docker extra's image is an ISO in the datastore's ISO folder
+(`lab-image-<extra>-<tag>.iso`, made by `scripts/isos/fetch-images.sh`; 13 of them, about 4 GB). The
+panel attaches a machine's at deploy, after its clean snapshot; the machine loads them and the panel
+takes them out once it's set up, and a reset attaches the same ones again. A new or updated service
+needs no template rebuild, and the panel marks the services that run in Docker. Templates built
+before this keep their old images until they're next rebuilt. Ubuntu 26.04 rebuilt without them:
+7.5 GB, down from 23.2.
+
+**Also 2026-10-29:**
+- **Trim:** `clean.sh` runs `fstrim` before the template's snapshot. Debian 12: 12.3 GB, down from
+  14.0, with Prometheus and Node Exporter added.
+- **Kali and Parrot** offer only web servers, FTP, Docker and Python: Kali 16.8 GB (was 25.2),
+  Parrot 15.5 GB (was 18.6).
+- **Deploys no longer cut off a template build:** the builder is updated once the builds finish
+  (`deploy/update-builder.sh`).
+- **[External resources](external-resources.md):** everything downloaded from outside, besides the
+  ISOs and the OSes' own packages.
 
 ### 4. Keep a vCenter session open in the API — not needed (checked 2026-10-27)
 
@@ -306,8 +328,8 @@ unused for 30 days and deleting them after a week unless kept, comes once step 1
 
 ## The lab today
 
-- **Datastore:** datastore1, 583.5 GB over two extents, 60 GB free on 2026-10-29 after six new
-  templates and deleting the two older Ubuntu Desktops (each one's ISO deleted once it passed). The PC's own free disk is the real limit.
+- **Datastore:** datastore1, 583.5 GB over two extents, 89 GB free on 2026-10-29, with every ISO a
+  recipe needs and the 13 image ISOs, after Jake deleted unused templates. The PC's own free disk is the real limit.
 - **Memory:** the panel counts 46 GB with overcommit; vCenter uses 14 GB of it.
 - **Deploys:** at most 2 or 3 test machines at once.
 - **Limits on what Claude may do in the lab:**
