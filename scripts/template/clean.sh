@@ -140,6 +140,12 @@ if [[ -f /etc/gdm3/daemon.conf ]] && grep -q "^AutomaticLogin=$BUILD_USER\$" /et
 	echo "  automatic sign-in removed from /etc/gdm3/daemon.conf"
 fi
 
+echo "==> Trimming free space"
+# The disk is thin: blocks the build wrote and deleted (packages, image layers) stay allocated in the
+# datastore until the guest says they're free. Where the disk can't trim, fstrim says so; no failure.
+sync
+fstrim -av 2>&1 | sed 's/^/  /' || true
+
 echo "==> Powering off. Next, in vCenter: CD/DVD to Client Device, snapshot 'clean', convert to template."
 sync
 systemctl poweroff
