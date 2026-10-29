@@ -258,8 +258,8 @@ CASES: dict[str, list[dict]] = {
                 ("ssh", "curl -s -u {username}:{password} -H 'X-Requested-By: e2e' http://127.0.0.1:9000/api/system/inputs", "Syslog UDP"),
                 (
                     "ssh",
-                    "sleep 60; n=$(curl -s -u {username}:{password} -H 'X-Requested-By: e2e' http://127.0.0.1:9000/api/count/total"
-                    " | grep -o '[0-9][0-9]*' | head -1); [ \"${n:-0}\" -gt 0 ] && echo has-messages",
+                    "sleep 30; n=$(curl -s -u {username}:{password} -H 'X-Requested-By: e2e' http://127.0.0.1:9000/api/system/indexer/overview"
+                    " | grep -o '\"events\":[0-9]*' | head -1 | cut -d: -f2); [ \"${n:-0}\" -gt 0 ] && echo has-messages",
                     "has-messages",
                 ),
             ],

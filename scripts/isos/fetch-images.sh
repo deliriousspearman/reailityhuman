@@ -203,9 +203,10 @@ for id in "${ids[@]}"; do
 		printf '%s\n' "${imgs[@]}" >"$dir/lab-image.txt"
 		docker save "${imgs[@]}" | "$zip" -c >"$dir/image.tar.gz"
 	fi
-	# Level 3: files over 4 GB (GitLab's isn't, compressed, but may grow).
+	# Level 3: files over 4 GB (GitLab's isn't, compressed, but may grow). Rock Ridge names for Linux, and
+	# Joliet for Windows, which otherwise sees ISO 9660's 8.3-style capitals (LAB_MEDIA.TXT).
 	label=$(printf 'LAB-%s' "$id" | tr '[:lower:]-' '[:upper:]_' | cut -c1-32)
-	xorriso -as mkisofs -quiet -iso-level 3 -r -V "$label" -o "$STAGING/$iso" "$dir"
+	xorriso -as mkisofs -quiet -iso-level 3 -r -J -joliet-long -V "$label" -o "$STAGING/$iso" "$dir"
 	rm -rf "$dir"
 	echo "  $iso: $(du -h "$STAGING/$iso" | cut -f1)"
 	if ((upload)); then

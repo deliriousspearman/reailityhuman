@@ -1,0 +1,25 @@
+#!/bin/sh
+# shellcheck disable=SC2034 # rc.subr reads these
+# PROVIDE: lab_firstboot
+# REQUIRE: LOGIN vmware_guestd sshd
+# KEYWORD: nojail
+#
+# The lab panel's first boot (/usr/local/libexec/lab-firstboot), in the background: it waits for VMware
+# Tools. Enable with lab_firstboot_enable="YES".
+
+# shellcheck disable=SC1091 # the system's own
+. /etc/rc.subr
+
+name=lab_firstboot
+rcvar=lab_firstboot_enable
+start_cmd="${name}_start"
+stop_cmd=":"
+
+lab_firstboot_start()
+{
+	/usr/local/libexec/lab-firstboot &
+}
+
+load_rc_config $name
+: "${lab_firstboot_enable:=NO}"
+run_rc_command "$1"

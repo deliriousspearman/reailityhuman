@@ -1031,6 +1031,22 @@
   family: legacy
   adminGroup: wheel
   access: [ssh, console]
+- template: freebsd
+  version: "15.1"
+  # Built by Packer (packer/build.sh freebsd) on 2026-10-29.
+  vsphere: Labs/Templates/tpl-freebsd-15.1-20261029
+  build:
+    packer: freebsd
+    isos: [FreeBSD-15.1-RELEASE-amd64-disc1.iso]
+    minutes: 10
+    sizeGB: 3
+  cpu: 2
+  memoryGB: 2
+  diskGB: 20
+  username: labuser
+  family: legacy
+  adminGroup: wheel
+  access: [ssh, console]
 
 # Metasploitable 2: a deliberately vulnerable Ubuntu 8.04, deployed as the complete image it is
 # (packer/metasploitable/import-ms2.sh: Rapid7's image, with VMware's frozen Tools 10.0.12 added so

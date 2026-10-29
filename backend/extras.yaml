@@ -2689,7 +2689,7 @@
         ipa hbacrule-add developers-ssh --hostcat=all --desc "Developers sign in over SSH" >/dev/null
         ipa hbacrule-add-user developers-ssh --groups=developers >/dev/null
         ipa hbacrule-add-service developers-ssh --hbacsvcs=sshd >/dev/null
-        ipa host-add "web01.$domain" --ip-address=192.0.2.10 --force --desc "An example web server" >/dev/null
+        ipa host-add "web01.$domain" --force --desc "An example web server" >/dev/null
       fi
       kdestroy -A
 

@@ -1,0 +1,24 @@
+# bsdinstall's script (freebsd.pkr.hcl): UFS on the first disk, the base system, then, in the new
+# system, sshd, DHCP and VMware Tools, and the build's key for root.
+PARTITIONS=DEFAULT
+DISTRIBUTIONS="kernel.txz base.txz"
+# From FreeBSD's site: 15's disc1 doesn't carry the sets where bsdinstall looks, and would ask for a mirror.
+export BSDINSTALL_DISTSITE="https://download.freebsd.org/releases/amd64/${version}-RELEASE"
+export nonInteractive="YES"
+# DNS, for the downloads and the new system: bsdinstall emptied its folder of the address DHCP gave.
+mkdir -p /tmp/bsdinstall_etc
+cp /tmp/lab-resolv.conf /tmp/bsdinstall_etc/resolv.conf
+
+#!/bin/sh
+sysrc hostname="freebsd"
+sysrc ifconfig_DEFAULT="SYNCDHCP"
+sysrc sshd_enable="YES"
+mkdir -p /root/.ssh
+echo "${ssh_public_key}" >/root/.ssh/authorized_keys
+chmod 700 /root/.ssh
+chmod 600 /root/.ssh/authorized_keys
+echo "PermitRootLogin prohibit-password" >>/etc/ssh/sshd_config
+# VMware Tools, so the new system reports its address to Packer.
+env ASSUME_ALWAYS_YES=yes pkg bootstrap -f
+pkg install -y open-vm-tools-nox11
+sysrc vmware_guest_vmblock_enable="NO" vmware_guestd_enable="YES"

@@ -1,0 +1,75 @@
+#!/bin/sh
+# The lab panel's first boot for the FreeBSD template (installed by prepare-freebsd.sh, run at boot by
+# /usr/local/etc/rc.d/lab_firstboot). As on the legacy templates (../legacy/lab-firstboot), it reads the
+# guestinfo keys the panel sets (backend/app/cloudinit.py: legacy_guestinfo) through VMware Tools, and:
+#   - sets the hostname;
+#   - creates the user, with the machine's password (a SHA-512 hash) and SSH key, in the wheel group
+#     (sudo);
+#   - makes this machine's own SSH host keys;
+#   - writes /var/lib/lab-deploy/extras.status, which the panel waits for: the sign the machine is ready.
+# It runs at every boot but acts once per machine (guestinfo.lab.instance); a reset reverts the disk to
+# before the first boot, so it runs again.
+set -u
+
+DIR=/var/lib/lab-deploy
+STATUS=$DIR/extras.status
+LOG_DIR=/var/log/lab-deploy
+
+mkdir -p "$DIR" "$LOG_DIR"
+chmod 755 "$DIR" "$LOG_DIR"
+exec >>"$LOG_DIR/firstboot.log" 2>&1
+echo "== $(date -u '+%Y-%m-%d %H:%M:%S') lab-firstboot"
+
+rpc() { /usr/local/bin/vmware-rpctool "info-get guestinfo.lab.$1" 2>/dev/null; }
+
+# VMware Tools may still be starting.
+instance=""
+i=0
+while [ $i -lt 60 ]; do
+	instance=$(rpc instance) && [ -n "$instance" ] && break
+	i=$((i + 1))
+	sleep 2
+done
+if [ -z "$instance" ]; then
+	echo "No panel data (guestinfo.lab.instance): nothing to do."
+	exit 0
+fi
+if [ "$(cat "$DIR/instance" 2>/dev/null)" = "$instance" ]; then
+	echo "Already set up for $instance."
+	exit 0
+fi
+
+host=$(rpc hostname)
+user=$(rpc username)
+hash=$(rpc password)
+group=$(rpc group)
+key=$(rpc sshkey | openssl base64 -d -A 2>/dev/null || true)
+echo "Setting up $instance: host $host, user $user"
+
+sysrc -q hostname="$host" >/dev/null
+hostname "$host"
+
+# The user, its password (as the hash the panel sent) and key, in the admin group.
+id "$user" >/dev/null 2>&1 || pw useradd -n "$user" -m -s /bin/sh
+pw groupmod "$group" -m "$user"
+printf '%s\n' "$hash" | pw usermod -n "$user" -H 0
+if [ -n "$key" ]; then
+	home=$(pw usershow -n "$user" | cut -d: -f9)
+	mkdir -p "$home/.ssh"
+	grep -qxF "$key" "$home/.ssh/authorized_keys" 2>/dev/null || echo "$key" >>"$home/.ssh/authorized_keys"
+	chown -R "$user" "$home/.ssh"
+	chmod 700 "$home/.ssh"
+	chmod 600 "$home/.ssh/authorized_keys"
+fi
+
+# SSH: this machine's own host keys (clean-freebsd.sh deleted the template's).
+ssh-keygen -A >/dev/null
+service sshd restart
+
+echo "$instance" >"$DIR/instance"
+# Empty: no extras on this template. Written last, in one go, readable by the user (the panel reads it
+# as them).
+tmp=$(mktemp "$DIR/status.XXXXXX")
+chmod 644 "$tmp"
+mv "$tmp" "$STATUS"
+echo "Done."
