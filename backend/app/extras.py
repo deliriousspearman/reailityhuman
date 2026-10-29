@@ -289,6 +289,9 @@ class Extra:
     # The container image it runs (lab_docker), e.g. "grafana/grafana:13.2.4". Not baked into templates:
     # the panel attaches it as a CD at deploy (image_iso), and lab_docker loads it.
     image: str = ""
+    # Other extras whose images it runs too (their CDs go in with its own), e.g. Prometheus's example
+    # data starts Node Exporter.
+    more_images: tuple[str, ...] = ()
     # family -> (packages, script)
     families: dict[str, tuple[tuple[str, ...], str]] = field(default_factory=dict)
 
@@ -351,8 +354,12 @@ def extras() -> dict[str, Extra]:
             options=options,
             setup_minutes=int(e.get("setupMinutes", 0)),
             image=e.get("dockerImage", ""),
+            more_images=tuple(e.get("moreImages", [])),
             families={f: (tuple(e[f].get("packages", [])), e[f]["script"]) for f in FAMILIES if f in e},
         )
+    for x in out.values():
+        if bad := [i for i in x.more_images if i not in out or not out[i].image]:
+            raise ValueError(f"extras.yaml: {x.id}: moreImages names {', '.join(bad)}, which isn't an extra with a dockerImage")
     return {i: replace(x, conflicts=tuple(y.id for y in out.values() if clashes(x, y))) for i, x in out.items()}
 
 
@@ -387,7 +394,13 @@ def media(chosen: list[dict], family: str) -> list[str]:
     """The image ISOs a machine with these extras needs attached at first boot (Linux only)."""
     if family not in ("debian", "rhel", "arch"):
         return []
-    return [iso for c in chosen if (x := find(c["id"])) and (iso := image_iso(x))]
+    out: list[str] = []
+    for c in chosen:
+        if x := find(c["id"]):
+            for y in (x, *(find(i) for i in x.more_images)):
+                if y and (iso := image_iso(y)) and iso not in out:
+                    out.append(iso)
+    return out
 
 
 # Choosing -------------------------------------------------------------------------------------------

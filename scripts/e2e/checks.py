@@ -232,7 +232,7 @@ CASES: dict[str, list[dict]] = {
                     " --eval 'print(db.orders.countDocuments(), db.customers.countDocuments())'",
                     "60 20",
                 ),
-                ("ssh", "echo {password} | sudo -S -p '' docker exec mongodb mongosh --quiet mongodb://{ip}:27017/shop --eval 'db.orders.countDocuments()' 2>&1", "requires authentication"),
+                ("ssh", "echo {password} | sudo -S -p '' docker exec mongodb mongosh --quiet mongodb://{ip}:27017/shop --eval 'db.orders.countDocuments()' 2>&1; true", "requires authentication"),
             ],
         },
         {

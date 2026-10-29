@@ -130,6 +130,10 @@ def test_docker_extras_get_their_image_and_iso():
     chosen = [{"id": "grafana", "options": {}}, {"id": "nginx", "options": {}}]
     assert extras.media(chosen, "debian") == [extras.image_iso(grafana)]
     assert extras.media(chosen, "windows") == []
+    # Prometheus's example data runs Node Exporter: its CD goes in too, once.
+    prometheus, exporter = (extras.image_iso(extras.find(i)) for i in ("prometheus", "node-exporter"))
+    assert extras.media([{"id": "prometheus", "options": {}}], "debian") == [prometheus, exporter]
+    assert extras.media([{"id": "prometheus", "options": {}}, {"id": "node-exporter", "options": {}}], "debian") == [prometheus, exporter]
 
 
 # Choosing ---------------------------------------------------------------------------------------------

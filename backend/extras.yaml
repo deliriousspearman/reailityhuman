@@ -31,6 +31,7 @@
 #              Not in the templates: the panel attaches it at deploy as a CD from the datastore's ISO
 #              folder (lab-image-<id>-<tag>.iso, made by scripts/isos/fetch-images.sh), and lab_docker
 #              loads it. A new version is a new ISO: run fetch-images.sh after changing it here.
+#   moreImages   optional: other extras whose images it runs too, e.g. [node-exporter]: their CDs go in too.
 #   password   true if the script needs the machine's password as it is ($password), e.g. for a web
 #              app's admin; then the panel clears it from vCenter once the machine is set up.
 #              $username (the machine's user) is always set.
@@ -204,14 +205,17 @@
         echo '</tomcat-users>'
       } >"$conf/tomcat-users.xml"
       chmod 644 "$conf/tomcat-users.xml"
-      # The Manager answers only on localhost by default: from anywhere, as it's the point here.
+      # The Manager and the examples answer only on localhost by default: from anywhere, as it's the
+      # point here.
       echo '<Context antiResourceLocking="false" privileged="true"/>' >"$conf/manager-context.xml"
+      echo '<Context/>' >"$conf/open-context.xml"
       apps="ROOT manager host-manager"
       [ "$sample_data" = yes ] && apps="$apps examples docs"
       lab_docker tomcat -p 8080:8080 -e LAB_APPS="$apps" \
         -v "$conf/tomcat-users.xml:/usr/local/tomcat/conf/tomcat-users.xml:ro" \
         -v "$conf/manager-context.xml:/usr/local/tomcat/webapps.dist/manager/META-INF/context.xml:ro" \
         -v "$conf/manager-context.xml:/usr/local/tomcat/webapps.dist/host-manager/META-INF/context.xml:ro" \
+        -v "$conf/open-context.xml:/usr/local/tomcat/webapps.dist/examples/META-INF/context.xml:ro" \
         tomcat:11.0.27-jre25-temurin \
         sh -c 'for a in $LAB_APPS; do [ -e "webapps/$a" ] || cp -r "webapps.dist/$a" webapps/; done; exec catalina.sh run'
       lab_wait_http http://127.0.0.1:8080/ 180
@@ -574,6 +578,8 @@
           printf 'requirepass "%s"\n' "$(printf %s "$password" | sed 's/\\/\\\\/g; s/"/\\"/g')"
         fi
       } >"$conf/redis.conf"
+      # Readable by the container's redis user (uid 999) only: it holds the password.
+      chown 999:999 "$conf/redis.conf"
       chmod 600 "$conf/redis.conf"
       lab_docker redis -p 6379:6379 -v redis:/data -v "$conf/redis.conf:/usr/local/etc/redis/redis.conf:ro" \
         redis:8.10.3 redis-server /usr/local/etc/redis/redis.conf
@@ -1248,6 +1254,7 @@
   name: Prometheus
   category: Monitoring
   dockerImage: prom/prometheus:v3.15.1
+  moreImages: [node-exporter]   # its example data runs Node Exporter
   description: Prometheus (in Docker), collecting metrics and evaluating alert rules, with its web interface on port 9090. Optionally with example data, and other machines to collect from.
   ports: [9090]
   links: ["http://{ip}:9090/"]
