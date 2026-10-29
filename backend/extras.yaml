@@ -31,7 +31,12 @@
 #              Not in the templates: the panel attaches it at deploy as a CD from the datastore's ISO
 #              folder (lab-image-<id>-<tag>.iso, made by scripts/isos/fetch-images.sh), and lab_docker
 #              loads it. A new version is a new ISO: run fetch-images.sh after changing it here.
+#   dockerImages optional, instead of dockerImage: all the images it runs, its own first (e.g. ELK's
+#              three); one ISO holds them all, its name with a hash of the list.
 #   moreImages   optional: other extras whose images it runs too, e.g. [node-exporter]: their CDs go in too.
+#   mediaIso   optional: an ISO of files it installs from rather than images, lab-media-<id>-<version>.iso
+#              (fetch-images.sh's media_<id> makes it), attached likewise, Windows too; the script copies
+#              them with lab_media (Linux) or finds the CD with lab-media.txt (Windows).
 #   password   true if the script needs the machine's password as it is ($password), e.g. for a web
 #              app's admin; then the panel clears it from vCenter once the machine is set up.
 #              $username (the machine's user) is always set.
@@ -1452,6 +1457,120 @@
       docker exec -u git gitea gitea admin user create --admin --username "$username" --password "$password" \
         --email "$username@$hostname.lab.example" --must-change-password=false
 
+- id: k3s
+  name: k3s (Kubernetes)
+  category: Developer tools
+  mediaIso: lab-media-k3s-v1.36.5-k3s1.iso
+  description: k3s, a small certified Kubernetes, as a one-node cluster, with kubectl set up for the machine's user and Traefik taking web traffic on ports 80 and 443. Optionally with example workloads. Works offline.
+  ports: [6443, 80, 443]
+  minMemoryGB: 4
+  minCPU: 2
+  diskGB: 4
+  setupMinutes: 5
+  notes:
+    - "Sign in over SSH and use kubectl, e.g. kubectl get nodes. To use it from elsewhere, copy ~/.kube/config and change its server to https://{ip}:6443. Images must already be on the machine (k3s ctr images import), as there's no internet."
+    - text: "Example workloads, in the namespace demo: the deployment web (nginx, 2 replicas) with its service and an ingress answering on http://{ip}/, a config map, a secret (db-credentials) and the cron job hello (every 5 minutes)."
+      when: {sample_data: ["yes"]}
+  options:
+    - id: sample_data
+      label: Add example workloads
+      help: A namespace with a web deployment and its ingress, a config map, a secret and a cron job, using images already on the machine.
+      type: boolean
+      default: "no"
+  debian:
+    packages: []
+    script: |
+      ip=$(lab_ip)
+      dir=/var/lib/lab-deploy/k3s
+      lab_media "$dir"
+      install -m 0755 "$dir/k3s" /usr/local/bin/k3s
+      # Images k3s imports at start: its own, and the example workloads'.
+      mkdir -p /var/lib/rancher/k3s/agent/images
+      cp "$dir/k3s-airgap-images-amd64.tar.zst" "$dir/demo-images.tar" /var/lib/rancher/k3s/agent/images/
+      INSTALL_K3S_SKIP_DOWNLOAD=true K3S_KUBECONFIG_MODE=600 sh "$dir/install.sh" --tls-san "$ip" >/dev/null
+      rm -rf "$dir"
+      for i in $(seq 150); do
+        k3s kubectl get nodes 2>/dev/null | grep -qw Ready && break
+        sleep 2
+      done
+      k3s kubectl wait --for=condition=Ready node --all --timeout=120s >/dev/null
+      home=$(getent passwd "$username" | cut -d: -f6)
+      install -d -m 700 -o "$username" -g "$(id -gn "$username")" "$home/.kube"
+      install -m 600 -o "$username" -g "$(id -gn "$username")" /etc/rancher/k3s/k3s.yaml "$home/.kube/config"
+      echo 'export KUBECONFIG="$HOME/.kube/config"' >/etc/profile.d/lab-k3s.sh
+      if [ "$sample_data" = yes ]; then
+        k3s kubectl apply -f - >/dev/null <<EOF
+      apiVersion: v1
+      kind: Namespace
+      metadata: {name: demo}
+      ---
+      apiVersion: v1
+      kind: ConfigMap
+      metadata: {name: web-content, namespace: demo}
+      data:
+        index.html: "<h1>Hello from k3s on $hostname</h1><p>Served by the deployment web, in the namespace demo.</p>"
+      ---
+      apiVersion: v1
+      kind: Secret
+      metadata: {name: db-credentials, namespace: demo}
+      stringData: {username: shop, password: $(openssl rand -hex 12)}
+      ---
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata: {name: web, namespace: demo, labels: {app: web}}
+      spec:
+        replicas: 2
+        selector: {matchLabels: {app: web}}
+        template:
+          metadata: {labels: {app: web}}
+          spec:
+            containers:
+              - name: nginx
+                image: nginx:1.30.6-alpine
+                imagePullPolicy: Never
+                ports: [{containerPort: 80}]
+                volumeMounts: [{name: content, mountPath: /usr/share/nginx/html}]
+            volumes: [{name: content, configMap: {name: web-content}}]
+      ---
+      apiVersion: v1
+      kind: Service
+      metadata: {name: web, namespace: demo}
+      spec:
+        selector: {app: web}
+        ports: [{port: 80, targetPort: 80}]
+      ---
+      apiVersion: networking.k8s.io/v1
+      kind: Ingress
+      metadata: {name: web, namespace: demo}
+      spec:
+        ingressClassName: traefik
+        rules:
+          - http:
+              paths: [{path: /, pathType: Prefix, backend: {service: {name: web, port: {number: 80}}}}]
+      ---
+      apiVersion: batch/v1
+      kind: CronJob
+      metadata: {name: hello, namespace: demo}
+      spec:
+        schedule: "*/5 * * * *"
+        jobTemplate:
+          spec:
+            template:
+              spec:
+                restartPolicy: OnFailure
+                containers:
+                  - name: hello
+                    image: busybox:1.37.0
+                    imagePullPolicy: Never
+                    command: [sh, -c, "date; echo Hello from the cron job hello"]
+      EOF
+        k3s kubectl -n demo rollout status deployment/web --timeout=180s >/dev/null
+        for i in $(seq 60); do
+          curl -fs http://127.0.0.1/ 2>/dev/null | grep -q "Hello from k3s" && break
+          sleep 2
+        done
+      fi
+
 - id: gitlab
   name: GitLab CE
   category: Developer tools
@@ -1782,6 +1901,227 @@
 # Wazuh: the server (manager, indexer and dashboard on one machine), and its agent on other machines,
 # which picks a Wazuh server machine and enrols with it. Both from files kept in the template
 # (prepare.sh's bake_wazuh and bake_wazuh_agent), so they work offline.
+
+- id: elk
+  name: Elastic Stack (ELK)
+  category: Monitoring
+  dockerImages: [elasticsearch:9.5.5, kibana:9.5.5, logstash:9.5.5]
+  description: Elasticsearch, Logstash and Kibana (in Docker), for collecting, searching and charting logs, with the machine's user as a superuser. Kibana on port 5601, Elasticsearch on 9200, and Logstash taking Beats on 5044, JSON lines over TCP on 5000 and syslog on UDP 5514. Optionally with Kibana's example data and this machine's own logs. It needs 8 GB of memory.
+  ports: [9200, 5601, 5044, 5000, 5514]
+  minMemoryGB: 8
+  minCPU: 2
+  diskGB: 8
+  setupMinutes: 10
+  password: true
+  links: ["http://{ip}:5601/"]
+  notes:
+    - "Sign in to Kibana as {username} (or elastic), with the machine's password; Elasticsearch takes the same, e.g. curl -u {username} http://{ip}:9200/. Logstash puts what it gets in the logstash-* indexes (the Logstash data view in Kibana)."
+    - "Windows machines can send their event logs here: deploy one with Send event logs to ELK, choosing this machine. They're in the Windows event logs data view."
+    - text: "Example data: Kibana's web logs, ecommerce orders and flights, with their dashboards, and this machine's syslog, sent through Logstash."
+      when: {sample_data: ["yes"]}
+  options:
+    - id: sample_data
+      label: Add example data
+      help: Kibana's three example data sets (web logs, ecommerce, flights) and their dashboards, and this machine's own syslog sent through Logstash.
+      type: boolean
+      default: "no"
+  debian:
+    packages: [docker.io]
+    script: |
+      ip=$(lab_ip)
+      conf=/etc/elk-lab
+      mkdir -p "$conf/pipeline"
+      # Elasticsearch needs more memory maps than Linux allows by default.
+      echo "vm.max_map_count = 262144" >/etc/sysctl.d/90-lab-elastic.conf
+      sysctl -q -w vm.max_map_count=262144
+      systemctl enable -q --now docker
+      docker network inspect elk >/dev/null 2>&1 || docker network create elk >/dev/null
+      jstr() { V="$1" python3 -c 'import json, os; print(json.dumps(os.environ["V"]))'; }
+      lab_docker elasticsearch --network elk -p 9200:9200 -v elasticsearch:/usr/share/elasticsearch/data \
+        -e discovery.type=single-node -e xpack.security.http.ssl.enabled=false -e ES_JAVA_OPTS="-Xms2g -Xmx2g" \
+        -e ELASTIC_PASSWORD="$password" elasticsearch:9.5.5
+      es() { curl -fsS -u "elastic:$password" -H 'Content-Type: application/json' "$@"; }
+      for i in $(seq 180); do
+        es -o /dev/null "http://127.0.0.1:9200/_cluster/health?wait_for_status=yellow&timeout=5s" 2>/dev/null && break
+        sleep 2
+      done
+      es -o /dev/null "http://127.0.0.1:9200/_cluster/health?wait_for_status=yellow&timeout=30s"
+      kibana_password=$(openssl rand -hex 16)
+      es -o /dev/null -X POST http://127.0.0.1:9200/_security/user/kibana_system/_password -d "{\"password\":\"$kibana_password\"}"
+      es -o /dev/null -X POST "http://127.0.0.1:9200/_security/user/$username" \
+        -d "{\"password\":$(jstr "$password"),\"roles\":[\"superuser\"],\"full_name\":\"$username\"}"
+      cat >"$conf/pipeline/logstash.conf" <<'EOF'
+      # Written by the lab panel: Beats, JSON lines over TCP and syslog over UDP, into logstash-* indexes;
+      # Windows event logs (Winlogbeat) into winlogbeat-* ones.
+      input {
+        beats { port => 5044 }
+        tcp { port => 5000 codec => json_lines }
+        udp { port => 5514 type => "syslog" }
+      }
+      output {
+        if [agent][type] == "winlogbeat" {
+          elasticsearch {
+            hosts => ["http://elasticsearch:9200"]
+            user => "elastic"
+            password => "${ES_PASSWORD}"
+            index => "winlogbeat-%{+YYYY.MM.dd}"
+          }
+        } else {
+          elasticsearch {
+            hosts => ["http://elasticsearch:9200"]
+            user => "elastic"
+            password => "${ES_PASSWORD}"
+            index => "logstash-%{+YYYY.MM.dd}"
+          }
+        }
+      }
+      EOF
+      lab_docker logstash --network elk -p 5044:5044 -p 5000:5000 -p 5514:5514/udp \
+        -v "$conf/pipeline:/usr/share/logstash/pipeline:ro" -e ES_PASSWORD="$password" \
+        -e XPACK_MONITORING_ENABLED=false -e LS_JAVA_OPTS="-Xms512m -Xmx512m" logstash:9.5.5
+      lab_docker kibana --network elk -p 5601:5601 -e ELASTICSEARCH_HOSTS=http://elasticsearch:9200 \
+        -e ELASTICSEARCH_USERNAME=kibana_system -e ELASTICSEARCH_PASSWORD="$kibana_password" \
+        -e XPACK_ENCRYPTEDSAVEDOBJECTS_ENCRYPTIONKEY="$(openssl rand -hex 32)" -e TELEMETRY_OPTIN=false \
+        -e SERVER_PUBLICBASEURL="http://$ip:5601" kibana:9.5.5
+      kb() { curl -fsS -u "$username:$password" -H 'kbn-xsrf: lab' -H 'Content-Type: application/json' "$@"; }
+      for i in $(seq 300); do
+        curl -s -u "$username:$password" http://127.0.0.1:5601/api/status 2>/dev/null | grep -q '"level":"available"' && break
+        sleep 2
+      done
+      curl -s -u "$username:$password" http://127.0.0.1:5601/api/status | grep -q '"level":"available"'
+      kb -o /dev/null -X POST http://127.0.0.1:5601/api/data_views/data_view \
+        -d '{"data_view":{"title":"logstash-*","name":"Logstash","timeFieldName":"@timestamp"}}'
+      # For Windows machines sending their event logs (the Send event logs to ELK extra).
+      kb -o /dev/null -X POST http://127.0.0.1:5601/api/data_views/data_view \
+        -d '{"data_view":{"title":"winlogbeat-*","name":"Windows event logs","timeFieldName":"@timestamp"}}'
+      if [ "$sample_data" = yes ]; then
+        for set in logs ecommerce flights; do
+          kb -o /dev/null -X POST "http://127.0.0.1:5601/api/sample_data/$set"
+        done
+        for i in $(seq 120); do
+          (exec 3<>/dev/tcp/127.0.0.1/5000) 2>/dev/null && break
+          sleep 2
+        done
+        {
+          for level in info info warning error info; do
+            printf '{"message":"Example event from %s","level":"%s","service":"lab-shop"}\n' "$hostname" "$level"
+          done
+        } >/dev/tcp/127.0.0.1/5000
+        if systemctl cat rsyslog.service >/dev/null 2>&1; then
+          echo '*.* @127.0.0.1:5514' >/etc/rsyslog.d/90-lab-elk.conf
+          systemctl restart rsyslog
+          logger -t lab-panel "Syslog from $hostname now goes to Logstash"
+        fi
+      fi
+
+- id: graylog
+  name: Graylog
+  category: Monitoring
+  dockerImages: [graylog/graylog:7.2.1, opensearchproject/opensearch:2.19.7, mongo:8.0.34]
+  description: Graylog (in Docker), for collecting and searching logs, with OpenSearch and MongoDB, and the machine's user as its administrator. Its web interface on port 9000, syslog on UDP 1514 and GELF on UDP 12201. Optionally with example messages and this machine's own logs. It needs 8 GB of memory.
+  ports: [9000, 1514, 12201]
+  minMemoryGB: 8
+  minCPU: 2
+  diskGB: 6
+  setupMinutes: 10
+  password: true
+  links: ["http://{ip}:9000/"]
+  notes:
+    - "Sign in as {username}, with the machine's password. Send syslog to UDP port 1514 and GELF to UDP 12201 (System → Inputs)."
+    - text: "Example data: a generator input making fake web-server messages (source example.org) all the time, and this machine's syslog."
+      when: {sample_data: ["yes"]}
+  options:
+    - id: sample_data
+      label: Add example messages
+      help: An input that keeps generating fake web-server messages, and this machine's own syslog sent to Graylog.
+      type: boolean
+      default: "no"
+  debian:
+    packages: [docker.io]
+    script: |
+      ip=$(lab_ip)
+      # OpenSearch needs more memory maps than Linux allows by default.
+      echo "vm.max_map_count = 262144" >/etc/sysctl.d/90-lab-opensearch.conf
+      sysctl -q -w vm.max_map_count=262144
+      systemctl enable -q --now docker
+      docker network inspect graylog >/dev/null 2>&1 || docker network create graylog >/dev/null
+      lab_docker graylog-mongodb --network graylog -v graylog-mongodb:/data/db mongo:8.0.34
+      lab_docker graylog-opensearch --network graylog -v graylog-opensearch:/usr/share/opensearch/data \
+        -e discovery.type=single-node -e DISABLE_SECURITY_PLUGIN=true -e DISABLE_INSTALL_DEMO_CONFIG=true \
+        -e action.auto_create_index=false -e OPENSEARCH_JAVA_OPTS="-Xms1g -Xmx1g" opensearchproject/opensearch:2.19.7
+      lab_docker graylog --network graylog -p 9000:9000 -p 1514:1514/udp -p 12201:12201/udp -v graylog:/usr/share/graylog/data \
+        -e GRAYLOG_PASSWORD_SECRET="$(openssl rand -hex 48)" -e GRAYLOG_ROOT_USERNAME="$username" \
+        -e GRAYLOG_ROOT_PASSWORD_SHA2="$(printf %s "$password" | sha256sum | cut -d' ' -f1)" \
+        -e GRAYLOG_HTTP_EXTERNAL_URI="http://$ip:9000/" -e GRAYLOG_ELASTICSEARCH_HOSTS=http://graylog-opensearch:9200 \
+        -e GRAYLOG_MONGODB_URI=mongodb://graylog-mongodb:27017/graylog graylog/graylog:7.2.1
+      for i in $(seq 300); do
+        [ "$(curl -s http://127.0.0.1:9000/api/system/lbstatus 2>/dev/null)" = ALIVE ] && break
+        sleep 2
+      done
+      [ "$(curl -s http://127.0.0.1:9000/api/system/lbstatus)" = ALIVE ]
+      gl() { curl -fsS -u "$username:$password" -H 'X-Requested-By: lab-panel' -H 'Content-Type: application/json' "$@"; }
+      input() { gl -o /dev/null -X POST http://127.0.0.1:9000/api/system/inputs -d "{\"title\":\"$1\",\"type\":\"$2\",\"global\":true,\"configuration\":$3}"; }
+      input "Syslog UDP" org.graylog2.inputs.syslog.udp.SyslogUDPInput \
+        '{"bind_address":"0.0.0.0","port":1514,"recv_buffer_size":262144,"store_full_message":true,"allow_override_date":true}'
+      input "GELF UDP" org.graylog2.inputs.gelf.udp.GELFUDPInput \
+        '{"bind_address":"0.0.0.0","port":12201,"recv_buffer_size":262144,"decompress_size_limit":8388608}'
+      if [ "$sample_data" = yes ]; then
+        input "Example web traffic" org.graylog2.inputs.random.FakeHttpMessageInput \
+          '{"sleep":500,"sleep_deviation":300,"source":"example.org","throttling_allowed":false}'
+        if systemctl cat rsyslog.service >/dev/null 2>&1; then
+          echo '*.* @127.0.0.1:1514;RSYSLOG_SyslogProtocol23Format' >/etc/rsyslog.d/90-lab-graylog.conf
+          systemctl restart rsyslog
+          logger -t lab-panel "Syslog from $hostname now goes to Graylog"
+        fi
+      fi
+
+- id: winlogbeat
+  name: Send event logs to ELK
+  category: Monitoring
+  mediaIso: lab-media-winlogbeat-9.5.5.iso
+  description: Winlogbeat, sending this machine's Windows event logs (Application, System, Security and PowerShell) to an Elastic Stack (ELK) machine you've deployed, through its Logstash. They're in that machine's Kibana as the Windows event logs data view.
+  setupMinutes: 3
+  notes:
+    - "In the ELK machine's Kibana: Discover → the Windows event logs data view (winlogbeat-* indexes). Winlogbeat runs as the service winlogbeat; its settings are in C:\\Program Files\\Winlogbeat\\winlogbeat.yml."
+  options:
+    - id: elk
+      label: Elastic Stack machine
+      type: machine
+      extra: elk
+      help: A running machine with the Elastic Stack (ELK) extra, which receives the logs.
+  windows:
+    script: |
+      # Winlogbeat comes on a CD: the one with lab-media.txt.
+      $cd = Get-PSDrive -PSProvider FileSystem | Where-Object { Test-Path (Join-Path $_.Root 'lab-media.txt') } | Select-Object -First 1
+      if (-not $cd) { throw "Winlogbeat's media CD wasn't attached." }
+      $zip = Get-ChildItem -Path $cd.Root -Filter 'winlogbeat-*.zip' | Select-Object -First 1
+      $dest = 'C:\Program Files\Winlogbeat'
+      if (Get-Service winlogbeat -ErrorAction SilentlyContinue) { Stop-Service winlogbeat; & sc.exe delete winlogbeat | Out-Null }
+      if (Test-Path $dest) { Remove-Item -Recurse -Force $dest }
+      $tmp = Join-Path $env:TEMP 'lab-winlogbeat'
+      Expand-Archive -Path $zip.FullName -DestinationPath $tmp -Force
+      Move-Item -Path (Get-ChildItem -Path $tmp -Directory | Select-Object -First 1).FullName -Destination $dest
+      Remove-Item -Recurse -Force $tmp
+      @"
+      # Written by the lab panel: this machine's event logs, to $elk_name's Logstash.
+      winlogbeat.event_logs:
+        - name: Application
+          ignore_older: 72h
+        - name: System
+          ignore_older: 72h
+        - name: Security
+          ignore_older: 72h
+        - name: Windows PowerShell
+          ignore_older: 72h
+        - name: Microsoft-Windows-PowerShell/Operational
+          ignore_older: 72h
+      output.logstash:
+        hosts: ["${elk_ip}:5044"]
+      logging.to_files: true
+      "@ | Set-Content -Encoding ascii -Path "$dest\winlogbeat.yml"
+      & powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$dest\install-service-winlogbeat.ps1" | Out-Null
+      if ($LASTEXITCODE) { throw "Winlogbeat's service didn't install." }
+      Start-Service winlogbeat
 
 - id: wazuh
   name: Wazuh server
@@ -2282,6 +2622,70 @@
 # baked in (prepare.ps1 -Exchange). It joins a domain controller's domain, then runs Exchange's setup as
 # that controller's user (a domain, schema and enterprise administrator), which also prepares the
 # forest. Unlicensed, it's a 180-day trial.
+- id: freeipa
+  name: FreeIPA
+  category: Identity
+  description: A FreeIPA identity management server for a new domain (LDAP, Kerberos, DNS, certificates and a web interface), with admin and the machine's user as administrators. Optionally with example users, groups, sudo and access rules. Linux machines can join its domain.
+  ports: [80, 443, 389, 636, 88, 464, 53]
+  minMemoryGB: 4
+  minCPU: 2
+  diskGB: 2
+  setupMinutes: 20
+  password: true
+  links: ["https://{hostname}.{domain}/ipa/ui/"]
+  notes:
+    - "Sign in as admin or {username}, with the machine's password. The web interface answers only on its name: use {ip} as your DNS server (it serves {domain}), or add \"{ip} {hostname}.{domain}\" to your hosts file. On the machine: kinit admin, then ipa user-find."
+    - text: "Example data: the users alice, bob, carol, dave and eve (password Welcome-2026, to change at first sign-in), the groups developers and ops, a sudo rule giving ops everything, an access rule letting developers in over SSH, and the host web01.{domain}."
+      when: {sample_data: ["yes"]}
+  options:
+    - id: domain
+      label: Domain
+      type: hostname
+      default: ipa.lab.example
+      help: The new domain, e.g. ipa.lab.example; its Kerberos realm is the same in capitals. The machine is named <its name>.<domain>.
+    - id: sample_data
+      label: Add example data
+      help: Five users, two groups, a sudo rule, an access (HBAC) rule and a host.
+      type: boolean
+      default: "no"
+  rhel:
+    packages: [ipa-server, ipa-server-dns]
+    script: |
+      ip=$(lab_ip)
+      fqdn="$hostname.$domain"
+      realm=$(printf %s "$domain" | tr '[:lower:]' '[:upper:]')
+      # FreeIPA needs its full name, resolving to its address, and kept across restarts.
+      echo "preserve_hostname: true" >/etc/cloud/cloud.cfg.d/99-lab-freeipa.cfg
+      hostnamectl set-hostname "$fqdn"
+      sed -i "/[[:space:]]$hostname\$/d; /[[:space:]]$hostname[[:space:]]/d" /etc/hosts
+      echo "$ip $fqdn $hostname" >>/etc/hosts
+      ipa-server-install --unattended --realm "$realm" --domain "$domain" --hostname "$fqdn" --ip-address "$ip" \
+        --ds-password "$password" --admin-password "$password" --setup-dns --auto-forwarders --auto-reverse --no-ntp \
+        >/var/log/lab-deploy/freeipa-install.log 2>&1 || { tail -5 /var/log/lab-deploy/freeipa-install.log >&2; exit 1; }
+      lab_open 80/tcp 443/tcp 389/tcp 636/tcp 88/tcp 88/udp 464/tcp 464/udp 53/tcp 53/udp
+      printf '%s\n' "$password" | kinit admin >/dev/null
+      # The machine's user as an administrator too, with the same password, not to be changed.
+      printf '%s\n' "$password" | ipa user-add "$username" --first Lab --last User --password >/dev/null
+      ipa user-mod "$username" --setattr krbPasswordExpiration=20380101000000Z >/dev/null
+      ipa group-add-member admins --users="$username" >/dev/null
+      if [ "$sample_data" = yes ]; then
+        for person in alice:Alice:Smith bob:Bob:Jones carol:Carol:Taylor dave:Dave:Brown eve:Eve:Wilson; do
+          IFS=: read -r uid first last <<<"$person"
+          printf 'Welcome-2026\n' | ipa user-add "$uid" --first "$first" --last "$last" --email "$uid@$domain" --password >/dev/null
+        done
+        ipa group-add developers --desc "Software developers" >/dev/null
+        ipa group-add ops --desc "Operations" >/dev/null
+        ipa group-add-member developers --users=alice --users=bob >/dev/null
+        ipa group-add-member ops --users=carol --users=dave >/dev/null
+        ipa sudorule-add ops-all --hostcat=all --cmdcat=all --runasusercat=all --desc "Operations can run anything as anyone" >/dev/null
+        ipa sudorule-add-user ops-all --groups=ops >/dev/null
+        ipa hbacrule-add developers-ssh --hostcat=all --desc "Developers sign in over SSH" >/dev/null
+        ipa hbacrule-add-user developers-ssh --groups=developers >/dev/null
+        ipa hbacrule-add-service developers-ssh --hbacsvcs=sshd >/dev/null
+        ipa host-add "web01.$domain" --ip-address=192.0.2.10 --force --desc "An example web server" >/dev/null
+      fi
+      kdestroy -A
+
 - id: exchange
   name: Exchange Server
   category: Mail

@@ -452,7 +452,7 @@ class VCenter:
             d for d in devices
             if isinstance(d, vim.vm.device.VirtualCdrom)
             and isinstance(d.backing, vim.vm.device.VirtualCdrom.IsoBackingInfo)
-            and "/lab-image-" in (d.backing.fileName or "")
+            and any(f"/{kind}-" in (d.backing.fileName or "") for kind in ("lab-image", "lab-media"))
         ]
         if not drives:
             return 0

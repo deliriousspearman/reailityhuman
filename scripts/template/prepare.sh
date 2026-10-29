@@ -81,6 +81,10 @@ declare -A EXTRA_PACKAGES_DEBIAN=(
 	[redis]="docker.io"
 	[mongodb]="docker.io"
 	[tomcat]="docker.io"
+	[elk]="docker.io"
+	[graylog]="docker.io"
+	# Not a package: its binary and images come on a CD at deploy (mediaIso).
+	[k3s]=""
 	# Not packages: built from source (bake_minio).
 	[minio]=""
 	# The Zimbra template's own (bake_zimbra), never baked in with the rest.
@@ -102,6 +106,8 @@ declare -A EXTRA_PACKAGES_RHEL=(
 	[apache-https]="httpd mod_ssl openssl"
 	# Fedora Workstation (Wayland only): GNOME's Remote Login, set up at first boot.
 	[gnome-remote-login]="gnome-remote-desktop openssl"
+	# FreeIPA's server, with its DNS (Rocky 9 and 10 only: FREEIPA_HERE).
+	[freeipa]="ipa-server ipa-server-dns"
 )
 # CachyOS (Arch's packages): no extras yet.
 # shellcheck disable=SC2034 # used through EXTRA_PACKAGES, a reference to the family's list
@@ -542,6 +548,10 @@ fi
 IREDMAIL_HERE=0
 case $ID-${VERSION_ID:-} in ubuntu-24.04 | ubuntu-26.04 | debian-12 | debian-13) IREDMAIL_HERE=1 ;; esac
 
+# FreeIPA's server: on Rocky 9 and 10 (8's is a module stream, and the other rebuilds don't offer it).
+FREEIPA_HERE=0
+case $ID-${VERSION_ID%%.*} in rocky-9 | rocky-10) FREEIPA_HERE=1 ;; esac
+
 # Releases Wazuh 4.14's server supports (its bundle is 1 GB: only baked in there).
 WAZUH_HERE=0
 case $ID-${VERSION_ID:-} in ubuntu-22.04 | ubuntu-24.04 | debian-12) WAZUH_HERE=1 ;; esac
@@ -558,6 +568,7 @@ if [[ $WANT_EXTRAS == all ]]; then
 	mapfile -t CHOSEN < <(printf '%s\n' "${CHOSEN[@]}" | grep -vx zimbra)
 	if ! ((GNOME_DESKTOP)); then mapfile -t CHOSEN < <(printf '%s\n' "${CHOSEN[@]}" | grep -vx gnome-remote-login); fi
 	if ! ((WAZUH_HERE)); then mapfile -t CHOSEN < <(printf '%s\n' "${CHOSEN[@]}" | grep -vx wazuh); fi
+	if ! ((FREEIPA_HERE)); then mapfile -t CHOSEN < <(printf '%s\n' "${CHOSEN[@]}" | grep -vx freeipa); fi
 	# Zabbix's server: not on Kali or Parrot (see preseed_zabbix).
 	if [[ $ID == kali || $ID == parrot ]]; then mapfile -t CHOSEN < <(printf '%s\n' "${CHOSEN[@]}" | grep -vx zabbix); fi
 	# A family with no extras (CachyOS) leaves one empty line.

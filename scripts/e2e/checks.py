@@ -129,6 +129,18 @@ CASES: dict[str, list[dict]] = {
             "checks": [("ssh", "(Get-CimInstance Win32_ComputerSystem).PartOfDomain", "True")],
         }
     ],
+    "freeipa": [
+        {
+            "options": {"sample_data": "yes"},
+            "checks": [
+                ("tcp", 443),
+                ("tcp", 389),
+                ("ssh", "echo {password} | kinit admin >/dev/null && ipa user-show alice --raw | grep -i '^ *uid:'", "alice"),
+                ("ssh", "echo {password} | kinit {username} >/dev/null && ipa group-show admins --raw | grep -qw {username} && echo is-admin", "is-admin"),
+                ("ssh", "[ \"$(dig +short @127.0.0.1 $(hostname -f))\" = {ip} ] && echo dns-ok", "dns-ok"),
+            ],
+        }
+    ],
     "zabbix": [
         {
             "options": {},
@@ -210,6 +222,60 @@ CASES: dict[str, list[dict]] = {
         }
     ],
     "vaultwarden": [{"options": {}, "checks": [("http", "https", 443, "/", "Vaultwarden")]}],
+    "elk": [
+        {
+            "options": {"sample_data": "yes"},
+            "checks": [
+                ("http", "http", 5601, "/login", None),
+                ("ssh", "curl -s -u {username}:{password} http://127.0.0.1:5601/api/status", '"level":"available"'),
+                ("ssh", "curl -s -u {username}:{password} 'http://127.0.0.1:9200/_cat/indices?h=index'", "kibana_sample_data_logs"),
+                ("ssh", "sleep 20; curl -s -u {username}:{password} 'http://127.0.0.1:9200/_cat/indices/logstash-*?h=index'", "logstash-"),
+            ],
+        }
+    ],
+    # A Windows machine sending its event logs to an ELK machine deployed first: its service runs and
+    # connects to that machine's Logstash.
+    "winlogbeat": [
+        {
+            "options": {},
+            "server": {"extra": "elk", "option": "elk"},
+            "checks": [
+                ("ssh", "(Get-Service winlogbeat).Status", "Running"),
+                (
+                    "ssh",
+                    "Start-Sleep -Seconds 30; Get-ChildItem C:\\ProgramData\\winlogbeat\\logs, 'C:\\Program Files\\Winlogbeat\\logs' -Filter 'winlogbeat*'"
+                    " -ErrorAction SilentlyContinue | Get-Content | Select-String -Pattern 'established' -Quiet",
+                    "True",
+                ),
+            ],
+        }
+    ],
+    "graylog": [
+        {
+            "options": {"sample_data": "yes"},
+            "checks": [
+                ("http", "http", 9000, "/api/system/lbstatus", "ALIVE"),
+                ("ssh", "curl -s -u {username}:{password} -H 'X-Requested-By: e2e' http://127.0.0.1:9000/api/system/inputs", "Syslog UDP"),
+                (
+                    "ssh",
+                    "sleep 60; n=$(curl -s -u {username}:{password} -H 'X-Requested-By: e2e' http://127.0.0.1:9000/api/count/total"
+                    " | grep -o '[0-9][0-9]*' | head -1); [ \"${n:-0}\" -gt 0 ] && echo has-messages",
+                    "has-messages",
+                ),
+            ],
+        }
+    ],
+    "k3s": [
+        {
+            "options": {"sample_data": "yes"},
+            "checks": [
+                ("tcp", 6443),
+                ("ssh", "kubectl --kubeconfig ~/.kube/config get nodes", " Ready "),
+                ("ssh", "kubectl --kubeconfig ~/.kube/config -n demo get cronjob hello -o name", "cronjob.batch/hello"),
+                ("http", "http", 80, "/", "Hello from k3s"),
+            ],
+        }
+    ],
     "redis": [
         {
             "options": {"sample_data": "yes"},

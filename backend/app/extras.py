@@ -17,6 +17,7 @@ import yaml
 from .config import settings
 
 import base64
+import hashlib
 
 # "legacy": old Linux practice targets, set up by lab-firstboot rather than cloud-init (no extras).
 # "arch": Arch-based (CachyOS), cloud-init like debian and rhel.
@@ -161,8 +162,8 @@ lab_sql_string() {
 
 # lab_images: the container images on the machine's image CDs loaded into Docker, unless it has them.
 # The panel attaches a CD per Docker extra chosen (lab-image-<id>-<tag>.iso, from the datastore's ISO
-# folder: scripts/isos/fetch-images.sh), each holding lab-image.txt (the image's name) and
-# image.tar.gz (docker save). Each CD is unmounted after, so the panel can take it out again.
+# folder: scripts/isos/fetch-images.sh), each holding lab-image.txt (its images' names, a line each)
+# and image.tar.gz (docker save of them all). Each CD is unmounted after, so the panel can take it out.
 lab_images() {
 	[ -e /run/lab-deploy-images ] && return 0
 	local dev dir image
@@ -171,12 +172,15 @@ lab_images() {
 		[ -b "$dev" ] || continue
 		mount -o ro "$dev" "$dir" 2>/dev/null || continue
 		if [ -f "$dir/lab-image.txt" ]; then
-			image=$(cat "$dir/lab-image.txt")
-			if ! docker image inspect "$image" >/dev/null 2>&1; then
-				echo "Loading $image from its CD"
+			image=
+			while read -r line; do
+				[ -n "$line" ] && ! docker image inspect "$line" >/dev/null 2>&1 && image="$image $line"
+			done <"$dir/lab-image.txt"
+			if [ -n "$image" ]; then
+				echo "Loading$image from its CD"
 				if ! docker load -q -i "$dir/image.tar.gz" >/dev/null; then
 					umount "$dir"
-					echo "Couldn't load $image from its CD." >&2
+					echo "Couldn't load$image from its CD." >&2
 					return 1
 				fi
 			fi
@@ -185,6 +189,30 @@ lab_images() {
 	done
 	rmdir "$dir"
 	touch /run/lab-deploy-images
+}
+
+# lab_media <folder>: the files of the machine's media CD (one with lab-media.txt, naming what it holds)
+# copied into the folder, and the CD unmounted. Fails if there's none.
+lab_media() {
+	local dev dir found=
+	mkdir -p "$1"
+	dir=$(mktemp -d)
+	for dev in /dev/sr*; do
+		[ -b "$dev" ] || continue
+		mount -o ro "$dev" "$dir" 2>/dev/null || continue
+		if [ -f "$dir/lab-media.txt" ]; then
+			cp -r "$dir/." "$1/"
+			found=$(cat "$dir/lab-media.txt")
+		fi
+		umount "$dir"
+		[ -n "$found" ] && break
+	done
+	rmdir "$dir"
+	if [ -z "$found" ]; then
+		echo "Its media CD wasn't attached." >&2
+		return 1
+	fi
+	echo "Copied $found from its CD"
 }
 
 # lab_docker <name> <docker run options and image...>: Docker turned on, the extra's image loaded from
@@ -289,9 +317,15 @@ class Extra:
     # The container image it runs (lab_docker), e.g. "grafana/grafana:13.2.4". Not baked into templates:
     # the panel attaches it as a CD at deploy (image_iso), and lab_docker loads it.
     image: str = ""
+    # All the images it runs, its own first (extras.yaml dockerImages, or dockerImage alone), e.g.
+    # Elasticsearch, Kibana and Logstash: one ISO holds them all.
+    images: tuple[str, ...] = ()
     # Other extras whose images it runs too (their CDs go in with its own), e.g. Prometheus's example
     # data starts Node Exporter.
     more_images: tuple[str, ...] = ()
+    # An ISO of files it installs from, not container images (lab-media-<id>-<version>.iso, made by
+    # fetch-images.sh too), attached like the image CDs; its script copies them with lab_media.
+    media_iso: str = ""
     # family -> (packages, script)
     families: dict[str, tuple[tuple[str, ...], str]] = field(default_factory=dict)
 
@@ -338,6 +372,7 @@ def extras() -> dict[str, Extra]:
         for key in ("uses", "provides", "conflicts"):
             if key in e:
                 raise ValueError(f"extras.yaml: {e['id']}: '{key}' is no longer used: clashes come from ports alone")
+        images = tuple(e.get("dockerImages") or ([e["dockerImage"]] if e.get("dockerImage") else []))
         out[e["id"]] = Extra(
             id=e["id"],
             name=e["name"],
@@ -353,11 +388,15 @@ def extras() -> dict[str, Extra]:
             password=bool(e.get("password", False)),
             options=options,
             setup_minutes=int(e.get("setupMinutes", 0)),
-            image=e.get("dockerImage", ""),
+            image=images[0] if images else "",
+            images=images,
             more_images=tuple(e.get("moreImages", [])),
+            media_iso=e.get("mediaIso", ""),
             families={f: (tuple(e[f].get("packages", [])), e[f]["script"]) for f in FAMILIES if f in e},
         )
     for x in out.values():
+        if x.media_iso and not re.fullmatch(rf"lab-media-{re.escape(x.id)}-[A-Za-z0-9._-]+\.iso", x.media_iso):
+            raise ValueError(f"extras.yaml: {x.id}: mediaIso is named lab-media-{x.id}-<version>.iso")
         if bad := [i for i in x.more_images if i not in out or not out[i].image]:
             raise ValueError(f"extras.yaml: {x.id}: moreImages names {', '.join(bad)}, which isn't an extra with a dockerImage")
     return {i: replace(x, conflicts=tuple(y.id for y in out.values() if clashes(x, y))) for i, x in out.items()}
@@ -387,12 +426,16 @@ def image_iso(x: Extra) -> str:
     if not x.image:
         return ""
     tag = x.image.rsplit(":", 1)[1] if ":" in x.image.rsplit("/", 1)[-1] else "latest"
-    return f"lab-image-{x.id}-{re.sub(r'[^A-Za-z0-9._-]', '-', tag)}.iso"
+    name = f"lab-image-{x.id}-{re.sub(r'[^A-Za-z0-9._-]', '-', tag)}"
+    if len(x.images) > 1:
+        # Several images: a change to any of them is a new file too.
+        name += "-" + hashlib.sha256(" ".join(x.images).encode()).hexdigest()[:6]
+    return name + ".iso"
 
 
 def media(chosen: list[dict], family: str) -> list[str]:
-    """The image ISOs a machine with these extras needs attached at first boot (Linux only)."""
-    if family not in ("debian", "rhel", "arch"):
+    """The image and media ISOs a machine with these extras needs attached at first boot."""
+    if family not in ("debian", "rhel", "arch", "windows"):
         return []
     out: list[str] = []
     for c in chosen:
@@ -400,6 +443,8 @@ def media(chosen: list[dict], family: str) -> list[str]:
             for y in (x, *(find(i) for i in x.more_images)):
                 if y and (iso := image_iso(y)) and iso not in out:
                     out.append(iso)
+            if x.media_iso and x.media_iso not in out:
+                out.append(x.media_iso)
     return out
 
 

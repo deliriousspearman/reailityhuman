@@ -39,7 +39,7 @@ def a_planned_template(monkeypatch):
 def test_the_attack_boxes_and_windows_load_as_built():
     windows = catalogue.find("windows-server", "2025 Core")
     assert windows.family == "windows" and windows.admin_group == "Administrators"
-    assert windows.extras == ("iis", "mssql", "domain-controller", "join-domain") and windows.access == ("rdp", "ssh", "console")
+    assert windows.extras == ("iis", "mssql", "domain-controller", "join-domain", "winlogbeat") and windows.access == ("rdp", "ssh", "console")
     assert "outlook" in catalogue.find("windows-server", "2025").extras  # not on Core: it needs the desktop
     for box in (catalogue.find("kali", "2026.2"), catalogue.find("parrot", "7")):
         assert box.family == "debian" and "rdp" in box.access

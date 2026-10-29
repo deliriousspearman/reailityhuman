@@ -96,10 +96,16 @@ def test_container_extras_run_their_image():
         script = x.families.get("debian", ("", ""))[1]
         if "lab_docker" in script:
             # The extra's own container (lab_docker <its id> ..., continued over "\" lines).
-            command = re.search(rf"lab_docker {re.escape(x.id)} .*?(?<!\\)\n", script, re.S).group(0)
-            run[x.id] = command.split()
+            if command := re.search(rf"lab_docker {re.escape(x.id)} .*?(?<!\\)\n", script, re.S):
+                run[x.id] = command.group(0).split()
     assert run, "no extra runs a container"
-    assert set(run) == {x.id for x in extras.extras().values() if x.image}
+    # Every extra with images runs them (an extra with several, e.g. ELK, a container each, named for what it runs).
+    for x in extras.extras().values():
+        if x.images:
+            words = x.families["debian"][1].split()
+            assert "lab_docker" in words, x.id
+            for image in x.images:
+                assert image in words, f"{x.id} doesn't run its image {image}"
     for extra_id, words in run.items():
         assert extras.find(extra_id).image in words, f"{extra_id}'s lab_docker doesn't run its dockerImage"
 
@@ -117,8 +123,18 @@ def test_image_isos_are_named_as_fetch_images_names_them(tmp_path):
     out = subprocess.run(
         ["bash", str(script), "--list"], capture_output=True, text=True, check=True, env={**os.environ, "EXTRAS_YAML": str(extras._path())}
     ).stdout
-    listed = {line.split()[0]: line.split()[2] for line in out.splitlines()}
-    assert listed == {x.id: extras.image_iso(x) for x in extras.extras().values() if x.image}
+    listed = {line.split()[0]: line.split()[-1] for line in out.splitlines()}
+    assert listed == {
+        **{x.id: extras.image_iso(x) for x in extras.extras().values() if x.image},
+        **{x.id: x.media_iso for x in extras.extras().values() if x.media_iso},
+    }
+    # Winlogbeat sends to ELK's Logstash: the same version.
+    assert extras.find("winlogbeat").media_iso == f"lab-media-winlogbeat-{extras.find('elk').image.rsplit(':', 1)[1]}.iso"
+    # Several images: the name has a hash of them all, so changing any one is a new ISO.
+    elk = extras.find("elk")
+    assert len(elk.images) == 3 and elk.image == elk.images[0]
+    assert re.fullmatch(r"lab-image-elk-9\.5\.5-[0-9a-f]{6}\.iso", extras.image_iso(elk))
+    assert extras.image_iso(replace(elk, images=(*elk.images[:2], "logstash:9.5.6"))) != extras.image_iso(elk)
     assert extras.image_iso(replace(extras.find("grafana"), image="registry.lab.example:5000/team/app")) == "lab-image-grafana-latest.iso"
 
 
@@ -129,11 +145,14 @@ def test_docker_extras_get_their_image_and_iso():
     assert "lab_image=" not in extras.script(extras.find("nginx"), "debian", "web01", {}, "jo")
     chosen = [{"id": "grafana", "options": {}}, {"id": "nginx", "options": {}}]
     assert extras.media(chosen, "debian") == [extras.image_iso(grafana)]
-    assert extras.media(chosen, "windows") == []
+    assert extras.media(chosen, "legacy") == []
+    assert extras.media([{"id": "winlogbeat", "options": {}}], "windows") == ["lab-media-winlogbeat-9.5.5.iso"]
     # Prometheus's example data runs Node Exporter: its CD goes in too, once.
     prometheus, exporter = (extras.image_iso(extras.find(i)) for i in ("prometheus", "node-exporter"))
     assert extras.media([{"id": "prometheus", "options": {}}], "debian") == [prometheus, exporter]
     assert extras.media([{"id": "prometheus", "options": {}}, {"id": "node-exporter", "options": {}}], "debian") == [prometheus, exporter]
+    # k3s: files, not images.
+    assert extras.media([{"id": "k3s", "options": {}}], "debian") == [extras.find("k3s").media_iso]
 
 
 # Choosing ---------------------------------------------------------------------------------------------
@@ -158,20 +177,25 @@ def test_catalogue_conflicts_are_worked_out():
     it only clashes with what uses 443."""
     found = {i: set(x.conflicts) for i, x in extras.extras().items()}
     web = {"nginx", "apache", "apache-https", "wordpress", "nextcloud", "nextcloud-snap", "mail", "iredmail", "zimbra", "iis",
-           "juice-shop", "dvwa", "uptime-kuma", "grafana", "gitea", "gitlab", "zabbix"}
-    https = {"apache-https", "wordpress", "nextcloud", "nextcloud-snap", "mail", "iredmail", "zimbra", "vaultwarden", "wazuh"}
+           "juice-shop", "dvwa", "uptime-kuma", "grafana", "gitea", "gitlab", "zabbix", "k3s", "freeipa"}
+    https = {"apache-https", "wordpress", "nextcloud", "nextcloud-snap", "mail", "iredmail", "zimbra", "vaultwarden", "wazuh", "k3s", "freeipa"}
     mysql_port = {"wordpress", "nextcloud", "mariadb", "mysql"}
     for i in web | mysql_port:
         expected = (web if i in web else set()) | (mysql_port if i in mysql_port else set()) | (https if i in https else set())
+        if i == "freeipa":
+            expected |= {"domain-controller"}  # DNS, Kerberos and LDAP, as a domain controller's
         assert found[i] == expected - {i}, i
-    for i in ("vaultwarden", "wazuh"):
-        assert found[i] == https - {i}, i
+    assert found["vaultwarden"] == https - {"vaultwarden"}
+    # The Wazuh server's indexer is on 9200, like Elasticsearch; its agents' port 1514 is Graylog's syslog.
+    assert found["wazuh"] == (https - {"wazuh"}) | {"elk", "graylog"}
     # Remote Desktop's port: the desktop extra, and Ubuntu Desktop 26.04's own Remote Login (never both
     # on one template).
     assert found["desktop"] == {"gnome-remote-login"} and found["gnome-remote-login"] == {"desktop"}
-    for i in ("ftp", "outlook", "postgresql", "sqlite", "mssql", "docker", "python", "minio", "wazuh-agent", "zabbix-agent",
+    for i in ("ftp", "outlook", "postgresql", "sqlite", "mssql", "docker", "python", "wazuh-agent", "zabbix-agent",
               "prometheus", "node-exporter", "redis", "mongodb"):
         assert found[i] == set(), i
+    # Port 9000: MinIO's and Graylog's.
+    assert found["minio"] == {"graylog"}
     # Port 8080: Jenkins and Tomcat.
     assert found["jenkins"] == {"tomcat"} and found["tomcat"] == {"jenkins"}
 
@@ -327,7 +351,7 @@ def test_parse_status():
 def test_config_lists_extras_for_templates_that_have_them(offered):
     t = client.get("/api/config").json()["templates"][0]
     https = next(x for x in t["extras"] if x["id"] == "apache-https")
-    assert https["conflicts"] == ["nginx", "apache", "wordpress", "nextcloud", "nextcloud-snap", "mail", "iredmail", "zimbra", "juice-shop", "dvwa", "uptime-kuma", "grafana", "vaultwarden", "gitea", "gitlab", "wazuh", "zabbix", "iis"]
+    assert https["conflicts"] == ["nginx", "apache", "wordpress", "nextcloud", "nextcloud-snap", "mail", "iredmail", "zimbra", "juice-shop", "dvwa", "uptime-kuma", "grafana", "vaultwarden", "gitea", "k3s", "gitlab", "wazuh", "zabbix", "iis", "freeipa"]
     assert https["options"][0]["id"] == "domain" and https["options"][0]["default"] == "{fqdn}"
 
 
