@@ -73,7 +73,7 @@ docker compose up -d --quiet-pull --wait --wait-timeout 1200 worker
 # hours). During a build, a waiter in the background updates it once the build queue is empty.
 mkdir -p build-next
 rc=0
-./update-builder.sh || rc=$?
+./update-builder.sh </dev/null || rc=$? # stdin is this script: keep it from being read
 if ((rc == 3)); then
 	setsid nohup ./update-builder.sh --wait >>build-logs/update-builder.log 2>&1 </dev/null &
 	echo "  builder: a template build is queued or running; it's updated once the builds finish (build-logs/update-builder.log)"

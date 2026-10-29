@@ -15,14 +15,15 @@ cd "$(dirname "$0")"
 # Template builds queued or running. Unreadable (a first deploy, before the jobs table): none.
 busy() {
 	local n
+	# </dev/null: exec reads stdin, which in deploy.sh is the rest of its script.
 	n=$(docker compose exec -T postgres psql -U labdeploy -d labdeploy -Atc \
-		"select count(*) from jobs where kind = 'build' and state in ('queued', 'running')" 2>/dev/null) || n=0
+		"select count(*) from jobs where kind = 'build' and state in ('queued', 'running')" 2>/dev/null </dev/null) || n=0
 	((${n:-0} > 0))
 }
 
 update() {
 	rsync -a --delete build-next/ build/
-	docker compose up -d --quiet-pull --wait --wait-timeout 180 builder
+	docker compose up -d --quiet-pull --wait --wait-timeout 180 builder </dev/null
 }
 
 if [[ ${1:-} != --wait ]]; then
