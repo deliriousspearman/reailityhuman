@@ -128,6 +128,15 @@
 		await loadTemplates();
 	}
 
+	// A short label for why a built template can't be deleted; its tooltip has the full reason.
+	function cantDeleteLabel(t: TemplateStatus): string {
+		if (t.machines.length) return 'In use';
+		if (!t.rebuildable) return 'No recipe';
+		const missing = t.build?.isos.filter((i) => i.present === false).length ?? 0;
+		if (missing) return missing > 1 ? 'ISOs missing' : 'ISO missing';
+		return "Can't delete";
+	}
+
 	const roomFor = $derived(cap ? Math.max(0, Math.floor((cap.total.memoryGB - cap.used.memoryGB) / biggest)) : 0);
 </script>
 
@@ -334,7 +343,7 @@
 							{:else if t.rebuildable && (t.state === 'deleted' || t.state === 'failed') && !t.job}
 								<button class="btn btn-sm" type="button" onclick={() => buildTemplate(t)}><Icon name="rebuild" /> Build</button>
 							{:else if t.cantDelete && t.state === 'built'}
-								<span class="why" title={t.cantDelete}>{t.machines.length ? 'In use' : t.rebuildable ? "Can't delete" : 'Kept'}</span>
+								<span class="why hint" title={t.cantDelete}>{cantDeleteLabel(t)}</span>
 							{/if}
 						</td>
 					</tr>
@@ -421,6 +430,12 @@
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
+	}
+	/* The full reason is in its tooltip: show that it has one. */
+	.templates .hint {
+		text-decoration: underline dotted;
+		text-underline-offset: 0.2em;
+		cursor: help;
 	}
 	h2 .soon-tag {
 		vertical-align: middle;
