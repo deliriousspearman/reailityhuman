@@ -230,7 +230,7 @@
   username: labadmin
   family: windows
   access: [rdp, ssh, console]
-  extras: [iis, mssql, outlook, domain-controller, additional-dc, join-domain, winlogbeat, brookfield-dc]   # SQL Server and Outlook: built with prepare.ps1 -SqlServer and -Office
+  extras: [iis, mssql, outlook, domain-controller, additional-dc, adcs, join-domain, winlogbeat, brookfield-dc]   # SQL Server and Outlook: built with prepare.ps1 -SqlServer and -Office
 - template: windows-server
   version: "2022"
   # Built by Packer (packer/build.sh windows-server -var version=2022) on 2026-10-28, with Office's and
@@ -248,7 +248,7 @@
   username: labadmin
   family: windows
   access: [rdp, ssh, console]
-  extras: [iis, mssql, outlook, domain-controller, additional-dc, join-domain, winlogbeat]
+  extras: [iis, mssql, outlook, domain-controller, additional-dc, adcs, join-domain, winlogbeat]
 - template: windows-server
   version: "2019"
   # Built by Packer (packer/build.sh windows-server -var version=2019) on 2026-10-28, with Office's and
@@ -266,7 +266,7 @@
   username: labadmin
   family: windows
   access: [rdp, ssh, console]
-  extras: [iis, mssql, outlook, domain-controller, additional-dc, join-domain, winlogbeat]
+  extras: [iis, mssql, outlook, domain-controller, additional-dc, adcs, join-domain, winlogbeat]
 - template: windows-server
   version: "2016"
   # Built by Packer (packer/build.sh windows-server -var version=2016) on 2026-10-28: the 180-day
@@ -285,7 +285,7 @@
   username: labadmin
   family: windows
   access: [rdp, ssh, console]
-  extras: [iis, domain-controller, additional-dc, join-domain, winlogbeat]
+  extras: [iis, domain-controller, additional-dc, adcs, join-domain, winlogbeat]
 - template: windows-server
   version: "2012 R2"
   # Built by Packer (packer/build.sh windows-server -var version=2012r2, after fetch-legacy.sh) on
@@ -305,7 +305,7 @@
   username: labadmin
   family: windows
   access: [rdp, ssh, console]
-  extras: [iis, domain-controller, additional-dc, join-domain]   # not Winlogbeat: 9.x needs Windows Server 2016 or later
+  extras: [iis, domain-controller, additional-dc, adcs, join-domain]   # not Winlogbeat: 9.x needs Windows Server 2016 or later
 - template: windows-server
   version: "2025 Core"
   # Built by Packer (packer/build.sh windows-server -var edition=core) on 2026-10-21, with SQL Server's files
@@ -323,7 +323,7 @@
   username: labadmin
   family: windows
   access: [rdp, ssh, console]
-  extras: [iis, mssql, domain-controller, additional-dc, join-domain, winlogbeat]   # not Outlook: it needs the desktop
+  extras: [iis, mssql, domain-controller, additional-dc, adcs, join-domain, winlogbeat]   # not Outlook: it needs the desktop
 
 # Windows 11 Enterprise, the 90-day evaluation (packer/windows): no virtual TPM, Setup's hardware checks
 # skipped, so BitLocker, Credential Guard and Windows Hello for Business aren't available. Rebuild it

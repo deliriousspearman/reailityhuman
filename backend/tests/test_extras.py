@@ -177,7 +177,7 @@ def test_catalogue_conflicts_are_worked_out():
     it only clashes with what uses 443."""
     found = {i: set(x.conflicts) for i, x in extras.extras().items()}
     web = {"nginx", "apache", "apache-https", "wordpress", "nextcloud", "nextcloud-snap", "mail", "iredmail", "zimbra", "iis",
-           "juice-shop", "dvwa", "uptime-kuma", "grafana", "gitea", "gitlab", "zabbix", "k3s", "freeipa"}
+           "juice-shop", "dvwa", "uptime-kuma", "grafana", "gitea", "gitlab", "zabbix", "k3s", "freeipa", "adcs"}
     https = {"apache-https", "wordpress", "nextcloud", "nextcloud-snap", "mail", "iredmail", "zimbra", "vaultwarden", "wazuh", "k3s", "freeipa"}
     mysql_port = {"wordpress", "nextcloud", "mariadb", "mysql"}
     for i in web | mysql_port:
@@ -351,7 +351,7 @@ def test_parse_status():
 def test_config_lists_extras_for_templates_that_have_them(offered):
     t = client.get("/api/config").json()["templates"][0]
     https = next(x for x in t["extras"] if x["id"] == "apache-https")
-    assert https["conflicts"] == ["nginx", "apache", "wordpress", "nextcloud", "nextcloud-snap", "mail", "iredmail", "zimbra", "juice-shop", "dvwa", "uptime-kuma", "grafana", "vaultwarden", "gitea", "k3s", "gitlab", "wazuh", "zabbix", "iis", "freeipa"]
+    assert https["conflicts"] == ["nginx", "apache", "wordpress", "nextcloud", "nextcloud-snap", "mail", "iredmail", "zimbra", "juice-shop", "dvwa", "uptime-kuma", "grafana", "vaultwarden", "gitea", "k3s", "gitlab", "wazuh", "zabbix", "iis", "adcs", "freeipa"]
     assert https["options"][0]["id"] == "domain" and https["options"][0]["default"] == "{fqdn}"
 
 

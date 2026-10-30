@@ -2719,6 +2719,53 @@
       Write-Output "Replicating both ways with $dc_name ($($inbound.Count) partitions in, $($outbound.Count) out)"
       exit 0
 
+# Active Directory Certificate Services on a domain controller: an Enterprise Root CA and the web
+# enrolment pages. The pages answer over HTTP (port 80) with Extended Protection off, the way a
+# certificate-based relay (ESC8) expects: deliberate, for the Meridian Pro Lab. Deploy it on a machine
+# that also has the Domain controller extra. No baked packages: AD CS is a role in Windows Server.
+- id: adcs
+  name: Certificate Services (AD CS)
+  category: Active Directory
+  description: Installs an Enterprise Root certificate authority and its web enrolment pages on this domain controller, with the pages answering over HTTP. For a machine you've also made a domain controller.
+  ports: [80]
+  setupMinutes: 10
+  notes:
+    - "The certificate authority issues for the domain. Web enrolment is at http://{ip}/certsrv/ (over HTTP, by design for the lab)."
+  windows:
+    script: |
+      if (-not (Get-Command Install-WindowsFeature -ErrorAction SilentlyContinue)) {
+        throw "Certificate Services needs Windows Server."
+      }
+      if ((Get-CimInstance Win32_ComputerSystem).DomainRole -lt 4) {
+        throw "Deploy Certificate Services on a domain controller (add the Domain controller extra to this machine)."
+      }
+      Import-Module ActiveDirectory
+      # An Enterprise CA registers itself in the directory, so wait until Active Directory answers.
+      $deadline = (Get-Date).AddMinutes(15)
+      while ($true) {
+        try { Get-ADDomain -Server localhost | Out-Null; break }
+        catch { if ((Get-Date) -gt $deadline) { throw "Active Directory didn't come up." }; Start-Sleep -Seconds 10 }
+      }
+      Install-WindowsFeature -Name Adcs-Cert-Authority, Adcs-Web-Enrollment -IncludeManagementTools | Out-Null
+      # The certificate authority, once: Install-AdcsCertificationAuthority fails if one is set up already,
+      # and the registry's Active value names it once it is.
+      if (-not (Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\CertSvc\Configuration' -Name Active -ErrorAction SilentlyContinue)) {
+        $ca = Install-AdcsCertificationAuthority -CAType EnterpriseRootCA -Force
+        if ($ca.ErrorId -ne 0) { throw "Setting up the certificate authority failed: $($ca.ErrorString)" }
+      }
+      Import-Module WebAdministration
+      # The web enrolment pages (http://<dc>/certsrv/), once.
+      if (-not (Test-Path 'IIS:\Sites\Default Web Site\CertSrv')) {
+        $web = Install-AdcsWebEnrollment -Force
+        if ($web.ErrorId -ne 0) { throw "Setting up web enrolment failed: $($web.ErrorString)" }
+      }
+      # Extended Protection for Authentication off on the enrolment application: the lab's certificate
+      # relay (ESC8) expects HTTP enrolment that doesn't bind the authentication to the channel.
+      Set-WebConfigurationProperty -PSPath 'IIS:\' -Location 'Default Web Site/CertSrv' `
+        -Filter 'system.webServer/security/authentication/windowsAuthentication/extendedProtection' -Name 'tokenChecking' -Value 'None'
+      iisreset /restart | Out-Null
+      exit 0
+
 # Exchange Server SE on its own template (templates.yaml: exchange), with its files and prerequisites
 # baked in (prepare.ps1 -Exchange). It joins a domain controller's domain, then runs Exchange's setup as
 # that controller's user (a domain, schema and enterprise administrator), which also prepares the
