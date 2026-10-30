@@ -59,6 +59,8 @@
   username: ubuntu
   family: debian
   extras: [nginx, apache, apache-https, tomcat, wordpress, nextcloud, nextcloud-snap, postgresql, mariadb, mysql, sqlite, redis, mongodb, mail, iredmail, ftp, desktop, docker, python, juice-shop, dvwa, uptime-kuma, node-exporter, prometheus, grafana, vaultwarden, gitea, k3s, gitlab, jenkins, minio, elk, graylog, wazuh-agent, zabbix, zabbix-agent]
+  # Prepped in prepare.sh, baked in on the next rebuild: the Join a domain (Linux) extra (realmd, SSSD).
+  plannedExtras: [join-domain-linux]
   # PHP versions for the Apache extras: Ubuntu's own, which the template has with the web apps.
   choices: {php: ["8.5"]}
 
@@ -80,6 +82,8 @@
   username: ubuntu
   family: debian
   extras: [nginx, apache, apache-https, tomcat, wordpress, nextcloud, nextcloud-snap, postgresql, mariadb, mysql, sqlite, redis, mongodb, mail, iredmail, ftp, desktop, docker, python, juice-shop, dvwa, uptime-kuma, node-exporter, prometheus, grafana, vaultwarden, gitea, k3s, gitlab, jenkins, minio, elk, graylog, wazuh, wazuh-agent, zabbix, zabbix-agent]
+  # Prepped in prepare.sh, baked in on the next rebuild: the Join a domain (Linux) extra (realmd, SSSD).
+  plannedExtras: [join-domain-linux]
   # PHP versions for the Apache extras: Ondřej Surý's PPA's, baked in (prepare.sh's PHP_VERSIONS).
   choices: {php: ["5.6", "7.0", "7.1", "7.2", "7.3", "7.4", "8.0", "8.1", "8.2", "8.3", "8.4", "8.5"]}
 - template: ubuntu

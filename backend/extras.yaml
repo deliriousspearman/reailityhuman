@@ -2625,6 +2625,62 @@
       Add-Computer -DomainName $dc_domain -Credential $credential -Force -WarningAction SilentlyContinue
       exit 3010
 
+# Joins a Linux machine to a domain controller's domain with realmd and SSSD, so domain users can sign
+# in to it. Its packages (realmd, SSSD, adcli, Kerberos) are baked into the template, so the domain
+# controller needn't be reachable on the internet.
+- id: join-domain-linux
+  name: Join a domain (Linux)
+  category: Active Directory
+  description: Joins this Linux machine to the domain of a domain controller you've deployed, using realmd and SSSD. Domain users can sign in to it, and it uses the controller for DNS.
+  setupMinutes: 8
+  notes:
+    - "Sign in with a domain account by its short name, e.g. the domain controller's user (its page has the details); a home directory is made on first sign-in. The machine's own {username} still works."
+  options:
+    - id: dc
+      label: Domain controller
+      type: machine
+      extra: domain-controller
+      help: A running machine with the Domain controller extra.
+  debian:
+    packages: [realmd, sssd, sssd-tools, libnss-sss, libpam-sss, adcli, samba-common-bin, krb5-user, packagekit]
+    script: |
+      # Already joined (a reset re-runs the extras): nothing to do.
+      if realm list --name-only 2>/dev/null | grep -qix "$dc_domain"; then exit 0; fi
+      # The domain controller answers DNS for the domain. A netplan drop-in, so it survives a DHCP
+      # renewal: keep DHCP for the address, but take the controller as the only resolver.
+      iface=$(ip route show default | awk '{print $5; exit}')
+      cat >/etc/netplan/99-lab-domain.yaml <<EOF
+      # Written by the lab panel: DNS points at the domain controller for the realm join.
+      network:
+        version: 2
+        ethernets:
+          $iface:
+            dhcp4: true
+            dhcp4-overrides:
+              use-dns: false
+            nameservers:
+              addresses: [$dc_ip]
+              search: [$dc_domain]
+      EOF
+      chmod 600 /etc/netplan/99-lab-domain.yaml
+      netplan apply
+      # Wait until the domain is discoverable through the controller (its SRV records).
+      for _ in $(seq 1 30); do
+        realm discover "$dc_domain" >/dev/null 2>&1 && break
+        sleep 10
+      done
+      # Join as the controller's user; SSSD then serves the domain's accounts.
+      printf '%s' "$dc_password" | realm join --user="$dc_username" "$dc_domain"
+      # Short names (alice, not alice@domain), a home directory on first sign-in, and any domain user
+      # may sign in.
+      conf=/etc/sssd/sssd.conf
+      sed -i 's/^use_fully_qualified_names = .*/use_fully_qualified_names = False/' "$conf"
+      grep -q '^override_homedir' "$conf" || sed -i '/^\[domain\//a override_homedir = /home/%u' "$conf"
+      pam-auth-update --enable mkhomedir
+      systemctl enable --now sssd
+      systemctl restart sssd
+      realm permit --all
+
 # A second (writable) domain controller of a domain deployed with the Domain controller extra: it gets
 # a full copy of the directory, DNS and the global catalogue, and replicates both ways with the first.
 # A domain controller has no local accounts, so it signs in as the first's user (account: dc): the

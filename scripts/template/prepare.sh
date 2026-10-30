@@ -98,6 +98,9 @@ declare -A EXTRA_PACKAGES_DEBIAN=(
 	[zabbix-agent]="zabbix-agent2"
 	# What Python 2.7 is built with (bake_python), and pip needs to build C extensions.
 	[python]="build-essential zlib1g-dev libbz2-dev libreadline-dev libsqlite3-dev libffi-dev libncurses-dev"
+	# realmd and SSSD, for the Join a domain (Linux) extra: joined to a domain controller at deploy, so
+	# the packages must be here (the lab controller isn't on the internet). SSSD stays off (joined first).
+	[join-domain-linux]="realmd sssd sssd-tools libnss-sss libpam-sss adcli samba-common-bin krb5-user packagekit"
 )
 # shellcheck disable=SC2034 # used through EXTRA_PACKAGES, a reference to the family's list
 declare -A EXTRA_PACKAGES_RHEL=(
@@ -143,6 +146,8 @@ declare -A EXTRA_SERVICES=(
 	[jenkins]="docker containerd"
 	[zabbix]="zabbix-server zabbix-agent2 apache2 postgresql"
 	[zabbix-agent]="zabbix-agent2"
+	# SSSD stays off in the template: the Join a domain (Linux) extra joins the domain, then starts it.
+	[join-domain-linux]="sssd"
 )
 # Where web apps come from, to bake into the template; point these at a mirror if you have one.
 WORDPRESS_URL=${WORDPRESS_URL:-https://wordpress.org/latest.tar.gz}
@@ -155,6 +160,12 @@ CHINOOK_URL=${CHINOOK_URL:-https://github.com/lerocha/chinook-database/releases/
 
 # preseed_<id>: answers to the packages' installer questions, before they're installed.
 # bake_<id>: steps after, for what isn't a package. (With "-" in the id as "_".)
+
+preseed_join_domain_linux() {
+	# krb5-config asks for a default realm; the realm join rewrites /etc/krb5.conf anyway. A placeholder,
+	# so the (noninteractive) install sets nothing it would otherwise prompt for.
+	echo "krb5-config krb5-config/default_realm string EXAMPLE.COM" | debconf-set-selections
+}
 
 preseed_mail() {
 	# Postfix: configured on each machine by the extra; Roundcube: its database in SQLite.
