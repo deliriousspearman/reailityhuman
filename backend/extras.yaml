@@ -2625,6 +2625,78 @@
       Add-Computer -DomainName $dc_domain -Credential $credential -Force -WarningAction SilentlyContinue
       exit 3010
 
+# A second (writable) domain controller of a domain deployed with the Domain controller extra: it gets
+# a full copy of the directory, DNS and the global catalogue, and replicates both ways with the first.
+# A domain controller has no local accounts, so it signs in as the first's user (account: dc): the
+# panel gives it that user and password, rather than a password of its own that nothing would use.
+- id: additional-dc
+  name: Additional domain controller
+  category: Active Directory
+  description: Makes this server a second domain controller of a domain you've deployed, with its own DNS and a copy of the directory that replicates both ways with the first. It signs in as the first one's user.
+  ports: [53, 88, 389, 636, 3268]
+  setupMinutes: 25
+  account: dc
+  notes:
+    - "Sign in as the domain controller's user (DOMAIN\\{username}), with the same password: this machine has no account of its own."
+    - "Check replication with repadmin /replsummary or repadmin /showrepl. Members can use either controller."
+  options:
+    - id: dc
+      label: Domain controller
+      type: machine
+      extra: domain-controller
+      help: A running machine with the Domain controller extra, whose domain this one joins as a second controller.
+  windows:
+    script: |
+      if (-not (Get-Command Install-WindowsFeature -ErrorAction SilentlyContinue)) {
+        throw "A domain controller needs Windows Server."
+      }
+      $adapter = Get-NetAdapter | Where-Object Status -eq 'Up' | Select-Object -First 1
+      if ((Get-CimInstance Win32_ComputerSystem).DomainRole -lt 4) {
+        # Find the domain through the first controller (as Join a domain does), then promote.
+        Set-DnsClientServerAddress -InterfaceIndex $adapter.ifIndex -ServerAddresses $dc_ip
+        Clear-DnsClientCache
+        $deadline = (Get-Date).AddMinutes(5)
+        while (-not (Resolve-DnsName -Name "_ldap._tcp.dc._msdcs.$dc_domain" -Type SRV -ErrorAction SilentlyContinue)) {
+          if ((Get-Date) -gt $deadline) { throw "Can't find the domain $dc_domain through $dc_name ($dc_ip)." }
+          Start-Sleep -Seconds 10
+        }
+        Install-WindowsFeature -Name AD-Domain-Services -IncludeManagementTools | Out-Null
+        Import-Module ADDSDeployment
+        $credential = New-Object PSCredential("$($dc_netbios.ToUpper())\$dc_username", (ConvertTo-SecureString $dc_password -AsPlainText -Force))
+        # Directory Services Restore Mode's password: the domain user's, which is this machine's too.
+        $safe = ConvertTo-SecureString $dc_password -AsPlainText -Force
+        $result = Install-ADDSDomainController -DomainName $dc_domain -Credential $credential -SafeModeAdministratorPassword $safe `
+          -InstallDns -NoGlobalCatalog:$false -NoRebootOnCompletion -Force -WarningAction SilentlyContinue
+        if ($result.Status -ne 'Success') { throw "Promotion failed: $($result.Message)" }
+        # 3011: restart, then run again to check replication.
+        exit 3011
+      }
+      # After the restart: the first controller for DNS, then itself.
+      Set-DnsClientServerAddress -InterfaceIndex $adapter.ifIndex -ServerAddresses $dc_ip, '127.0.0.1'
+      Import-Module ActiveDirectory
+      $deadline = (Get-Date).AddMinutes(15)
+      while (-not (Get-ADDomainController -Server localhost -ErrorAction SilentlyContinue)) {
+        if ((Get-Date) -gt $deadline) { throw "Active Directory didn't come up." }
+        Start-Sleep -Seconds 10
+      }
+      # Replicate now, both ways, rather than on the schedule; then every partition with every partner
+      # must have succeeded (it can take a few tries while the first controller learns of this one).
+      $deadline = (Get-Date).AddMinutes(10)
+      while ($true) {
+        repadmin /syncall $env:COMPUTERNAME /Ade | Out-Null
+        repadmin /syncall $env:COMPUTERNAME /AdeP | Out-Null
+        $links = @(repadmin /showrepl $env:COMPUTERNAME /csv | ConvertFrom-Csv)
+        $failing = @($links | Where-Object { [int]$_.'Number of Failures' -gt 0 })
+        if ($links.Count -gt 0 -and $failing.Count -eq 0) { break }
+        if ((Get-Date) -gt $deadline) {
+          $why = if ($links.Count -eq 0) { 'no replication partners' } else { ($failing | ForEach-Object { "$($_.'Naming Context') from $($_.'Source DSA'): $($_.'Last Failure Status')" }) -join '; ' }
+          throw "Replication isn't working: $why"
+        }
+        Start-Sleep -Seconds 20
+      }
+      Write-Output "Replicating with $(@($links | Select-Object -ExpandProperty 'Source DSA' -Unique) -join ', ')"
+      exit 0
+
 # Exchange Server SE on its own template (templates.yaml: exchange), with its files and prerequisites
 # baked in (prepare.ps1 -Exchange). It joins a domain controller's domain, then runs Exchange's setup as
 # that controller's user (a domain, schema and enterprise administrator), which also prepares the

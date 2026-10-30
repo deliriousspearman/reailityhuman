@@ -129,6 +129,25 @@ CASES: dict[str, list[dict]] = {
             "checks": [("ssh", "(Get-CimInstance Win32_ComputerSystem).PartOfDomain", "True")],
         }
     ],
+    # A second controller (DomainRole 4, a backup domain controller) of a domain deployed first: every
+    # replication link healthy, and a user made on it reaches the first controller.
+    "additional-dc": [
+        {
+            "options": {},
+            "server": {"extra": "domain-controller", "option": "dc"},
+            "checks": [
+                ("ssh", "(Get-CimInstance Win32_ComputerSystem).DomainRole", "4"),
+                ("ssh", "if (@(repadmin /showrepl /csv | ConvertFrom-Csv | Where-Object { [int]$_.'Number of Failures' -gt 0 }).Count -eq 0) { 'repl-ok' }", "repl-ok"),
+                (
+                    "ssh",
+                    "$n = 'e2e' + (Get-Random); New-ADUser -Name $n; repadmin /syncall /AdeP | Out-Null;"
+                    " $p = (Get-ADDomainController -Filter * | Where-Object Name -ne $env:COMPUTERNAME).HostName;"
+                    " if (Get-ADUser -Identity $n -Server $p) { 'reached-partner' }",
+                    "reached-partner",
+                ),
+            ],
+        }
+    ],
     "freeipa": [
         {
             "options": {"sample_data": "yes"},

@@ -163,6 +163,32 @@ three templates) and declaring the `exchange` extra's `diskGB: 45` fixed that, a
 a network per instance (VLAN/port group, with a VPN — see "Later"); a second lab; and rebuilding the
 three templates retired to make room (Windows Server 2019/2022, Metasploitable 3 Windows).
 
+### 1a. Meridian: the second Pro Lab, with two replicating domain controllers (large) — started 2026-10-30
+
+**Goal.** The LMS's Meridian lab, cut from seven machines to five (four Windows, one Linux). Jake's main
+requirement is **two domain controllers replicating with each other**. Domain `meridian.example`:
+- **dc1** (Windows Server 2025): the first domain controller, plus AD CS with web enrolment;
+- **dc2** (Windows Server 2025): a second, writable domain controller in the same site, replicating both ways;
+- **sql** (Windows Server 2025): SQL Server, running as a domain service account;
+- **ws** (Windows 11): a staff workstation;
+- **web** (Ubuntu 24.04): the customer portal and entry point, joined to the domain with realmd/sssd.
+
+**Decisions (2026-10-30):** the flat LAN with DHCP like Brookfield (the DMZ and Internal networks wait for
+"Networks"). About 18 GB of memory, so one instance at a time. The final chain uses both
+controllers: coerce dc2 → relay to dc1's certificate web enrolment (ESC8) → a certificate for dc2 → DCSync.
+Other routes: a backup account with replication rights, a GPP password in SYSVOL (replicated to dc2),
+and an ESC1 template. 7 flags.
+
+**Steps:**
+
+| Step | What | State |
+|---|---|---|
+| 1 | `additional-dc` extra (a general one): a second controller of a deployed domain, signing in as the first one's user (`account: dc`) | Built 2026-10-30; lab test next |
+| 2 | `adcs` and `join-domain-linux` extras | |
+| 3 | Meridian in `labs.yaml`, its seeding extras (`meridian-dc`, `meridian-dc2`, `meridian-member`, `meridian-web`), the frontend entry | |
+| 4 | Flags on the Linux machine, if `plant_flags` needs it | |
+| 5 | End-to-end instance test, walking the attack path | |
+
 ### 2. The install script: clear outcomes, colours and full errors — done 2026-10-26
 
 Asked 2026-10-26, done the same day. The offline install (`deploy/install.sh` and

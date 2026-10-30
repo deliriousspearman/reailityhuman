@@ -385,6 +385,13 @@ def deploy_machine(req: DeployRequest, db: Db) -> dict:
             extras.check_machine(x, o, db.get(Machine, other_id))
     except extras.ExtraError as e:
         raise HTTPException(422, str(e)) from e
+    username = tpl.username
+    if account := extras.account_of(chosen):
+        # It signs in as another machine (an additional domain controller, as its domain's user).
+        if password is not None:
+            raise HTTPException(422, "This machine signs in with its domain controller's user and password, so it can't take a password of its own.")
+        other = db.get(Machine, account)
+        username, password = other.username, other.password
     if db.scalar(select(Machine).where(Machine.name == req.name)):
         raise HTTPException(409, f"There's already a machine called {req.name}.")
     # Expired machines don't count: they're off, and deleted once their grace period ends. Their disk
@@ -420,7 +427,7 @@ def deploy_machine(req: DeployRequest, db: Db) -> dict:
         expires_at=None if req.hours is None else utcnow() + timedelta(hours=req.hours),
         # "<owner>-<name>-<id>": whose it is, at a glance in vCenter, and never clashing.
         vm_name=f"{owner}-{req.name}-{machine_id.removeprefix('m-')}",
-        username=tpl.username,
+        username=username,
         password=password or cloudinit.generate_password(cfg.password_length),
         ssh_key=(req.sshKey or "").strip() or None,
         extras=chosen,
@@ -805,6 +812,12 @@ def deploy_instance(req: InstanceRequest, db: Db) -> dict:
     first_turn = planned[0][0].boot_order
     for lm, tpl, chosen in planned:
         name, machine_id = names[lm.name], ids[lm.name]
+        username, password = tpl.username, tpl.fixed_password or cloudinit.generate_password(cfg.password_length)
+        # A machine signing in as an earlier one (e.g. a second domain controller): added above, as
+        # machines are in boot order and a machine option points at an earlier one.
+        if account := extras.account_of(chosen):
+            other = db.get(Machine, account)
+            username, password = other.username, other.password
         m = Machine(
             id=machine_id,
             name=name,
@@ -815,8 +828,8 @@ def deploy_instance(req: InstanceRequest, db: Db) -> dict:
             state="deploying",
             expires_at=expires_at,
             vm_name=f"{owner}-{name}-{machine_id.removeprefix('m-')}",
-            username=tpl.username,
-            password=tpl.fixed_password or cloudinit.generate_password(cfg.password_length),
+            username=username,
+            password=password,
             extras=chosen,
             instance_id=instance_id,
             lab=lab.slug,

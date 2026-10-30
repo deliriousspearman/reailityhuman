@@ -183,7 +183,7 @@ def test_catalogue_conflicts_are_worked_out():
     for i in web | mysql_port:
         expected = (web if i in web else set()) | (mysql_port if i in mysql_port else set()) | (https if i in https else set())
         if i == "freeipa":
-            expected |= {"domain-controller"}  # DNS, Kerberos and LDAP, as a domain controller's
+            expected |= {"domain-controller", "additional-dc"}  # DNS, Kerberos and LDAP, as a domain controller's
         assert found[i] == expected - {i}, i
     assert found["vaultwarden"] == https - {"vaultwarden"}
     # The Wazuh server's indexer is on 9200, like Elasticsearch; its agents' port 1514 is Graylog's syslog.

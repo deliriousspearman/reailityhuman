@@ -24,7 +24,7 @@ def windows(monkeypatch):
     ubuntu = catalogue.catalogue()[("ubuntu", "26.04")]
     tpl = replace(
         ubuntu, template=KEY[0], version=KEY[1], vsphere=TEMPLATE, username="labadmin", family="windows",
-        admin_group="Administrators", extras=("iis", "domain-controller", "join-domain"),
+        admin_group="Administrators", extras=("iis", "domain-controller", "additional-dc", "join-domain"),
     )  # fmt: skip
     monkeypatch.setitem(catalogue.catalogue(), KEY, tpl)
 
@@ -127,6 +127,29 @@ def test_joining_needs_a_running_controller(queued, windows, ready):
     dc = deploy("dc01", [{"id": "domain-controller"}], password="Dc-Passw0rd!").json()  # not run yet: deploying
     r = deploy("win03", [{"id": "join-domain", "options": {"dc": dc["id"]}}])
     assert r.status_code == 422 and "dc01 isn't running yet" in r.json()["detail"]
+
+
+def test_the_additional_controller_extra():
+    x = extras.find("additional-dc")
+    (option,) = x.options
+    assert option.type == "machine" and option.extra == "domain-controller" and x.account == "dc"
+    # It serves the same ports as the first controller, so the two can't go on one machine.
+    assert set(x.conflicts) >= {"domain-controller", "freeipa"}
+    _, script = x.families["windows"]
+    # Promotes, restarts and comes back (3011) to check replication.
+    assert script.index("Install-ADDSDomainController") < script.index("exit 3011") < script.index("repadmin /showrepl")
+
+
+def test_a_second_controller_signs_in_as_the_first(queued, windows, ready):
+    dc = deploy_dc(queued)
+    r = deploy("dc02", [{"id": "additional-dc", "options": {"dc": dc["id"]}}])
+    assert r.status_code == 201, r.text
+    first = client.get(f"/api/machines/{dc['id']}").json()
+    second = client.get(f"/api/machines/{r.json()['id']}").json()
+    assert (second["username"], second["password"]) == (first["username"], first["password"]) == ("labadmin", "Dc-Passw0rd!")
+    # A password of its own would never be used.
+    r = deploy("dc03", [{"id": "additional-dc", "options": {"dc": dc["id"]}}], password="Other-Passw0rd!")
+    assert r.status_code == 422 and "domain controller's user and password" in r.json()["detail"]
 
 
 def test_deploy_fails_if_the_controller_went_away(queued, windows, ready):

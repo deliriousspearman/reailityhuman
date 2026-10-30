@@ -312,6 +312,9 @@ class Extra:
     # app's admin account. The worker then clears it from vCenter once the machine is set up.
     password: bool = False
     options: tuple[Option, ...] = ()
+    # A machine option whose machine's sign-in this one takes (username and password), e.g. "dc" for an
+    # additional domain controller: it has no account of its own, only the domain's.
+    account: str = ""
     # Minutes a deploy waits for it beyond the usual, e.g. a domain controller's promotion.
     setup_minutes: int = 0
     # The container image it runs (lab_docker), e.g. "grafana/grafana:13.2.4". Not baked into templates:
@@ -369,6 +372,8 @@ def extras() -> dict[str, Extra]:
                 raise ValueError(f"extras.yaml: {e['id']}.{o.id}: 'when' names no such option {', '.join(sorted(unknown))}")
             if not re.fullmatch(r"[a-z][a-z0-9_]*", o.id) or o.id in RESERVED:
                 raise ValueError(f"extras.yaml: {e['id']}: option id '{o.id}' must be a lowercase shell name other than {', '.join(RESERVED)}")
+        if (account := e.get("account", "")) and account not in {o.id for o in options if o.type == "machine"}:
+            raise ValueError(f"extras.yaml: {e['id']}: account names '{account}', which isn't one of its machine options")
         for key in ("uses", "provides", "conflicts"):
             if key in e:
                 raise ValueError(f"extras.yaml: {e['id']}: '{key}' is no longer used: clashes come from ports alone")
@@ -387,6 +392,7 @@ def extras() -> dict[str, Extra]:
             notes=tuple(_conditional(n) for n in e.get("notes", [])),
             password=bool(e.get("password", False)),
             options=options,
+            account=account,
             setup_minutes=int(e.get("setupMinutes", 0)),
             image=images[0] if images else "",
             images=images,
@@ -565,6 +571,12 @@ def needs_password(chosen: list[dict]) -> bool:
 def machine_options(chosen: list[dict]) -> list[tuple[Extra, Option, str]]:
     """The machine options among these (resolved) extras, with the machine id each names."""
     return [(x, o, c["options"][o.id]) for c in chosen if (x := find(c["id"])) for o in x.options if o.type == "machine"]
+
+
+def account_of(chosen: list[dict]) -> str | None:
+    """The machine (its id) whose sign-in a machine with these (resolved) extras takes, if one of them
+    says so (Extra.account); otherwise None, and it gets its own."""
+    return next((c["options"][x.account] for c in chosen if (x := find(c["id"])) and x.account), None)
 
 
 def dependants(machines, machine_id: str) -> list[tuple[object, str]]:
