@@ -183,7 +183,7 @@ and an ESC1 template. 7 flags.
 
 | Step | What | State |
 |---|---|---|
-| 1 | `additional-dc` extra (a general one): a second controller of a deployed domain, signing in as the first one's user (`account: dc`) | Built 2026-10-30; lab test next |
+| 1 | `additional-dc` extra (a general one): a second controller of a deployed domain, signing in as the first one's user (`account: dc`) | Done 2026-10-30: the e2e test passes (promotes, replicates both ways, a user made on each controller reaches the other) |
 | 2 | `adcs` and `join-domain-linux` extras | |
 | 3 | Meridian in `labs.yaml`, its seeding extras (`meridian-dc`, `meridian-dc2`, `meridian-member`, `meridian-web`), the frontend entry | |
 | 4 | Flags on the Linux machine, if `plant_flags` needs it | |
