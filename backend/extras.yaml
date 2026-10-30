@@ -2634,7 +2634,7 @@
   category: Active Directory
   description: Makes this server a second domain controller of a domain you've deployed, with its own DNS and a copy of the directory that replicates both ways with the first. It signs in as the first one's user.
   ports: [53, 88, 389, 636, 3268]
-  setupMinutes: 25
+  setupMinutes: 40
   account: dc
   notes:
     - "Sign in as the domain controller's user (DOMAIN\\{username}), with the same password: this machine has no account of its own."
@@ -2665,8 +2665,20 @@
         $credential = New-Object PSCredential("$($dc_netbios.ToUpper())\$dc_username", (ConvertTo-SecureString $dc_password -AsPlainText -Force))
         # Directory Services Restore Mode's password: the domain user's, which is this machine's too.
         $safe = ConvertTo-SecureString $dc_password -AsPlainText -Force
-        $result = Install-ADDSDomainController -DomainName $dc_domain -Credential $credential -SafeModeAdministratorPassword $safe `
-          -InstallDns -NoGlobalCatalog:$false -NoRebootOnCompletion -Force -WarningAction SilentlyContinue
+        $promote = @{
+          DomainName = $dc_domain; Credential = $credential; SafeModeAdministratorPassword = $safe
+          InstallDns = $true; NoGlobalCatalog = $false; Force = $true; WarningAction = 'SilentlyContinue'
+        }
+        # A controller promoted moments ago answers DNS before it serves as one (SYSVOL, the locator), and
+        # promotion then fails "could not be contacted": Windows' own checks, until they pass.
+        $deadline = (Get-Date).AddMinutes(15)
+        while ($true) {
+          $failed = @(Test-ADDSDomainControllerInstallation @promote | Where-Object Status -eq 'Error')
+          if ($failed.Count -eq 0) { break }
+          if ((Get-Date) -gt $deadline) { throw "$dc_name isn't ready to take a second controller: $($failed[0].Message)" }
+          Start-Sleep -Seconds 30
+        }
+        $result = Install-ADDSDomainController @promote -NoRebootOnCompletion
         if ($result.Status -ne 'Success') { throw "Promotion failed: $($result.Message)" }
         # 3011: restart, then run again to check replication.
         exit 3011
