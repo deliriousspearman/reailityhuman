@@ -129,6 +129,19 @@ CASES: dict[str, list[dict]] = {
             "checks": [("ssh", "(Get-CimInstance Win32_ComputerSystem).PartOfDomain", "True")],
         }
     ],
+    # A Linux machine joined to a domain controller deployed first (realmd/SSSD): the realm is joined,
+    # SSSD is running, and a domain account resolves through NSS by its short name.
+    "join-domain-linux": [
+        {
+            "options": {},
+            "server": {"extra": "domain-controller", "option": "dc"},
+            "checks": [
+                ("ssh", "realm list --name-only 2>/dev/null | tr A-Z a-z", "lab.internal"),
+                ("ssh", "systemctl is-active sssd", "active"),
+                ("ssh", "getent passwd administrator >/dev/null && echo found-admin", "found-admin"),
+            ],
+        }
+    ],
     # A second controller (DomainRole 4, a backup domain controller) of a domain deployed first: every
     # replication link healthy, and a user made on it reaches the first controller.
     "additional-dc": [
