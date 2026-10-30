@@ -2,7 +2,7 @@
 
 from datetime import datetime, timezone
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, BigInteger, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -133,3 +133,30 @@ class Job(Base):
     cancelled_by: Mapped[str | None] = mapped_column(String(64))
     # A build job's template version, "<template>/<version>" (machine_id is None then).
     template: Mapped[str | None] = mapped_column(String(100))
+
+
+class Capture(Base):
+    """A packet capture on the capture appliance (app/capture.py), limited to some machines' traffic.
+    The .pcap itself is a file in capture_dir; this row is what the panel lists."""
+
+    __tablename__ = "captures"
+
+    id: Mapped[str] = mapped_column(String(16), primary_key=True)
+    owner: Mapped[str] = mapped_column(String(64))
+    # The machines it's limited to, as they were when it started (kept after they're destroyed):
+    # [{"id", "name", "ip", "macs"}].
+    machines: Mapped[list] = mapped_column(JSON, default=list)
+    # The filter as typed (may be empty), and what tcpdump ran: limited to those machines' MACs.
+    user_filter: Mapped[str] = mapped_column(Text, default="")
+    effective_filter: Mapped[str] = mapped_column(Text)
+    seconds: Mapped[int] = mapped_column(Integer)
+    # running | stopped | failed
+    state: Mapped[str] = mapped_column(String(8), default="running")
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    stopped_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    packets: Mapped[int] = mapped_column(Integer, default=0)
+    bytes: Mapped[int] = mapped_column(BigInteger, default=0)
+    # Who talked to whom, busiest first: [{"a", "b", "packets", "bytes"}] (addresses: IP, or MAC).
+    conversations: Mapped[list] = mapped_column(JSON, default=list)
+    # Why it stopped, e.g. "Time limit reached (10 minutes)".
+    detail: Mapped[str | None] = mapped_column(Text)

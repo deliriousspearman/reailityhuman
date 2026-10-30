@@ -9,7 +9,7 @@
 	import { api, ApiError } from '$lib/api';
 	import { store } from '$lib/store.svelte';
 	import { findTemplate } from '$lib/templates';
-	import type { TemplateStatus } from '$lib/types';
+	import type { CaptureAppliance, TemplateStatus } from '$lib/types';
 
 	// Capacity comes from vCenter, which is slower to ask than the database: on load, then every 30 s.
 	onMount(() => {
@@ -138,6 +138,29 @@
 	}
 
 	const roomFor = $derived(cap ? Math.max(0, Math.floor((cap.total.memoryGB - cap.used.memoryGB) / biggest)) : 0);
+
+	// The packet capture appliance (packer/capture): whether it answers, and the panel's key for it.
+	let appliance = $state<CaptureAppliance | null>(null);
+	let applianceProblem = $state<string | null>(null);
+	async function loadAppliance() {
+		appliance = null;
+		try {
+			appliance = await api<CaptureAppliance>('/capture-appliance');
+			applianceProblem = null;
+		} catch (e) {
+			applianceProblem = e instanceof Error ? e.message : String(e);
+		}
+	}
+	onMount(() => void loadAppliance());
+	async function copyKey() {
+		if (!appliance?.publicKey) return;
+		try {
+			await navigator.clipboard.writeText(appliance.publicKey);
+			store.say('Copied the public key', 'ok');
+		} catch {
+			store.say("Couldn't copy: select the key and copy it instead.");
+		}
+	}
 </script>
 
 <svelte:head><title>Admin · Codex Labs</title></svelte:head>
@@ -355,7 +378,70 @@
 
 <ConfirmDialog bind:request />
 
+<div class="section-heading">
+	<h2 id="capture">Packet capture</h2>
+	<p>The capture appliance, which sees the machines' traffic for the Network page's captures</p>
+</div>
+{#if applianceProblem}
+	<p class="problem"><strong>Can't ask the panel:</strong> {applianceProblem}</p>
+{:else if !appliance}
+	<p class="loading">Asking the appliance…</p>
+{:else}
+	<dl class="stats">
+		<div>
+			<dt>Appliance</dt>
+			<dd><Status tone={appliance.ok ? 'up' : 'error'} label={appliance.ok ? 'Answering' : 'Not answering'} /></dd>
+			<span class="stat-note">{appliance.problem ?? (appliance.vm || appliance.host)}</span>
+		</div>
+		<div>
+			<dt>Address</dt>
+			<dd><code>{appliance.host || '—'}</code></dd>
+			<span class="stat-note">{appliance.vm ? `from VMware Tools (${appliance.vm})` : 'CAPTURE_HOST'}</span>
+		</div>
+		<div>
+			<dt>Running now</dt>
+			<dd>{appliance.running}</dd>
+			<span class="stat-note">captures</span>
+		</div>
+	</dl>
+	{#if appliance.publicKey}
+		<p class="key-intro">The panel's key: build the appliance with it (<code>packer/build.sh capture -var panel_key="…"</code>).</p>
+		<div class="key">
+			<code>{appliance.publicKey}</code>
+			<button class="btn btn-sm" type="button" onclick={copyKey}><Icon name="copy" /> Copy</button>
+		</div>
+	{/if}
+	<button class="btn btn-sm recheck" type="button" onclick={loadAppliance}><Icon name="reboot" /> Check again</button>
+{/if}
+
 <style>
+	.key-intro {
+		margin-top: 1rem;
+		font-size: 0.875rem;
+		color: var(--lms-gray-2);
+	}
+	.key-intro code {
+		font: 0.82rem var(--lms-mono);
+	}
+	.key {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.75rem;
+		margin-top: 0.5rem;
+		padding: 0.6rem 0.8rem;
+		border: var(--lms-border-width) solid var(--lms-gray-5);
+		background: var(--lms-bg-code);
+	}
+	.key code {
+		flex: 1;
+		font: 0.78rem var(--lms-mono);
+		color: var(--lms-lime-text);
+		overflow-wrap: anywhere;
+	}
+	.recheck {
+		margin-top: 0.75rem;
+	}
 	.lead {
 		margin: 0.75rem 0 0;
 	}

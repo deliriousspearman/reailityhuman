@@ -83,7 +83,7 @@ def database():
 def clean_tables():
     yield
     with engine().begin() as c:
-        c.execute(text("truncate machines, log_lines, jobs, template_builds restart identity cascade"))
+        c.execute(text("truncate machines, log_lines, jobs, template_builds, captures restart identity cascade"))
     with connect() as vc:
         for child in vc.folder.childEntity:
             if isinstance(child, vim.VirtualMachine):

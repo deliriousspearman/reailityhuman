@@ -23,6 +23,7 @@ browser console. Machines expire unless they're given more time.
 | Optional services on machines | `backend/extras.yaml` (and the templates that bake them in) |
 | Pro Labs | `backend/labs.yaml` (+ `frontend/src/lib/labs.ts` for the card) |
 | vCenter permissions | `scripts/setup_vcenter.py` |
+| Packet captures | The capture appliance and `CAPTURE_*` ([section 13](#13-packet-capture)) |
 | Database backups | `/srv/lab-deploy/backups` |
 
 **Changes go live by push.** Every change to the repository is committed and pushed to `main`, and
@@ -41,9 +42,12 @@ the YAML, run the tests, commit and push.
 | `backend/`, `site/` | What the pipeline deployed |
 | `backups/` | Daily database dumps |
 
+The API's named volume `capture` holds the panel's SSH key for the capture appliance and the
+captures' .pcap files.
+
 ## 2. The Admin page
 
-`/admin` has four sections.
+`/admin` has six sections: Capacity, Machines, Leftover VMs, Jobs, Templates and Packet capture.
 
 ### Capacity
 
@@ -179,6 +183,10 @@ The settings you're most likely to change:
 | `BUILD_HTTP_IP` | empty | Template builds' VMs can't reach the server: set it to the server's LAN address |
 | `BUILD_MEDIA_DIR` | empty | Offline: the media folder `fetch-media.sh` made, for the Windows builds |
 | `BUILD_TIMEOUT_MINUTES` | 180 | A build that takes longer is stopped |
+| `CAPTURE_VM` | empty | The capture appliance is set up: its VM, e.g. `Labs/Capture/lab-capture` ([section 13](#13-packet-capture)) |
+| `CAPTURE_MAX_SECONDS`, `CAPTURE_MAX_MB` | 600, 100 | Captures should be allowed to run longer or grow larger |
+| `CAPTURE_PER_OWNER`, `CAPTURE_TOTAL` | 1, 3 | More captures should run at once |
+| `CAPTURE_KEEP_DAYS` | 7 | Finished captures should be kept longer |
 
 The [Developer guide's configuration reference](developer-guide.md#14-configuration-reference)
 lists every setting.
@@ -719,3 +727,72 @@ docker compose ps                         # every service up and healthy?
 | Console won't open | Machine stopped, or console privilege missing | Start it; re-run `setup_vcenter.py` |
 | Console opens black | A guest display quirk (seen on Ubuntu Desktop) | Reconnect; use RDP meanwhile |
 | A lab shows "Soon" | A template isn't built, or doesn't list an extra the lab uses | The reason on the lab's page names it; see [7.1](#71-before-you-start) |
+
+## 13. Packet capture
+
+The **Network** page draws each person's machines on the LAN and captures the traffic between them,
+with a BPF filter. Traffic between machines stays inside ESXi's virtual switch, so a small VM, the
+**capture appliance**, listens on a promiscuous port group with the LAN's VLAN. The panel signs in to it
+over SSH, runs tcpdump there and streams the packets back. Design: [plan.md section 12](plan.md#12-packet-capture-and-the-network-diagram).
+
+> **Warning:** A VM on the capture port group sees **all** the LAN's traffic on that switch: vCenter,
+> ESXi, the panel and everyone's machines. Put nothing else on it. The panel limits every capture to the
+> chosen machines' MAC addresses, and its key on the appliance may only run `lab-capture`.
+
+**Setting it up** (once; about 15 minutes):
+
+1. **The port group and folder.** From a machine with pyVmomi (as for `setup_vcenter.py`):
+
+    ```sh
+    ~/labdeploy-setup/bin/python scripts/setup_capture.py
+    ```
+
+    It adds `LAN-capture` to every host's vSwitch that carries the LAN's port group (same VLAN,
+    promiscuous mode on, forged transmits and MAC changes refused), and the folder `Labs/Capture`. On a
+    **distributed switch** it stops: add a distributed port group `LAN-capture` by hand, with the LAN's
+    VLAN and Security → Promiscuous mode set to Accept.
+2. **The panel's key.** Admin → Packet capture shows the panel's public key (made on the API's first
+    start). Copy it.
+3. **Build the appliance** (from the build machine, as for templates;
+    [build-templates.md](build-templates.md)). It needs Alpine's ISO, the same as `packer/alpine`:
+
+    ```sh
+    packer/build.sh capture -var panel_key="ssh-ed25519 AAAA… lab-deploy-capture"
+    ```
+
+    This leaves the VM `lab-capture`, powered off, in `Labs/Capture`.
+4. **Power it on**, and set it in `/srv/lab-deploy/lab-deploy.env`:
+
+    ```sh
+    CAPTURE_VM=Labs/Capture/lab-capture
+    ```
+
+    Then `docker compose up -d api`. The panel reads the appliance's address from VMware Tools, so DHCP
+    can give it any address. Set `CAPTURE_HOST` instead to use a fixed address.
+5. **Check it.** Admin → Packet capture should say **Answering**. On the Network page, select two
+    machines, pick ICMP, start a capture, and ping one from the other.
+
+**The appliance's host key** is accepted on the first connection, then pinned (under the name
+`lab-capture`, whatever its address). After rebuilding the appliance, remove the old key:
+
+```sh
+docker compose exec api ssh-keygen -f /capture/ssh/known_hosts -R lab-capture
+```
+
+**A new panel key** (a new server, or the `capture` volume was lost): build the appliance again with
+the new key, or put it in `/root/.ssh/authorized_keys.panel` on the appliance (from its console) and
+run `finish-capture.sh` there, which also powers it off.
+
+**Limits.** A capture runs at most `CAPTURE_MAX_SECONDS` (10 minutes) and `CAPTURE_MAX_MB` (100 MB), one
+per person and three at once. Finished captures are kept `CAPTURE_KEEP_DAYS` (7), or until all their
+machines are destroyed. A deploy restarts the API, which stops running captures; what they captured is
+kept. Each start is written to the machines' activity logs.
+
+**When it doesn't answer**, Admin → Packet capture says why:
+
+| It says | Do this |
+|---|---|
+| "has no address: is it running, with VMware Tools?" | Power the appliance on; wait a minute for Tools |
+| "Couldn't reach the capture appliance … Permission denied" | The appliance doesn't have the panel's current key: see "A new panel key" |
+| "… REMOTE HOST IDENTIFICATION HAS CHANGED" | The appliance was rebuilt: remove its old host key (above) |
+| A capture with no packets | The machines are on another host or switch than the appliance, or the port group isn't promiscuous |

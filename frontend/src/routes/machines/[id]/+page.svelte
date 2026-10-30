@@ -220,6 +220,7 @@
 						<button type="button" disabled={busy || m.state === 'expired'} onclick={() => fromMenu(reset)}><Icon name="reset" /> Reset to clean</button>
 						<button type="button" disabled={busy || m.state === 'expired'} onclick={() => fromMenu(redeploy)}><Icon name="rebuild" /> Redeploy</button>
 						<a href="/machines/new/{m.template}?from={m.id}"><Icon name="plus" /> Deploy another like this</a>
+						<a href="/network?machines={m.id}"><Icon name="capture" /> Capture its traffic</a>
 						<button type="button" class="danger" disabled={busy} onclick={() => fromMenu(destroy)}><Icon name="trash" /> Destroy</button>
 					</div>
 				</details>

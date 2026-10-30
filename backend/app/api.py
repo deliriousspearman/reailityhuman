@@ -1,5 +1,6 @@
 """The panel's HTTP API, under /api. Responses use the frontend's shapes (src/lib/types.ts)."""
 
+import asyncio
 import logging
 import re
 import secrets
@@ -14,7 +15,7 @@ from sqlalchemy import func, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, object_session
 
-from . import actions, builds, catalogue, cloudinit, console, extras, jobs, labs
+from . import actions, builds, capture, catalogue, cloudinit, console, extras, jobs, labs
 from .config import settings
 from .deps import ANYONE, OWNER_RULE, Actor, Db, add_log, get_machine
 from .models import STABLE_STATES, InstanceFlag, Job, LogLine, Machine, TemplateBuild, utcnow
@@ -206,6 +207,8 @@ def config(db: Db) -> dict:
         "maxMachines": cfg.max_machines,
         "maxPermanent": cfg.max_permanent,
         "vcenterConfigured": cfg.vcenter_configured,
+        # Packet captures (capture.py): whether the appliance is set up, and the limits.
+        "capture": capture.capture_status(),
         # The checks deploys must pass, so the form can show problems while typing. The patterns
         # are written to mean the same in Python and JavaScript.
         "rules": {
@@ -1060,9 +1063,20 @@ def list_jobs(db: Db, limit: int = 50, machine: str | None = None) -> list[dict]
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
-    """Keeps a connection pool to the job queue open while the API runs, so it can defer jobs."""
+    """Keeps a connection pool to the job queue open while the API runs, so it can defer jobs. Packet
+    captures: records those the last run left running as stopped, deletes old ones now and then, and
+    stops those running when the API does (so what they captured is kept)."""
     with jobs.app.open():
-        yield
+        try:
+            await asyncio.to_thread(capture.recover)
+        except Exception:
+            log.exception("Packet capture: couldn't record interrupted captures")
+        cleaner = asyncio.create_task(capture.cleaner())
+        try:
+            yield
+        finally:
+            cleaner.cancel()
+            await capture.stop_all()
 
 
 def create_app() -> FastAPI:
@@ -1070,6 +1084,7 @@ def create_app() -> FastAPI:
     api = FastAPI(title="lab-deploy", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url="/api/openapi.json")
     api.include_router(router)
     api.include_router(console.router)
+    api.include_router(capture.router)
     return api
 
 

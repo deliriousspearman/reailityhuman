@@ -416,6 +416,16 @@ template; delete it in vCenter once none are left (Admin → Leftover VMs lists 
 templates). vCenter may refuse to delete a template outright ("Invalid virtual machine state"):
 right-click it → Template → Convert to Virtual Machine first, then Delete from Disk.
 
+**The capture appliance** (`packer/capture`) is built the same way but isn't a template: it's the VM
+`lab-capture` in `Labs/Capture`, for packet captures. It needs the panel's public key and the capture
+port group made by `scripts/setup_capture.py`:
+
+```sh
+packer/build.sh capture -var panel_key="ssh-ed25519 AAAA… lab-deploy-capture"
+```
+
+The [admin guide, section 13](admin-guide.md#13-packet-capture) has the rest of the setup.
+
 ## 6. Acceptance: the end-to-end tests
 
 ```sh

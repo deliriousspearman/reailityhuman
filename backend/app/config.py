@@ -71,11 +71,30 @@ class Settings(BaseSettings):
     # A build that takes longer is stopped (the slowest take about 70 minutes).
     build_timeout_minutes: int = 180
 
+    # Packet captures (app/capture.py): the capture appliance (packer/capture), by its VM in vCenter
+    # (its address is read from VMware Tools, so DHCP can give it any), or by its address. Both empty:
+    # captures are off. The panel's SSH key for it, the appliance's host key (pinned on first use) and
+    # the captures themselves are kept in capture_dir.
+    capture_vm: str = ""
+    capture_host: str = ""
+    capture_dir: Path = Path("/capture")
+    # The longest and largest a capture may be, how many may run at once (each person's, and in all),
+    # and how long finished ones are kept.
+    capture_max_seconds: int = Field(default=600, ge=10)
+    capture_max_mb: int = Field(default=100, ge=1)
+    capture_per_owner: int = Field(default=1, ge=1)
+    capture_total: int = Field(default=3, ge=1)
+    capture_keep_days: int = Field(default=7, ge=1)
+
     catalogue_path: Path = Path(__file__).resolve().parent.parent / "templates.yaml"
 
     @property
     def sqlalchemy_url(self) -> str:
         return self.database_url.replace("postgresql://", "postgresql+psycopg://", 1)
+
+    @property
+    def capture_configured(self) -> bool:
+        return bool(self.capture_host or self.capture_vm)
 
     @property
     def vcenter_configured(self) -> bool:

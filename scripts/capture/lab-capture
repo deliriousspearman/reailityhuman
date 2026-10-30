@@ -1,0 +1,57 @@
+#!/bin/sh
+# The only thing the panel's key may run on the capture appliance (packer/capture puts it in root's
+# authorized_keys as command="lab-capture"). The panel (backend/app/capture.py) writes its request on
+# standard input, one value a line:
+#
+#   validate <filter>                  exit 0 if tcpdump takes the filter, 3 with its complaint if not
+#   run <seconds> <snaplen> <filter>   tcpdump's pcap stream on standard output until the panel closes
+#                                      standard input or the seconds are up
+#
+# The filter is passed to tcpdump as a single argument, never through a shell. The panel always limits
+# it to its machines' MAC addresses: this script doesn't, so keep the key to the panel.
+set -u
+iface=${LAB_CAPTURE_IFACE:-eth1}
+tcpdump=${LAB_CAPTURE_TCPDUMP:-tcpdump}
+BAD_REQUEST=2 BAD_FILTER=3
+
+IFS= read -r mode || exit "$BAD_REQUEST"
+case $mode in
+validate)
+	IFS= read -r filter || exit "$BAD_REQUEST"
+	if ! out=$("$tcpdump" -d -i "$iface" -- "$filter" 2>&1 >/dev/null); then
+		printf '%s\n' "$out" >&2
+		exit "$BAD_FILTER"
+	fi
+	;;
+run)
+	IFS= read -r seconds && IFS= read -r snaplen && IFS= read -r filter || exit "$BAD_REQUEST"
+	case $seconds in '' | *[!0-9]*) echo "lab-capture: seconds must be a number" >&2; exit "$BAD_REQUEST" ;; esac
+	case $snaplen in '' | *[!0-9]*) echo "lab-capture: snaplen must be a number" >&2; exit "$BAD_REQUEST" ;; esac
+	if ! out=$("$tcpdump" -d -i "$iface" -- "$filter" 2>&1 >/dev/null); then
+		printf '%s\n' "$out" >&2
+		exit "$BAD_FILTER"
+	fi
+	# Standard input stays open while the panel wants packets. A background job's would be /dev/null,
+	# so the watcher gets it through fd 3.
+	exec 3<&0
+	timeout "$seconds" "$tcpdump" -i "$iface" -n -U -s "$snaplen" -w - -- "$filter" 3<&- </dev/null &
+	pid=$!
+	{
+		cat >/dev/null
+		kill "$pid" 2>/dev/null
+	} <&3 >/dev/null 2>&1 &
+	watcher=$!
+	exec 3<&-
+	wait "$pid"
+	rc=$?
+	# The watcher's cat, then the watcher (killing the watcher alone would leave cat waiting).
+	pkill -P "$watcher" 2>/dev/null
+	kill "$watcher" 2>/dev/null
+	# Stopped by the panel or the time limit (SIGTERM): a normal end.
+	case $rc in 0 | 124 | 143) exit 0 ;; *) exit "$rc" ;; esac
+	;;
+*)
+	echo "lab-capture: unknown request '$mode'" >&2
+	exit "$BAD_REQUEST"
+	;;
+esac

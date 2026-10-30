@@ -148,7 +148,7 @@ blockquote.warn strong:first-child { color: var(--medium); }
 <div class="layout">
   <nav class="toc" aria-label="On this page">
     <p class="toc-title">On this page</p>
-    <ul><li><a href="#1-overview">1. Overview</a></li><li><a href="#2-the-admin-page">2. The Admin page</a><ul><li><a href="#capacity">Capacity</a></li><li><a href="#machines">Machines</a></li><li><a href="#templates">Templates</a></li><li><a href="#leftover-vms">Leftover VMs</a></li><li><a href="#jobs">Jobs</a></li></ul></li><li><a href="#3-day-to-day-machine-management">3. Day-to-day machine management</a></li><li><a href="#4-settings-lab-deployenv">4. Settings (lab-deploy.env)</a></li><li><a href="#5-adding-a-machine-template-by-hand">5. Adding a machine (template) by hand</a><ul><li><a href="#51-choose-how-to-build-it">5.1 Choose how to build it</a></li><li><a href="#52-build-it-with-packer">5.2 Build it with Packer</a></li><li><a href="#53-build-it-by-hand-linux">5.3 Build it by hand (Linux)</a></li><li><a href="#54-import-a-complete-image">5.4 Import a complete image</a></li><li><a href="#55-add-it-to-the-catalogue">5.5 Add it to the catalogue</a></li><li><a href="#56-test-ship-and-check">5.6 Test, ship, and check</a></li><li><a href="#57-updating-and-retiring-a-template">5.7 Updating and retiring a template</a></li></ul></li><li><a href="#6-adding-an-extra-service">6. Adding an extra (service)</a><ul><li><a href="#the-docker-extras-image-isos">The Docker extras' image ISOs</a></li></ul></li><li><a href="#7-adding-a-pro-lab-by-hand">7. Adding a Pro Lab by hand</a><ul><li><a href="#71-before-you-start">7.1 Before you start</a></li><li><a href="#72-define-it-in-labsyaml">7.2 Define it in labs.yaml</a></li><li><a href="#73-the-catalogue-card-optional">7.3 The catalogue card (optional)</a></li><li><a href="#74-ship-and-test-it">7.4 Ship and test it</a></li></ul></li><li><a href="#8-vcenter-setup-and-privileges">8. vCenter setup and privileges</a></li><li><a href="#9-capacity-and-datastore-space">9. Capacity and datastore space</a></li><li><a href="#10-backups-and-restore">10. Backups and restore</a></li><li><a href="#11-deploying-and-updating-the-panel">11. Deploying and updating the panel</a></li><li><a href="#12-troubleshooting">12. Troubleshooting</a></li></ul>
+    <ul><li><a href="#1-overview">1. Overview</a></li><li><a href="#2-the-admin-page">2. The Admin page</a><ul><li><a href="#capacity">Capacity</a></li><li><a href="#machines">Machines</a></li><li><a href="#templates">Templates</a></li><li><a href="#leftover-vms">Leftover VMs</a></li><li><a href="#jobs">Jobs</a></li></ul></li><li><a href="#3-day-to-day-machine-management">3. Day-to-day machine management</a></li><li><a href="#4-settings-lab-deployenv">4. Settings (lab-deploy.env)</a></li><li><a href="#5-adding-a-machine-template-by-hand">5. Adding a machine (template) by hand</a><ul><li><a href="#51-choose-how-to-build-it">5.1 Choose how to build it</a></li><li><a href="#52-build-it-with-packer">5.2 Build it with Packer</a></li><li><a href="#53-build-it-by-hand-linux">5.3 Build it by hand (Linux)</a></li><li><a href="#54-import-a-complete-image">5.4 Import a complete image</a></li><li><a href="#55-add-it-to-the-catalogue">5.5 Add it to the catalogue</a></li><li><a href="#56-test-ship-and-check">5.6 Test, ship, and check</a></li><li><a href="#57-updating-and-retiring-a-template">5.7 Updating and retiring a template</a></li></ul></li><li><a href="#6-adding-an-extra-service">6. Adding an extra (service)</a><ul><li><a href="#the-docker-extras-image-isos">The Docker extras' image ISOs</a></li></ul></li><li><a href="#7-adding-a-pro-lab-by-hand">7. Adding a Pro Lab by hand</a><ul><li><a href="#71-before-you-start">7.1 Before you start</a></li><li><a href="#72-define-it-in-labsyaml">7.2 Define it in labs.yaml</a></li><li><a href="#73-the-catalogue-card-optional">7.3 The catalogue card (optional)</a></li><li><a href="#74-ship-and-test-it">7.4 Ship and test it</a></li></ul></li><li><a href="#8-vcenter-setup-and-privileges">8. vCenter setup and privileges</a></li><li><a href="#9-capacity-and-datastore-space">9. Capacity and datastore space</a></li><li><a href="#10-backups-and-restore">10. Backups and restore</a></li><li><a href="#11-deploying-and-updating-the-panel">11. Deploying and updating the panel</a></li><li><a href="#12-troubleshooting">12. Troubleshooting</a></li><li><a href="#13-packet-capture">13. Packet capture</a></li></ul>
   </nav>
   <main id="top">
     <article class="content">
@@ -198,6 +198,10 @@ browser console. Machines expire unless they're given more time.</p>
 <td><code>scripts/setup_vcenter.py</code></td>
 </tr>
 <tr>
+<td>Packet captures</td>
+<td>The capture appliance and <code>CAPTURE_*</code> (<a href="#13-packet-capture">section 13</a>)</td>
+</tr>
+<tr>
 <td>Database backups</td>
 <td><code>/srv/lab-deploy/backups</code></td>
 </tr>
@@ -237,8 +241,10 @@ read their passwords, and use the Admin page. Keep the panel on a trusted networ
 </tr>
 </tbody>
 </table></div>
+<p>The API's named volume <code>capture</code> holds the panel's SSH key for the capture appliance and the
+captures' .pcap files.</p>
 <h2 id="2-the-admin-page">2. The Admin page<a class="headerlink" href="#2-the-admin-page" title="Permanent link">#</a></h2>
-<p><code>/admin</code> has four sections.</p>
+<p><code>/admin</code> has six sections: Capacity, Machines, Leftover VMs, Jobs, Templates and Packet capture.</p>
 <h3 id="capacity">Capacity<a class="headerlink" href="#capacity" title="Permanent link">#</a></h3>
 <p>Three meters, read from vCenter every 30 s:</p>
 <ul>
@@ -456,6 +462,26 @@ curl -sk https://localhost/api/health      # database and vCenter both "ok"</cod
 <td><code>BUILD_TIMEOUT_MINUTES</code></td>
 <td>180</td>
 <td>A build that takes longer is stopped</td>
+</tr>
+<tr>
+<td><code>CAPTURE_VM</code></td>
+<td>empty</td>
+<td>The capture appliance is set up: its VM, e.g. <code>Labs/Capture/lab-capture</code> (<a href="#13-packet-capture">section 13</a>)</td>
+</tr>
+<tr>
+<td><code>CAPTURE_MAX_SECONDS</code>, <code>CAPTURE_MAX_MB</code></td>
+<td>600, 100</td>
+<td>Captures should be allowed to run longer or grow larger</td>
+</tr>
+<tr>
+<td><code>CAPTURE_PER_OWNER</code>, <code>CAPTURE_TOTAL</code></td>
+<td>1, 3</td>
+<td>More captures should run at once</td>
+</tr>
+<tr>
+<td><code>CAPTURE_KEEP_DAYS</code></td>
+<td>7</td>
+<td>Finished captures should be kept longer</td>
 </tr>
 </tbody>
 </table></div>
@@ -1083,6 +1109,76 @@ docker compose ps                         # every service up and healthy?</code>
 <td>A lab shows "Soon"</td>
 <td>A template isn't built, or doesn't list an extra the lab uses</td>
 <td>The reason on the lab's page names it; see <a href="#71-before-you-start">7.1</a></td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="13-packet-capture">13. Packet capture<a class="headerlink" href="#13-packet-capture" title="Permanent link">#</a></h2>
+<p>The <strong>Network</strong> page draws each person's machines on the LAN and captures the traffic between them,
+with a BPF filter. Traffic between machines stays inside ESXi's virtual switch, so a small VM, the
+<strong>capture appliance</strong>, listens on a promiscuous port group with the LAN's VLAN. The panel signs in to it
+over SSH, runs tcpdump there and streams the packets back. Design: <a href="../plan.md#12-packet-capture-and-the-network-diagram">plan.md section 12</a>.</p>
+<blockquote class="warn">
+<p><strong>Warning:</strong> A VM on the capture port group sees <strong>all</strong> the LAN's traffic on that switch: vCenter,
+ESXi, the panel and everyone's machines. Put nothing else on it. The panel limits every capture to the
+chosen machines' MAC addresses, and its key on the appliance may only run <code>lab-capture</code>.</p>
+</blockquote>
+<p><strong>Setting it up</strong> (once; about 15 minutes):</p>
+<ol>
+<li>
+<p><strong>The port group and folder.</strong> From a machine with pyVmomi (as for <code>setup_vcenter.py</code>):</p>
+<div class="term"><div class="term-bar"><i></i><i></i><i></i><span>shell</span></div><pre><code>~/labdeploy-setup/bin/python scripts/setup_capture.py</code></pre></div>
+<p>It adds <code>LAN-capture</code> to every host's vSwitch that carries the LAN's port group (same VLAN,
+promiscuous mode on, forged transmits and MAC changes refused), and the folder <code>Labs/Capture</code>. On a
+<strong>distributed switch</strong> it stops: add a distributed port group <code>LAN-capture</code> by hand, with the LAN's
+VLAN and Security → Promiscuous mode set to Accept.
+2. <strong>The panel's key.</strong> Admin → Packet capture shows the panel's public key (made on the API's first
+start). Copy it.
+3. <strong>Build the appliance</strong> (from the build machine, as for templates;
+<a href="../build-templates.md">build-templates.md</a>). It needs Alpine's ISO, the same as <code>packer/alpine</code>:</p>
+<div class="term"><div class="term-bar"><i></i><i></i><i></i><span>shell</span></div><pre><code>packer/build.sh capture -var panel_key="ssh-ed25519 AAAA… lab-deploy-capture"</code></pre></div>
+<p>This leaves the VM <code>lab-capture</code>, powered off, in <code>Labs/Capture</code>.
+4. <strong>Power it on</strong>, and set it in <code>/srv/lab-deploy/lab-deploy.env</code>:</p>
+<div class="term"><div class="term-bar"><i></i><i></i><i></i><span>shell</span></div><pre><code>CAPTURE_VM=Labs/Capture/lab-capture</code></pre></div>
+<p>Then <code>docker compose up -d api</code>. The panel reads the appliance's address from VMware Tools, so DHCP
+can give it any address. Set <code>CAPTURE_HOST</code> instead to use a fixed address.
+5. <strong>Check it.</strong> Admin → Packet capture should say <strong>Answering</strong>. On the Network page, select two
+machines, pick ICMP, start a capture, and ping one from the other.</p>
+</li>
+</ol>
+<p><strong>The appliance's host key</strong> is accepted on the first connection, then pinned (under the name
+<code>lab-capture</code>, whatever its address). After rebuilding the appliance, remove the old key:</p>
+<div class="term"><div class="term-bar"><i></i><i></i><i></i><span>shell</span></div><pre><code>docker compose exec api ssh-keygen -f /capture/ssh/known_hosts -R lab-capture</code></pre></div>
+<p><strong>A new panel key</strong> (a new server, or the <code>capture</code> volume was lost): build the appliance again with
+the new key, or put it in <code>/root/.ssh/authorized_keys.panel</code> on the appliance (from its console) and
+run <code>finish-capture.sh</code> there, which also powers it off.</p>
+<p><strong>Limits.</strong> A capture runs at most <code>CAPTURE_MAX_SECONDS</code> (10 minutes) and <code>CAPTURE_MAX_MB</code> (100 MB), one
+per person and three at once. Finished captures are kept <code>CAPTURE_KEEP_DAYS</code> (7), or until all their
+machines are destroyed. A deploy restarts the API, which stops running captures; what they captured is
+kept. Each start is written to the machines' activity logs.</p>
+<p><strong>When it doesn't answer</strong>, Admin → Packet capture says why:</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>It says</th>
+<th>Do this</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>"has no address: is it running, with VMware Tools?"</td>
+<td>Power the appliance on; wait a minute for Tools</td>
+</tr>
+<tr>
+<td>"Couldn't reach the capture appliance … Permission denied"</td>
+<td>The appliance doesn't have the panel's current key: see "A new panel key"</td>
+</tr>
+<tr>
+<td>"… REMOTE HOST IDENTIFICATION HAS CHANGED"</td>
+<td>The appliance was rebuilt: remove its old host key (above)</td>
+</tr>
+<tr>
+<td>A capture with no packets</td>
+<td>The machines are on another host or switch than the appliance, or the port group isn't promiscuous</td>
 </tr>
 </tbody>
 </table></div>

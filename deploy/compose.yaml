@@ -51,6 +51,10 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    # Packet captures (app/capture.py): the panel's SSH key for the capture appliance, its host key, and
+    # the .pcap files.
+    volumes:
+      - capture:/capture
     healthcheck:
       test: ['CMD', 'python', '-c', "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/config')"]
       interval: 10s
@@ -144,3 +148,4 @@ volumes:
   caddy_data:
   caddy_config:
   postgres:
+  capture:

@@ -327,6 +327,8 @@ export interface PanelConfig {
 	maxMachines: number;
 	maxPermanent: number;
 	vcenterConfigured: boolean;
+	/** Packet captures (backend/app/capture.py): whether the capture appliance is set up, and the limits. */
+	capture?: CaptureLimits;
 	/** The API's checks on deploys (backend/app/api.py), so the form can show problems while typing. */
 	rules: {
 		name: { pattern: string; problem: string };
@@ -383,4 +385,82 @@ export interface TemplateStatus {
 	deletable: boolean;
 	/** Why it can't be deleted now. */
 	cantDelete?: string;
+}
+
+// Packet captures (backend/app/capture.py) -------------------------------------------------------------
+
+export interface CaptureLimits {
+	configured: boolean;
+	maxSeconds: number;
+	maxMB: number;
+	perOwner: number;
+	keepDays: number;
+}
+
+/** A machine a capture was limited to, as it was when the capture started. */
+export interface CaptureMachine {
+	id: string;
+	name: string;
+	ip: string;
+	macs: string[];
+}
+
+/** Who talked to whom: addresses are IPs, or MACs for traffic without one (ARP). */
+export interface Conversation {
+	a: string;
+	b: string;
+	packets: number;
+	bytes: number;
+}
+
+export type CaptureState = 'running' | 'stopped' | 'failed';
+
+export interface Capture {
+	id: string;
+	owner: string;
+	machines: CaptureMachine[];
+	/** As typed (may be empty); effectiveFilter is what tcpdump ran, limited to the machines' MACs. */
+	filter: string;
+	effectiveFilter: string;
+	seconds: number;
+	state: CaptureState;
+	startedAt: number;
+	endsAt: number;
+	stoppedAt?: number;
+	packets: number;
+	bytes: number;
+	conversations: Conversation[];
+	/** Why it stopped. */
+	detail?: string;
+}
+
+/** A packet's line in the table. */
+export interface PacketLine {
+	n: number;
+	/** Seconds since the epoch. */
+	t: number;
+	src: string;
+	dst: string;
+	proto: string;
+	len: number;
+	info: string;
+}
+
+/** What a running capture's WebSocket sends, every half second. */
+export interface CaptureLive {
+	packets: PacketLine[];
+	count?: number;
+	bytes?: number;
+	conversations?: Conversation[];
+	done: boolean;
+}
+
+/** GET /capture-appliance, for the Admin page. */
+export interface CaptureAppliance {
+	vm: string;
+	host: string;
+	publicKey: string | null;
+	running: number;
+	ok: boolean;
+	problem?: string;
 }

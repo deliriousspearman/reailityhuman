@@ -1,12 +1,13 @@
 import type { IconName } from '$lib/components/Icon.svelte';
 
-export type Section = 'machines' | 'labs' | 'instances' | 'admin';
+export type Section = 'machines' | 'labs' | 'instances' | 'network' | 'admin';
 
 /** `soon`: not built yet; shown greyed out, and its pages say it's coming. */
 export const sections: { id: Section; href: string; label: string; icon: IconName; soon?: boolean }[] = [
 	{ id: 'machines', href: '/machines', label: 'Machines', icon: 'console' },
 	{ id: 'labs', href: '/labs', label: 'Pro Labs', icon: 'labs' },
 	{ id: 'instances', href: '/instances', label: 'Instances', icon: 'instances' },
+	{ id: 'network', href: '/network', label: 'Network', icon: 'network' },
 	{ id: 'admin', href: '/admin', label: 'Admin', icon: 'admin' },
 ];
 
@@ -14,6 +15,7 @@ export const sections: { id: Section; href: string; label: string; icon: IconNam
 export function sectionFor(pathname: string): Section {
 	if (pathname.startsWith('/machines')) return 'machines';
 	if (pathname.startsWith('/instances')) return 'instances';
+	if (pathname.startsWith('/network')) return 'network';
 	if (pathname.startsWith('/admin')) return 'admin';
 	if (pathname.startsWith('/labs')) return 'labs';
 	return 'machines';
@@ -29,4 +31,5 @@ export const adminSections = [
 	{ id: 'leftovers', label: 'Leftover VMs' },
 	{ id: 'jobs', label: 'Jobs' },
 	{ id: 'templates', label: 'Templates' },
+	{ id: 'capture', label: 'Packet capture' },
 ];

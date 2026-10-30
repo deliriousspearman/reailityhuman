@@ -250,6 +250,27 @@ class VCenter:
             for name, (_, p) in found.items()
         }
 
+    def vm_address(self, path: str) -> str | None:
+        """The IPv4 address VMware Tools reports for the VM at this path under the datacenter's VM
+        folder (e.g. "Labs/Capture/lab-capture"), or None while it has none. Raises if there's no VM."""
+        vm = self._path(self._vm_path(path))
+        if not isinstance(vm, vim.VirtualMachine):
+            raise VSphereError(f"VM '{path}' not found")
+        p = self.props(vm, "guest.ipAddress", "guest.net")
+        return first_ipv4(p.get("guest.ipAddress"), p.get("guest.net"))
+
+    def machine_macs(self) -> dict[str, list[str]]:
+        """Every VM in the machines folder: name -> its network adapters' MAC addresses (lowercase),
+        which bound what a packet capture may see (capture.py)."""
+        return {
+            name: [
+                d.macAddress.lower()
+                for d in p.get("config.hardware.device") or []
+                if isinstance(d, vim.vm.device.VirtualEthernetCard) and d.macAddress
+            ]
+            for name, (_, p) in self._folder_vms("config.hardware.device").items()
+        }
+
     def infrastructure_addresses(self) -> set[str]:
         """vCenter's address and the hosts' management addresses: a machine must never get one of these
         (a DHCP pool overlapping them hands it out, and the host or vCenter drops off the network)."""

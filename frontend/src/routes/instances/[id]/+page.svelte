@@ -82,6 +82,7 @@
 			{#if busy}
 				<button class="btn" type="button" onclick={cancel}><Icon name="stop" /> Cancel jobs</button>
 			{/if}
+			<a class="btn" href="/network?instance={i.id}"><Icon name="capture" /> Capture traffic</a>
 			<button class="btn" type="button" disabled={busy || expired} onclick={reset}><Icon name="reset" /> Reset lab</button>
 			<button class="btn btn-danger" type="button" disabled={busy} onclick={destroy}><Icon name="trash" /> Destroy lab</button>
 		</div>

@@ -148,7 +148,7 @@ blockquote.warn strong:first-child { color: var(--medium); }
 <div class="layout">
   <nav class="toc" aria-label="On this page">
     <p class="toc-title">On this page</p>
-    <ul><li><a href="#1-what-the-panel-is">1. What the panel is</a></li><li><a href="#2-architecture">2. Architecture</a></li><li><a href="#3-repository-tour">3. Repository tour</a><ul><li><a href="#the-backend-modules-backendapp">The backend modules (backend/app/)</a></li></ul></li><li><a href="#4-data-model">4. Data model</a><ul><li><a href="#machine-states">Machine states</a></li></ul></li><li><a href="#5-api-reference">5. API reference</a></li><li><a href="#6-jobs-and-the-worker">6. Jobs and the worker</a><ul><li><a href="#queueing">Queueing</a></li><li><a href="#what-each-action-does-actionspy">What each action does (actions.py)</a></li><li><a href="#cancellation">Cancellation</a></li><li><a href="#the-sweep">The sweep</a></li></ul></li><li><a href="#7-templates-families-and-first-boot">7. Templates, families and first boot</a></li><li><a href="#8-extras-framework">8. Extras framework</a></li><li><a href="#9-pro-labs-internals">9. Pro Labs internals</a></li><li><a href="#10-console-relay">10. Console relay</a></li><li><a href="#11-frontend">11. Frontend</a></li><li><a href="#12-local-development-and-tests">12. Local development and tests</a></li><li><a href="#13-ci-and-deployment">13. CI and deployment</a></li><li><a href="#14-configuration-reference">14. Configuration reference</a></li><li><a href="#15-conventions-and-gotchas">15. Conventions and gotchas</a></li></ul>
+    <ul><li><a href="#1-what-the-panel-is">1. What the panel is</a></li><li><a href="#2-architecture">2. Architecture</a></li><li><a href="#3-repository-tour">3. Repository tour</a><ul><li><a href="#the-backend-modules-backendapp">The backend modules (backend/app/)</a></li></ul></li><li><a href="#4-data-model">4. Data model</a><ul><li><a href="#machine-states">Machine states</a></li></ul></li><li><a href="#5-api-reference">5. API reference</a></li><li><a href="#6-jobs-and-the-worker">6. Jobs and the worker</a><ul><li><a href="#queueing">Queueing</a></li><li><a href="#what-each-action-does-actionspy">What each action does (actions.py)</a></li><li><a href="#cancellation">Cancellation</a></li><li><a href="#the-sweep">The sweep</a></li></ul></li><li><a href="#7-templates-families-and-first-boot">7. Templates, families and first boot</a></li><li><a href="#8-extras-framework">8. Extras framework</a></li><li><a href="#9-pro-labs-internals">9. Pro Labs internals</a></li><li><a href="#10-console-relay">10. Console relay</a><ul><li><a href="#packet-captures">Packet captures</a></li></ul></li><li><a href="#11-frontend">11. Frontend</a></li><li><a href="#12-local-development-and-tests">12. Local development and tests</a></li><li><a href="#13-ci-and-deployment">13. CI and deployment</a></li><li><a href="#14-configuration-reference">14. Configuration reference</a></li><li><a href="#15-conventions-and-gotchas">15. Conventions and gotchas</a></li></ul>
   </nav>
   <main id="top">
     <article class="content">
@@ -354,6 +354,14 @@ the browser's WebSocket to ESXi (see <a href="#10-console-relay">Console relay</
 <td><code>console.py</code></td>
 <td>The WebMKS console relay</td>
 </tr>
+<tr>
+<td><code>capture.py</code></td>
+<td>Packet captures: the capture appliance over SSH, the filter's scope, running captures, their routes and WebSocket</td>
+</tr>
+<tr>
+<td><code>pcap.py</code></td>
+<td>Reads a pcap stream as it arrives: whole packets, a line each for the live table, and conversations</td>
+</tr>
 </tbody>
 </table></div>
 <h2 id="4-data-model">4. Data model<a class="headerlink" href="#4-data-model" title="Permanent link">#</a></h2>
@@ -381,6 +389,14 @@ the browser's WebSocket to ESXi (see <a href="#10-console-relay">Console relay</
 <td><code>instance_flags</code></td>
 <td>One row per planted flag: <code>instance_id</code>, <code>flag_id</code>, <code>value</code> (<code>LAB{…}</code>), <code>planted_at</code></td>
 </tr>
+<tr>
+<td><code>template_builds</code></td>
+<td>Templates the panel deleted or built: <code>template</code>, <code>version</code>, <code>state</code>, <code>vsphere</code>, <code>built_at</code>, <code>last_deployed_at</code>, <code>job_id</code>, <code>detail</code></td>
+</tr>
+<tr>
+<td><code>captures</code></td>
+<td>Packet captures: <code>id</code> (<code>c-xxxxxx</code>), <code>owner</code>, <code>machines</code> (JSON, as they were: id, name, ip, macs), <code>user_filter</code>, <code>effective_filter</code>, <code>seconds</code>, <code>state</code> (<code>running</code>, <code>stopped</code>, <code>failed</code>), <code>started_at</code>, <code>stopped_at</code>, <code>packets</code>, <code>bytes</code>, <code>conversations</code> (JSON), <code>detail</code>. The .pcap is <code>/capture/files/&lt;id&gt;.pcap</code></td>
+</tr>
 </tbody>
 </table></div>
 <p>A Pro Lab instance has no table of its own. It is the set of machines sharing an <code>instance_id</code>
@@ -388,7 +404,7 @@ the browser's WebSocket to ESXi (see <a href="#10-console-relay">Console relay</
 <p>Migrations (<code>backend/alembic/versions/</code>): <code>0001</code> initial tables and Procrastinate's schema · <code>0002</code>
 machine extras · <code>0003</code> unique machine names · <code>0004</code> <code>jobs.kind</code> · <code>0005</code> <code>jobs.queued_at</code> ·
 <code>0006</code> <code>machines.family</code> · <code>0007</code> <code>jobs.cancelled_by</code> · <code>0008</code> instance columns on machines · <code>0009</code>
-<code>instance_flags</code>. Add a new one with <code>alembic revision -m "…"</code> in <code>backend/</code>. The <code>api</code> container
+<code>instance_flags</code> · <code>0010</code> <code>template_builds</code> · <code>0011</code> <code>machines.media</code> · <code>0012</code> <code>captures</code>. Add a new one with <code>alembic revision -m "…"</code> in <code>backend/</code>. The <code>api</code> container
 runs <code>alembic upgrade head</code> on every start.</p>
 <h3 id="machine-states">Machine states<a class="headerlink" href="#machine-states" title="Permanent link">#</a></h3>
 <div class="term"><div class="term-bar"><i></i><i></i><i></i><span></span></div><pre><code>                ┌──────────── API sets a busy state, queues a job ───────────┐
@@ -568,6 +584,64 @@ switched off.</p>
 <td>GET</td>
 <td><code>/jobs?limit=&amp;machine=</code></td>
 <td>Jobs, newest first (<code>limit</code> 1–500)</td>
+</tr>
+</tbody>
+</table></div>
+<p><strong>Packet captures</strong> (<code>capture.py</code>; requests carry <code>X-Lab-User</code>, and only your own machines can be
+captured)</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Path</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>POST</td>
+<td><code>/captures/check</code></td>
+<td><code>{machineIds or instanceId, filter}</code>: the filter tcpdump would run, or 400 with tcpdump's complaint</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/captures</code></td>
+<td>Start (201): <code>{machineIds or instanceId, filter, seconds}</code></td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/captures</code>, <code>/captures/{id}</code></td>
+<td>List (newest first), or one; a running one's counts are live</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/captures/{id}/stop</code></td>
+<td>Stop it; answers once it's recorded</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/captures/{id}/pcap</code></td>
+<td>The .pcap (a running one's so far)</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/captures/{id}/packets?after=&amp;limit=</code></td>
+<td>A finished capture's lines for the table, from its file</td>
+</tr>
+<tr>
+<td>DELETE</td>
+<td><code>/captures/{id}</code></td>
+<td>Delete a finished one and its file</td>
+</tr>
+<tr>
+<td>WS</td>
+<td><code>/captures/{id}/live</code></td>
+<td>A running one's new lines, counts and conversations every 0.5 s; <code>done: true</code> last</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/capture-appliance</code></td>
+<td>The appliance's address, whether it answers, and the panel's public key</td>
 </tr>
 </tbody>
 </table></div>
@@ -782,6 +856,28 @@ values.</p>
     therefore send Shift around capitals and shifted symbols, assuming a US layout.</li>
 <li><strong>Privilege.</strong> It needs <code>VirtualMachine.Interact.ConsoleInteract</code>.</li>
 </ul>
+<h3 id="packet-captures">Packet captures<a class="headerlink" href="#packet-captures" title="Permanent link">#</a></h3>
+<p><code>capture.py</code> runs captures on the capture appliance (<a href="../plan.md#12-packet-capture-and-the-network-diagram">plan.md section 12</a>):</p>
+<ol>
+<li><strong>Scope.</strong> <code>POST /captures</code> reads the chosen machines' MAC addresses from vCenter
+    (<code>VCenter.machine_macs</code>) and builds <code>(ether host &lt;mac&gt; or …) and (&lt;filter&gt;)</code> (<code>scoped()</code>), then has
+    the appliance check it (<code>validate</code>).</li>
+<li><strong>The appliance.</strong> <code>ssh</code> (OpenSSH, from the image) with the panel's key in <code>/capture/ssh/</code>, made by
+    <code>public_key()</code> on first use, and <code>StrictHostKeyChecking=accept-new</code> under <code>HostKeyAlias=lab-capture</code>.
+    The key may only run <code>scripts/capture/lab-capture</code>, which reads its request from stdin: <code>validate</code>
+    and the filter, or <code>run</code>, seconds, snap length and the filter. <code>run</code> streams tcpdump's pcap until
+    stdin closes or the seconds are up. Its address is <code>CAPTURE_HOST</code>, or <code>CAPTURE_VM</code>'s from VMware
+    Tools (<code>appliance_address()</code>, cached a minute).</li>
+<li><strong>Running.</strong> <code>_run()</code> is an asyncio task in the API process: it feeds stdout to <code>pcap.Reader</code>, writes
+    only whole packets to the file (so a capture cut off by a limit is still a valid file), keeps the last
+    2000 lines and the conversations in a <code>Live</code>, and records the result in <code>captures</code> when it ends.
+    The WebSocket reads the <code>Live</code>.</li>
+<li><strong>Restarts.</strong> The lifespan stops running captures on shutdown (<code>stop_all()</code>), marks leftovers
+    <code>stopped</code> on start (<code>recover()</code>), and deletes old captures every 10 minutes (<code>clean_up()</code>).</li>
+</ol>
+<p><strong>Gotchas:</strong> like consoles, captures live in the single API process. Tests run <code>tests/fake_capture.py</code>
+in place of <code>ssh</code> (the <code>appliance</code> fixture), and need <code>with TestClient(app)</code> so the event loop, and the
+capture, outlives one request.</p>
 <h2 id="11-frontend">11. Frontend<a class="headerlink" href="#11-frontend" title="Permanent link">#</a></h2>
 <p><code>frontend/</code> is SvelteKit 2 with Svelte 5, built to static files by <code>adapter-static</code> (<code>ssr = false</code>;
 <code>200.html</code> is the fallback, served by Caddy's <code>try_files</code>).</p>
@@ -803,7 +899,11 @@ values.</p>
 </tr>
 <tr>
 <td><code>src/routes/admin/</code></td>
-<td>Capacity, all machines, leftover VMs, jobs</td>
+<td>Capacity, all machines, leftover VMs, jobs, templates, the capture appliance</td>
+</tr>
+<tr>
+<td><code>src/routes/network/</code></td>
+<td>The network diagram and packet captures (<code>NetworkDiagram</code>, <code>CaptureForm</code> and <code>CaptureView</code> in <code>src/lib/components/</code>; filters in <code>src/lib/captures.ts</code>)</td>
 </tr>
 <tr>
 <td><code>src/lib/api.ts</code></td>

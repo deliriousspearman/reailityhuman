@@ -387,6 +387,51 @@ much longer the deploy will take.
 5. End to end in the lab: delete a small template (Debian 11), deploy it, watch it build and deploy;
    then the same through the admin page's Build.
 
+## 12. Packet capture and the network diagram
+
+Asked 2026-10-30 (todo.md: a network diagram of a user's machines, and packet captures with BPF filters).
+Jake chose a capture appliance and a live table plus a .pcap download.
+
+### Why an appliance
+Machines share the LAN's port group, so traffic between two of them never leaves ESXi's virtual
+switch: nothing outside ESXi can see it. A VM whose adapter is on a port group with the same VLAN, with
+promiscuous mode on, gets a copy of every frame on that VLAN. The capture appliance (`packer/capture`,
+`lab-capture` in `Labs/Capture`) is that VM: a small Alpine with tcpdump, its first adapter on the LAN
+for the panel's SSH, the second on `LAN-capture`, listening only (no address, no ARP, no IPv6).
+`scripts/setup_capture.py` makes the port group and folder. The other way, `pktcap-uw` on ESXi over SSH,
+would have kept root's ESXi password on the panel's server.
+
+### Keeping a capture to its machines
+The appliance sees the whole LAN: vCenter, ESXi, the panel and everyone's machines. So the panel always
+runs `(ether host <mac> or …) and (<the filter typed>)`, with the chosen machines' MAC addresses read
+from vCenter; the brackets keep a filter from widening it. Only your own machines (the name the panel
+sends, as there's no sign-in yet) can be captured. The panel's SSH key may only run `lab-capture`
+(`command=` in authorized_keys), which hands the filter to tcpdump as one argument.
+
+### How a capture runs
+The API runs it (`backend/app/capture.py`), an asyncio task each: `ssh` to the appliance, `run` with the
+filter, and tcpdump's pcap stream back on stdout. Whole packets go to `/capture/files/<id>.pcap` (a
+named volume); `app/pcap.py` sums each up for the live table (time, addresses, protocol, a line of info
+for TCP, UDP, ICMP, ARP, DNS and HTTP) and counts conversations for the diagram. A page follows a running
+capture over a WebSocket. It stops when asked, at its time limit (`CAPTURE_MAX_SECONDS`, 10 minutes) or
+size (`CAPTURE_MAX_MB`, 100), or when the API stops (a deploy): what it captured is kept. One capture
+per person and three in all at once; finished ones are kept 7 days, or until all their machines are
+destroyed.
+
+### The Network page
+`/network`: the switch, a trunk, each lab instance as a labelled group, and machines as nodes with
+their logo, address and state. Select machines (or a whole lab), then capture between them, across a
+subnet, or with your own filter, narrowed by a preset (DNS, HTTP, TLS, SSH, SMB, Kerberos, LDAP, RDP,
+ICMP, ARP). Check shows the exact filter tcpdump will run. During and after a capture, the machines
+that talked are linked on the diagram, thicker for more traffic; other addresses are listed below.
+Machine and instance pages link to it with the machines selected.
+
+### Later
+- Per-lab networks (VLANs): a trunk port group (VLAN 4095) would let one appliance adapter see every
+  VLAN; its frames arrive tagged, so filters then need `vlan and …`.
+- More than one host: one appliance per host, as a promiscuous port only sees its own host's switch.
+- With sign-in: captures limited to their owner and admins (today anyone can list and download them).
+
 ## Open items to confirm with the infra owner
 - vCenter version and licence edition (dvSwitch?), and whether NSX is present.
 - Number of hosts, total RAM, and datastore type and size.

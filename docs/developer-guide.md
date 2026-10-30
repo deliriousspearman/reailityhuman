@@ -93,6 +93,8 @@ All backend services read `lab-deploy.env` (see [Configuration reference](#14-co
 | `cloudinit.py` | First-boot data per family, password rules and generation, a pure-Python `sha512_crypt` |
 | `labs.py` | Loads and validates `labs.yaml` |
 | `console.py` | The WebMKS console relay |
+| `capture.py` | Packet captures: the capture appliance over SSH, the filter's scope, running captures, their routes and WebSocket |
+| `pcap.py` | Reads a pcap stream as it arrives: whole packets, a line each for the live table, and conversations |
 
 ## 4. Data model
 
@@ -102,6 +104,8 @@ All backend services read `lab-deploy.env` (see [Configuration reference](#14-co
 | `log_lines` | The activity log per machine: `machine_id` (cascade delete), `at`, `text`, `tone` (`ok`, `warn`, `error`, `muted`) |
 | `jobs` | `id`, `machine_id` (**no** foreign key, so jobs outlive destroyed machines), `action` (a label such as "Deploy ubuntu01"), `kind`, `by`, `state` (`queued`, `running`, `done`, `failed`), `queued_at`, `started_at`, `finished_at`, `detail`, `cancelled_by` |
 | `instance_flags` | One row per planted flag: `instance_id`, `flag_id`, `value` (`LAB{…}`), `planted_at` |
+| `template_builds` | Templates the panel deleted or built: `template`, `version`, `state`, `vsphere`, `built_at`, `last_deployed_at`, `job_id`, `detail` |
+| `captures` | Packet captures: `id` (`c-xxxxxx`), `owner`, `machines` (JSON, as they were: id, name, ip, macs), `user_filter`, `effective_filter`, `seconds`, `state` (`running`, `stopped`, `failed`), `started_at`, `stopped_at`, `packets`, `bytes`, `conversations` (JSON), `detail`. The .pcap is `/capture/files/<id>.pcap` |
 
 A Pro Lab instance has no table of its own. It is the set of machines sharing an `instance_id`
 (`i-xxxx`).
@@ -109,7 +113,7 @@ A Pro Lab instance has no table of its own. It is the set of machines sharing an
 Migrations (`backend/alembic/versions/`): `0001` initial tables and Procrastinate's schema · `0002`
 machine extras · `0003` unique machine names · `0004` `jobs.kind` · `0005` `jobs.queued_at` ·
 `0006` `machines.family` · `0007` `jobs.cancelled_by` · `0008` instance columns on machines · `0009`
-`instance_flags`. Add a new one with `alembic revision -m "…"` in `backend/`. The `api` container
+`instance_flags` · `0010` `template_builds` · `0011` `machines.media` · `0012` `captures`. Add a new one with `alembic revision -m "…"` in `backend/`. The `api` container
 runs `alembic upgrade head` on every start.
 
 ### Machine states
@@ -182,6 +186,21 @@ switched off.
 | GET | `/leftovers` | VMs in the machines folder that no machine row owns |
 | DELETE | `/leftovers/{name}` | Delete one (re-checked first) |
 | GET | `/jobs?limit=&machine=` | Jobs, newest first (`limit` 1–500) |
+
+**Packet captures** (`capture.py`; requests carry `X-Lab-User`, and only your own machines can be
+captured)
+
+| Method | Path | Purpose |
+|---|---|---|
+| POST | `/captures/check` | `{machineIds or instanceId, filter}`: the filter tcpdump would run, or 400 with tcpdump's complaint |
+| POST | `/captures` | Start (201): `{machineIds or instanceId, filter, seconds}` |
+| GET | `/captures`, `/captures/{id}` | List (newest first), or one; a running one's counts are live |
+| POST | `/captures/{id}/stop` | Stop it; answers once it's recorded |
+| GET | `/captures/{id}/pcap` | The .pcap (a running one's so far) |
+| GET | `/captures/{id}/packets?after=&limit=` | A finished capture's lines for the table, from its file |
+| DELETE | `/captures/{id}` | Delete a finished one and its file |
+| WS | `/captures/{id}/live` | A running one's new lines, counts and conversations every 0.5 s; `done: true` last |
+| GET | `/capture-appliance` | The appliance's address, whether it answers, and the panel's public key |
 
 Errors are JSON `{"detail": "…"}` with a sentence meant for people; the frontend shows it as is.
 
@@ -372,6 +391,30 @@ The browser console is noVNC talking to ESXi's WebMKS, relayed through the API (
     therefore send Shift around capitals and shifted symbols, assuming a US layout.
 - **Privilege.** It needs `VirtualMachine.Interact.ConsoleInteract`.
 
+### Packet captures
+
+`capture.py` runs captures on the capture appliance ([plan.md section 12](plan.md#12-packet-capture-and-the-network-diagram)):
+
+1. **Scope.** `POST /captures` reads the chosen machines' MAC addresses from vCenter
+    (`VCenter.machine_macs`) and builds `(ether host <mac> or …) and (<filter>)` (`scoped()`), then has
+    the appliance check it (`validate`).
+2. **The appliance.** `ssh` (OpenSSH, from the image) with the panel's key in `/capture/ssh/`, made by
+    `public_key()` on first use, and `StrictHostKeyChecking=accept-new` under `HostKeyAlias=lab-capture`.
+    The key may only run `scripts/capture/lab-capture`, which reads its request from stdin: `validate`
+    and the filter, or `run`, seconds, snap length and the filter. `run` streams tcpdump's pcap until
+    stdin closes or the seconds are up. Its address is `CAPTURE_HOST`, or `CAPTURE_VM`'s from VMware
+    Tools (`appliance_address()`, cached a minute).
+3. **Running.** `_run()` is an asyncio task in the API process: it feeds stdout to `pcap.Reader`, writes
+    only whole packets to the file (so a capture cut off by a limit is still a valid file), keeps the last
+    2000 lines and the conversations in a `Live`, and records the result in `captures` when it ends.
+    The WebSocket reads the `Live`.
+4. **Restarts.** The lifespan stops running captures on shutdown (`stop_all()`), marks leftovers
+    `stopped` on start (`recover()`), and deletes old captures every 10 minutes (`clean_up()`).
+
+**Gotchas:** like consoles, captures live in the single API process. Tests run `tests/fake_capture.py`
+in place of `ssh` (the `appliance` fixture), and need `with TestClient(app)` so the event loop, and the
+capture, outlives one request.
+
 ## 11. Frontend
 
 `frontend/` is SvelteKit 2 with Svelte 5, built to static files by `adapter-static` (`ssr = false`;
@@ -381,7 +424,8 @@ The browser console is noVNC talking to ESXi's WebMKS, relayed through the API (
 |---|---|
 | `src/routes/machines/…` | Machine list (By OS / By service), deploy form (`new/[template]`), machine page (`[id]`), console (`[id]/console`) |
 | `src/routes/labs/…`, `instances/…` | Pro Lab catalogue and lab pages; deployed instances |
-| `src/routes/admin/` | Capacity, all machines, leftover VMs, jobs |
+| `src/routes/admin/` | Capacity, all machines, leftover VMs, jobs, templates, the capture appliance |
+| `src/routes/network/` | The network diagram and packet captures (`NetworkDiagram`, `CaptureForm` and `CaptureView` in `src/lib/components/`; filters in `src/lib/captures.ts`) |
 | `src/lib/api.ts` | `fetch` wrapper: sends `X-Lab-User`, turns error bodies into `ApiError` |
 | `src/lib/store.svelte.ts` | `PanelStore`: polls `/api/state` every 3 s while the tab is visible (15 s hidden); every action the UI takes |
 | `src/lib/types.ts` | Types shared with the API's JSON. Build backend work against these |

@@ -1,6 +1,6 @@
 # Roadmap
 
-Where lab-deploy stands and what comes next. Last updated 2026-10-28. The original design is in
+Where lab-deploy stands and what comes next. Last updated 2026-10-30. The original design is in
 [plan.md](plan.md); building templates is in [build-templates.md](build-templates.md).
 
 ## Where things stand
@@ -102,6 +102,7 @@ the next step (an xrdp debug log while resizing) is agreed.
 | RDP live resize | A go-ahead to set xrdp's log to DEBUG on kali01 (restarting xrdp drops the RDP window; the session stays), then a connect and resize | Read whether resize messages arrive, and fix xrdp or the desktop side |
 | Brookfield `i-9547` | Done looking at it? It was left running after the 2026-10-27 test | Destroy it (frees about 18 GB of memory) |
 | Exercises | Answers to the open questions in [plan.md](plan.md#open-questions-for-jake) and a go-ahead | Phase 1: the engine and the iptables track |
+| Packet capture: the port group | Run `scripts/setup_capture.py` (it adds `LAN-capture` to vSwitch0: VLAN 0, promiscuous mode on, and the folder `Labs/Capture`), or allow Claude to. Claude's run was blocked as a security change | Build `lab-capture` with the panel's key, set `CAPTURE_VM`, and test captures end to end (item 9) |
 
 ## Next, in order
 
@@ -306,6 +307,38 @@ Delete a template nobody uses from the Admin page and keep its ISO; the next dep
 first. A template takes about five times its ISO's space. Design: [plan.md](plan.md#11-templates-on-demand).
 Step 1 (deleting by hand, building on deploy or with Build) is built; step 2, flagging templates
 unused for 30 days and deleting them after a week unless kept, comes once step 1 has proved itself.
+
+### 9. Packet capture and the network diagram (medium-large) — built 2026-10-30, lab setup waiting
+
+Asked 2026-10-30. Design: [plan.md section 12](plan.md#12-packet-capture-and-the-network-diagram);
+setup: [admin guide section 13](admin-guide.md#13-packet-capture).
+
+**Decisions (Jake, 2026-10-30):** a capture appliance (not `pktcap-uw` on ESXi over SSH), and a live
+table in the browser plus a .pcap download.
+
+**Built:**
+- **The Network page** (`/network`): your machines on the LAN, grouped by lab instance, to select
+  for a capture; the machines that talked are linked on it, thicker for more traffic. Machine and
+  instance pages link to it.
+- **Captures**: between the selected machines, across a subnet, or with your own BPF filter, with
+  presets (DNS, HTTP, TLS, SSH, SMB, Kerberos, LDAP, RDP, ICMP, ARP). Always limited to the chosen
+  machines' MAC addresses. A live table (find, pause), Stop, Download .pcap, and past captures kept for
+  7 days. Limits: 10 minutes, 100 MB, one per person, three at once.
+- **The appliance**: `packer/capture` (Alpine, tcpdump; the second adapter listens on `LAN-capture`),
+  `scripts/capture/lab-capture` (the only command the panel's key may run), and
+  `scripts/setup_capture.py` for the port group and folder. Admin → Packet capture shows whether it
+  answers and the panel's public key.
+
+**Tested:** the backend's tests, with a stand-in appliance (16 new: parsing, scope, owners, a bad
+filter, live and stop, the size limit, cleanup); `lab-capture` itself in an Alpine container with
+tcpdump (checking a filter, stopping when the panel hangs up, the time limit). **Not yet:** the real
+appliance, waiting on the port group (see "Waiting on Jake").
+
+**Steps left:** build `lab-capture`, power it on, set `CAPTURE_VM=Labs/Capture/lab-capture`, then the
+end-to-end test: two Ubuntu machines pinging and fetching a page, with ICMP and HTTP captures; a
+capture of vCenter's address shows nothing (the scope holds); a bad filter is refused with tcpdump's
+message; and, on a Brookfield instance, Kerberos between the workstation and the domain controller
+during sign-in.
 
 ### Suggested, not yet scheduled
 

@@ -30,6 +30,8 @@
 		chevron: 'm6 9 6 6 6-6',
 		expand: 'M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5',
 		keyboard: 'M3 6h18v12H3zM7 10h.01M11 10h.01M15 10h.01M8 14h8',
+		network: 'M9 3h6v5H9zM12 8v4M5 12h14M5 12v3M12 12v3M19 12v3M3 15h4v5H3zM10 15h4v5h-4zM17 15h4v5h-4z',
+		capture: 'M3 12h3l2-6 4 12 2-6h7',
 	} as const;
 
 	export type IconName = keyof typeof paths;

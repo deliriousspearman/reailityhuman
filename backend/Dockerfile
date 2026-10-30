@@ -24,6 +24,9 @@ COPY pyproject.toml ./
 RUN mkdir app && touch app/__init__.py && pip install . && pip uninstall -y lab-deploy && rm -rf app build *.egg-info
 COPY . .
 RUN useradd --system --no-create-home labdeploy
+# Packet captures (app/capture.py): the panel's SSH key for the capture appliance and the .pcap files,
+# in a named volume (compose.yaml), which takes this folder's owner when it's first made.
+RUN mkdir -m 750 /capture && chown labdeploy: /capture
 USER labdeploy
 
 EXPOSE 8000
