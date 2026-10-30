@@ -138,12 +138,23 @@ CASES: dict[str, list[dict]] = {
             "checks": [
                 ("ssh", "(Get-CimInstance Win32_ComputerSystem).DomainRole", "4"),
                 ("ssh", "if (@(repadmin /showrepl /csv | ConvertFrom-Csv | Where-Object { [int]$_.'Number of Failures' -gt 0 }).Count -eq 0) { 'repl-ok' }", "repl-ok"),
+                # Both ways: a user made here reaches the first controller, and one made there reaches
+                # this one (each side asks the other to replicate, then waits up to a minute).
                 (
                     "ssh",
-                    "$n = 'e2e' + (Get-Random); New-ADUser -Name $n; repadmin /syncall /AdeP | Out-Null;"
-                    " $p = (Get-ADDomainController -Filter * | Where-Object Name -ne $env:COMPUTERNAME).HostName;"
-                    " if (Get-ADUser -Identity $n -Server $p) { 'reached-partner' }",
-                    "reached-partner",
+                    "$p = (Get-ADDomainController -Filter * | Where-Object Name -ne $env:COMPUTERNAME).HostName;"
+                    " $dn = (Get-ADDomain).DistinguishedName; $n = 'e2e' + (Get-Random);"
+                    " New-ADUser -Server localhost -Name $n; repadmin /replicate $p $env:COMPUTERNAME $dn | Out-Null;"
+                    " foreach ($i in 1..12) { if (Get-ADUser -Server $p -Filter \"Name -eq '$n'\") { 'reached-first'; break }; Start-Sleep 5 }",
+                    "reached-first",
+                ),
+                (
+                    "ssh",
+                    "$p = (Get-ADDomainController -Filter * | Where-Object Name -ne $env:COMPUTERNAME).HostName;"
+                    " $dn = (Get-ADDomain).DistinguishedName; $n = 'e2e' + (Get-Random);"
+                    " New-ADUser -Server $p -Name $n; repadmin /replicate $env:COMPUTERNAME $p $dn | Out-Null;"
+                    " foreach ($i in 1..12) { if (Get-ADUser -Server localhost -Filter \"Name -eq '$n'\") { 'reached-second'; break }; Start-Sleep 5 }",
+                    "reached-second",
                 ),
             ],
         }

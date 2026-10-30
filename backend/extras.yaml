@@ -2634,7 +2634,7 @@
   category: Active Directory
   description: Makes this server a second domain controller of a domain you've deployed, with its own DNS and a copy of the directory that replicates both ways with the first. It signs in as the first one's user.
   ports: [53, 88, 389, 636, 3268]
-  setupMinutes: 40
+  setupMinutes: 50
   account: dc
   notes:
     - "Sign in as the domain controller's user (DOMAIN\\{username}), with the same password: this machine has no account of its own."
@@ -2691,22 +2691,32 @@
         if ((Get-Date) -gt $deadline) { throw "Active Directory didn't come up." }
         Start-Sleep -Seconds 10
       }
-      # Replicate now, both ways, rather than on the schedule; then every partition with every partner
-      # must have succeeded (it can take a few tries while the first controller learns of this one).
-      $deadline = (Get-Date).AddMinutes(10)
+      # This controller's DNS records (its _msdcs alias above all), registered with the first controller's
+      # DNS directly: otherwise they reach it only by replication from here, which needs them first, and
+      # the first controller can't add its links from here until its next KCC run (up to 15 minutes).
+      ipconfig /registerdns | Out-Null
+      nltest /dsregdns | Out-Null
+      # Then links both ways: here from the first controller, and on the first controller from here (its
+      # KCC asked to run again), replicated now rather than on the schedule, every one without failures.
+      $deadline = (Get-Date).AddMinutes(20)
       while ($true) {
+        repadmin /kcc $dc_name | Out-Null
+        repadmin /kcc $env:COMPUTERNAME | Out-Null
         repadmin /syncall $env:COMPUTERNAME /Ade | Out-Null
         repadmin /syncall $env:COMPUTERNAME /AdeP | Out-Null
-        $links = @(repadmin /showrepl $env:COMPUTERNAME /csv | ConvertFrom-Csv)
-        $failing = @($links | Where-Object { [int]$_.'Number of Failures' -gt 0 })
-        if ($links.Count -gt 0 -and $failing.Count -eq 0) { break }
+        $inbound = @(repadmin /showrepl $env:COMPUTERNAME /csv | ConvertFrom-Csv)
+        $outbound = @(repadmin /showrepl $dc_name /csv | ConvertFrom-Csv | Where-Object { $_.'Source DSA' -eq $env:COMPUTERNAME })
+        $failing = @($inbound + $outbound | Where-Object { [int]$_.'Number of Failures' -gt 0 })
+        if ($inbound.Count -gt 0 -and $outbound.Count -gt 0 -and $failing.Count -eq 0) { break }
         if ((Get-Date) -gt $deadline) {
-          $why = if ($links.Count -eq 0) { 'no replication partners' } else { ($failing | ForEach-Object { "$($_.'Naming Context') from $($_.'Source DSA'): $($_.'Last Failure Status')" }) -join '; ' }
+          $why = if ($inbound.Count -eq 0) { "nothing replicates here from $dc_name" }
+            elseif ($outbound.Count -eq 0) { "$dc_name doesn't replicate from here" }
+            else { ($failing | ForEach-Object { "$($_.'Naming Context') from $($_.'Source DSA'): $($_.'Last Failure Status')" }) -join '; ' }
           throw "Replication isn't working: $why"
         }
         Start-Sleep -Seconds 20
       }
-      Write-Output "Replicating with $(@($links | Select-Object -ExpandProperty 'Source DSA' -Unique) -join ', ')"
+      Write-Output "Replicating both ways with $dc_name ($($inbound.Count) partitions in, $($outbound.Count) out)"
       exit 0
 
 # Exchange Server SE on its own template (templates.yaml: exchange), with its files and prerequisites
