@@ -13,6 +13,15 @@ be started, stopped, reset, redeployed, extended and destroyed, and reached over
 console. The admin page shows capacity, every machine, leftover VMs and the job queue. Personal
 networks (VPN) and sign-in come later.
 
+![The Machines page: running machines, each with its owner, address and time left, and the catalogue to deploy from](docs/screenshots/machines.png)
+
+| A Pro Lab, ready to deploy | The network, picking machines to capture |
+|---|---|
+| ![The Brookfield Logistics lab: its machines in boot order, its flags and Deploy](docs/screenshots/lab-brookfield.png) | ![The Network page in the dark theme, with machines selected for a packet capture](docs/screenshots/network-dark.png) |
+
+More in [`docs/screenshots/`](docs/screenshots/): the deploy form, a machine's page, the browser console,
+Pro Labs, the admin page and the dark theme.
+
 **Guides:** the [Admin guide](docs/admin-guide.md) (running the site, adding machines and Pro Labs) and
 the [Developer guide](docs/developer-guide.md) (how it works). Themed HTML copies are in
 [`docs/html/`](docs/html/), made with `python3 scripts/docs/build-html.py`.
