@@ -33,6 +33,7 @@ iface eth1 inet manual
 IFACE
 
 echo "==> lab-capture and the panel's key"
+mkdir -p /usr/local/bin /usr/local/sbin
 install -m 755 "$here/lab-capture" /usr/local/bin/lab-capture
 install -m 755 "$here/finish-capture.sh" /usr/local/sbin/finish-capture.sh
 mkdir -p /root/.ssh
