@@ -414,8 +414,8 @@ filter, and tcpdump's pcap stream back on stdout. Whole packets go to `/capture/
 named volume); `app/pcap.py` sums each up for the live table (time, addresses, protocol, a line of info
 for TCP, UDP, ICMP, ARP, DNS and HTTP) and counts conversations for the diagram. A page follows a running
 capture over a WebSocket. It stops when asked, at its time limit (`CAPTURE_MAX_SECONDS`, 10 minutes) or
-size (`CAPTURE_MAX_MB`, 100), or when the API stops (a deploy): what it captured is kept. One capture
-per person and three in all at once; finished ones are kept 7 days, or until all their machines are
+size (`CAPTURE_MAX_MB`, 50), or when the API stops (a deploy): what it captured is kept. One capture
+per person and three in all at once; finished ones are kept a day, or until all their machines are
 destroyed.
 
 ### The Network page

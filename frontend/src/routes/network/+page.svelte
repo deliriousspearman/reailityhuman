@@ -136,7 +136,7 @@
 {/if}
 
 {#if myCaptures.length}
-	<div class="section-heading"><h2>Captures</h2><p>Kept for {limits?.keepDays ?? 7} days, or until their machines are destroyed.</p></div>
+	<div class="section-heading"><h2>Captures</h2><p>Kept for {limits?.keepDays ?? 1} day{(limits?.keepDays ?? 1) === 1 ? '' : 's'}, or until their machines are destroyed.</p></div>
 	{#if problem}<p class="problem" role="alert">{problem}</p>{/if}
 	<div class="table-wrap">
 		<table class="table">

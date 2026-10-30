@@ -184,9 +184,9 @@ The settings you're most likely to change:
 | `BUILD_MEDIA_DIR` | empty | Offline: the media folder `fetch-media.sh` made, for the Windows builds |
 | `BUILD_TIMEOUT_MINUTES` | 180 | A build that takes longer is stopped |
 | `CAPTURE_VM` | empty | The capture appliance is set up: its VM, e.g. `Labs/Capture/lab-capture` ([section 13](#13-packet-capture)) |
-| `CAPTURE_MAX_SECONDS`, `CAPTURE_MAX_MB` | 600, 100 | Captures should be allowed to run longer or grow larger |
+| `CAPTURE_MAX_SECONDS`, `CAPTURE_MAX_MB` | 600, 50 | Captures should be allowed to run longer or grow larger |
 | `CAPTURE_PER_OWNER`, `CAPTURE_TOTAL` | 1, 3 | More captures should run at once |
-| `CAPTURE_KEEP_DAYS` | 7 | Finished captures should be kept longer |
+| `CAPTURE_KEEP_DAYS` | 1 | Finished captures should be kept longer |
 
 The [Developer guide's configuration reference](developer-guide.md#14-configuration-reference)
 lists every setting.
@@ -783,8 +783,8 @@ docker compose exec api ssh-keygen -f /capture/ssh/known_hosts -R lab-capture
 the new key, or put it in `/root/.ssh/authorized_keys.panel` on the appliance (from its console) and
 run `finish-capture.sh` there, which also powers it off.
 
-**Limits.** A capture runs at most `CAPTURE_MAX_SECONDS` (10 minutes) and `CAPTURE_MAX_MB` (100 MB), one
-per person and three at once. Finished captures are kept `CAPTURE_KEEP_DAYS` (7), or until all their
+**Limits.** A capture runs at most `CAPTURE_MAX_SECONDS` (10 minutes) and `CAPTURE_MAX_MB` (50 MB), one
+per person and three at once. Finished captures are kept `CAPTURE_KEEP_DAYS` (1 day), or until all their
 machines are destroyed. A deploy restarts the API, which stops running captures; what they captured is
 kept. Each start is written to the machines' activity logs.
 

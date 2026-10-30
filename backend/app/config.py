@@ -81,10 +81,10 @@ class Settings(BaseSettings):
     # The longest and largest a capture may be, how many may run at once (each person's, and in all),
     # and how long finished ones are kept.
     capture_max_seconds: int = Field(default=600, ge=10)
-    capture_max_mb: int = Field(default=100, ge=1)
+    capture_max_mb: int = Field(default=50, ge=1)
     capture_per_owner: int = Field(default=1, ge=1)
     capture_total: int = Field(default=3, ge=1)
-    capture_keep_days: int = Field(default=7, ge=1)
+    capture_keep_days: int = Field(default=1, ge=1)
 
     catalogue_path: Path = Path(__file__).resolve().parent.parent / "templates.yaml"
 

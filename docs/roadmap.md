@@ -322,7 +322,7 @@ table in the browser plus a .pcap download.
 - **Captures**: between the selected machines, across a subnet, or with your own BPF filter, with
   presets (DNS, HTTP, TLS, SSH, SMB, Kerberos, LDAP, RDP, ICMP, ARP). Always limited to the chosen
   machines' MAC addresses. A live table (find, pause), Stop, Download .pcap, and past captures kept for
-  7 days. Limits: 10 minutes, 100 MB, one per person, three at once.
+  a day. Limits: 10 minutes, 50 MB, one per person, three at once.
 - **The appliance**: `packer/capture` (Alpine, tcpdump; the second adapter listens on `LAN-capture`),
   `scripts/capture/lab-capture` (the only command the panel's key may run), and
   `scripts/setup_capture.py` for the port group and folder. Admin → Packet capture shows whether it

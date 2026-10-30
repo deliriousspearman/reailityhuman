@@ -470,7 +470,7 @@ curl -sk https://localhost/api/health      # database and vCenter both "ok"</cod
 </tr>
 <tr>
 <td><code>CAPTURE_MAX_SECONDS</code>, <code>CAPTURE_MAX_MB</code></td>
-<td>600, 100</td>
+<td>600, 50</td>
 <td>Captures should be allowed to run longer or grow larger</td>
 </tr>
 <tr>
@@ -480,7 +480,7 @@ curl -sk https://localhost/api/health      # database and vCenter both "ok"</cod
 </tr>
 <tr>
 <td><code>CAPTURE_KEEP_DAYS</code></td>
-<td>7</td>
+<td>1</td>
 <td>Finished captures should be kept longer</td>
 </tr>
 </tbody>
@@ -1151,8 +1151,8 @@ machines, pick ICMP, start a capture, and ping one from the other.</p>
 <p><strong>A new panel key</strong> (a new server, or the <code>capture</code> volume was lost): build the appliance again with
 the new key, or put it in <code>/root/.ssh/authorized_keys.panel</code> on the appliance (from its console) and
 run <code>finish-capture.sh</code> there, which also powers it off.</p>
-<p><strong>Limits.</strong> A capture runs at most <code>CAPTURE_MAX_SECONDS</code> (10 minutes) and <code>CAPTURE_MAX_MB</code> (100 MB), one
-per person and three at once. Finished captures are kept <code>CAPTURE_KEEP_DAYS</code> (7), or until all their
+<p><strong>Limits.</strong> A capture runs at most <code>CAPTURE_MAX_SECONDS</code> (10 minutes) and <code>CAPTURE_MAX_MB</code> (50 MB), one
+per person and three at once. Finished captures are kept <code>CAPTURE_KEEP_DAYS</code> (1 day), or until all their
 machines are destroyed. A deploy restarts the API, which stops running captures; what they captured is
 kept. Each start is written to the machines' activity logs.</p>
 <p><strong>When it doesn't answer</strong>, Admin → Packet capture says why:</p>
