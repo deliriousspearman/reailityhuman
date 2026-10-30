@@ -175,6 +175,8 @@ def test_first_boot_script_handles_a_domain_controller():
     assert "DomainRole -ge 4" in script
     # The user into Domain Admins by SID, and the local accounts only when it isn't a controller.
     assert "foreach ($rid in 512, 518, 519)" in script
+    # On its own directory: SYSTEM on a second controller is only its computer account on the first.
+    assert "Add-ADGroupMember -Server localhost" in script and "Get-ADDomain -Server localhost" in script
     assert script.index("DomainRole -ge 4") < script.index("New-LocalUser")
 
 
