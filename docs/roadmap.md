@@ -92,7 +92,7 @@ the next step (an xrdp debug log while resizing) is agreed.
 | Item | What's needed | Then |
 |---|---|---|
 | Disk space for the next templates | None now: 89 GB free on 2026-10-29 after Jake deleted unused templates. ISOs stay; unused templates are deleted instead (templates on demand), and every ISO a recipe needs is back on the datastore | Windows 10 (~23 GB), Metasploitable 3 Windows (~14 GB), Parrot 6 (~19 GB, plus its import base while building) |
-| CI runner `lms-docker` | Since about 11:45 on 2026-10-29 it takes jobs but never starts them (no output; GitLab shows it online). It's on a host outside the lab, so it waits on Jake. Pushes since then were deployed by hand with `deploy/deploy.sh` from a clean worktree, after the same tests passed locally | CI deploys again; its queued pipelines will redeploy the same commits, which is harmless |
+| CI runner `lms-docker` | Runner is back online, but pipelines now fail at `git clone`: GitLab moved behind a reverse proxy, so its clone URL is `https://gitlab.hedgylabs.org` (→ 192.168.0.6), which the runner's job containers can't resolve. Fix is on the runner host (.149, Jake's): `extra_hosts = ["gitlab.hedgylabs.org:192.168.0.6"]` under `[runners.docker]`. Deploying by hand meanwhile (`deploy/deploy.sh`, after the tests pass locally) | CI deploys again; a retried pipeline redeploys the same commit, harmless |
 | Windows 7, Server 2008 R2, ESXi | Their ISOs (not downloadable without a licence or a Broadcom login) | A legacy Windows build; nested ESXi |
 | vuln-ad fixes | A yes to push the fixes to `workstation/vuln-workstation.ps1`, committed locally in the vuln-ad repo | Push to `jake/vuln-ad` |
 | Firefox black screen | Testing on the one affected Firefox: without extensions, then with `privacy.resistFingerprinting` off. Canvas blockers stop the screen drawing | A fix if it isn't the browser's settings |
@@ -184,7 +184,7 @@ and an ESC1 template. 7 flags.
 | Step | What | State |
 |---|---|---|
 | 1 | `additional-dc` extra (a general one): a second controller of a deployed domain, signing in as the first one's user (`account: dc`) | Done 2026-10-30: the e2e test passes (promotes, replicates both ways, a user made on each controller reaches the other) |
-| 2 | `adcs` and `join-domain-linux` extras | |
+| 2 | `adcs` and `join-domain-linux` extras | Code done 2026-10-30 (both extras, prepare.sh, tests pass). `adcs` needs no rebuild (AD CS is a Windows role); `join-domain-linux` is `plannedExtras` on Ubuntu 24.04/26.04 until those templates are rebuilt with its packages. e2e of each still to run |
 | 3 | Meridian in `labs.yaml`, its seeding extras (`meridian-dc`, `meridian-dc2`, `meridian-member`, `meridian-web`), the frontend entry | |
 | 4 | Flags on the Linux machine, if `plant_flags` needs it | |
 | 5 | End-to-end instance test, walking the attack path | |
