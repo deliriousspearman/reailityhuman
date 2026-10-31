@@ -2785,7 +2785,7 @@
   description: Installs an Enterprise Root certificate authority and its web enrolment pages on this domain controller, with the pages answering over HTTP. For a machine you've also made a domain controller.
   ports: [80]
   password: true
-  setupMinutes: 10
+  setupMinutes: 15
   notes:
     - "The certificate authority issues for the domain. Web enrolment is at http://{ip}/certsrv/ (over HTTP, by design for the lab)."
   windows:
@@ -2803,25 +2803,57 @@
         try { $domain = Get-ADDomain -Server localhost; break }
         catch { if ((Get-Date) -gt $deadline) { throw "Active Directory didn't come up." }; Start-Sleep -Seconds 10 }
       }
-      # The setup runs as SYSTEM (the computer account), which isn't an Enterprise Admin, so an enterprise
-      # CA install would fail "not in the acceptable range" (0x80072082): run it as the domain user, who is
-      # (the machine's user, in Enterprise Admins, with the machine's password).
-      $credential = New-Object PSCredential("$($domain.NetBIOSName)\$username", (ConvertTo-SecureString $password -AsPlainText -Force))
+      # The enterprise CA install locates a domain controller (DsGetDcName), which needs Netlogon's locator
+      # working. On a freshly promoted controller it isn't, even with DNS pointing at itself and the SRV
+      # records resolving, until Netlogon re-registers: the install otherwise fails "the directory is
+      # unavailable" (certocm.log: ENUM_ENTERPRISE_UNAVAIL_REASON_DS_UNAVAILABLE, then a downstream
+      # 0x80072082). Restart Netlogon, re-register its records each try, and wait until the locator answers.
+      # nltest writes to stderr while it warms up, so don't let that stop the script (it runs with -Stop).
+      $ErrorActionPreference = 'Continue'
+      Restart-Service Netlogon -Force
+      $deadline = (Get-Date).AddMinutes(10)
+      while ($true) {
+        nltest /dsregdns 2>&1 | Out-Null
+        nltest "/dsgetdc:$($domain.DNSRoot)" 2>&1 | Out-Null
+        if ($LASTEXITCODE -eq 0) { break }
+        if ((Get-Date) -gt $deadline) { $ErrorActionPreference = 'Stop'; throw "The domain controller locator (DsGetDcName) didn't come up." }
+        Start-Sleep -Seconds 15
+      }
+      $ErrorActionPreference = 'Stop'
       Install-WindowsFeature -Name Adcs-Cert-Authority, Adcs-Web-Enrollment -IncludeManagementTools | Out-Null
-      # The certificate authority, once: Install-AdcsCertificationAuthority fails if one is set up already,
-      # and the registry's Active value names it once it is.
+      # The install writes to the directory, which needs Enterprise Admin rights the runner's SYSTEM (the
+      # computer account) hasn't: run it as the domain user (the machine's user, in Enterprise Admins).
+      $credential = New-Object PSCredential("$($domain.NetBIOSName)\$username", (ConvertTo-SecureString $password -AsPlainText -Force))
+      # Pin the key to the software provider, 2048-bit RSA and SHA-256. Server 2025's default setup probes
+      # the TPM-backed Microsoft Platform Crypto Provider (not ready on these VMs) and newer algorithms
+      # (SHA3, KMAC), which fail; the CA key then can't be made (NTE_BAD_KEYSET) and its empty certificate
+      # fails to write "not in the acceptable range" (0x80072082). certocm.log in C:\Windows holds the reason.
       if (-not (Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\CertSvc\Configuration' -Name Active -ErrorAction SilentlyContinue)) {
-        $ca = Install-AdcsCertificationAuthority -CAType EnterpriseRootCA -Credential $credential -Force
-        if ($ca.ErrorId -ne 0) { throw "Setting up the certificate authority failed: $($ca.ErrorString)" }
+        try {
+          Install-AdcsCertificationAuthority -CAType EnterpriseRootCA -Credential $credential `
+            -CryptoProviderName 'RSA#Microsoft Software Key Storage Provider' -KeyLength 2048 -HashAlgorithmName SHA256 `
+            -Force -ErrorAction Stop | Out-Null
+        } catch {
+          $log = (Get-Content C:\Windows\certocm.log -Tail 40 -ErrorAction SilentlyContinue) -join "`n"
+          throw "Setting up the certificate authority failed: $($_.Exception.Message)`ncertocm.log:`n$log"
+        }
       }
       Import-Module WebAdministration
       # The web enrolment pages (http://<dc>/certsrv/), once.
       if (-not (Test-Path 'IIS:\Sites\Default Web Site\CertSrv')) {
-        $web = Install-AdcsWebEnrollment -Credential $credential -Force
-        if ($web.ErrorId -ne 0) { throw "Setting up web enrolment failed: $($web.ErrorString)" }
+        try {
+          Install-AdcsWebEnrollment -Credential $credential -Force -ErrorAction Stop | Out-Null
+        } catch {
+          $log = (Get-Content C:\Windows\certocm.log -Tail 40 -ErrorAction SilentlyContinue) -join "`n"
+          throw "Setting up web enrolment failed: $($_.Exception.Message)`ncertocm.log:`n$log"
+        }
       }
-      # Extended Protection for Authentication off on the enrolment application: the lab's certificate
-      # relay (ESC8) expects HTTP enrolment that doesn't bind the authentication to the channel.
+      # Web enrolment over HTTP: Server 2025's setup requires SSL on the CertSrv application (requests
+      # then get 403.4), but the lab's certificate relay (ESC8) coerces enrolment over plain HTTP.
+      Set-WebConfigurationProperty -PSPath 'IIS:\' -Location 'Default Web Site/CertSrv' `
+        -Filter 'system.webServer/security/access' -Name 'sslFlags' -Value 'None'
+      # Extended Protection for Authentication off on the enrolment application too: the relay expects
+      # authentication that isn't bound to the channel.
       Set-WebConfigurationProperty -PSPath 'IIS:\' -Location 'Default Web Site/CertSrv' `
         -Filter 'system.webServer/security/authentication/windowsAuthentication/extendedProtection' -Name 'tokenChecking' -Value 'None'
       iisreset /restart | Out-Null
