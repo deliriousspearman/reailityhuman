@@ -3185,3 +3185,316 @@
       )
       Set-Content -Path 'C:\lab\plant-mail-flag.ps1' -Value ($planter -join [Environment]::NewLine) -Encoding UTF8
       exit 0
+
+# Meridian Pro Lab seeding (labs.yaml: meridian). Four extras, applied on top of the Active Directory,
+# AD CS, SQL Server and domain-join extras, that turn the plain domain into the lab: users and groups,
+# a chained set of weaknesses (Kerberoasting, a backup account with DCSync rights, a GPP password in
+# SYSVOL that replicates to the second controller, an ESC1 template on top of the ESC8 the adcs extra
+# leaves, a weak workstation and SQL Server, and a web portal that leaks a service password). They run
+# only built-in cmdlets and the baked packages, so any suitable template offers them without a rebuild.
+# Not meant to be picked by hand: they belong to the lab. The centrepiece chain: web foothold ->
+# svc_portal -> Kerberoast svc_sql -> SQL01 xp_cmdshell -> WS01 local-admin reuse -> coerce dc2 ->
+# relay to dc1's AD CS web enrolment (ESC8) -> a dc2 certificate -> DCSync.
+- id: meridian-dc
+  name: Meridian lab (domain)
+  category: Pro Labs
+  description: Seeds the Meridian Pro Lab's first domain controller — users, groups, the chained weaknesses, a file share and the flag targets. For the Meridian lab, not for a machine on its own.
+  setupMinutes: 12
+  windows:
+    script: |
+      # Runs on dc1 after it's promoted (its user is a domain admin) and the adcs extra has set up the CA.
+      Import-Module ActiveDirectory
+      $deadline = (Get-Date).AddMinutes(15)
+      while ($true) {
+        try { $domain = Get-ADDomain; break } catch { if ((Get-Date) -gt $deadline) { throw "Active Directory didn't come up." }; Start-Sleep -Seconds 10 }
+      }
+      $dn = $domain.DistinguishedName
+      $root = $domain.DNSRoot
+      function Try-Step([string]$What, [scriptblock]$Do) {
+        try { & $Do } catch { Write-Output "skipped $What : $($_.Exception.Message)" }
+      }
+      function New-Pwd { -join ((48..57) + (65..90) + (97..122) | Get-Random -Count 16 | ForEach-Object { [char]$_ }) + 'aA1!' }
+      function Ensure-User([string]$Sam, [string]$Pwd, [bool]$NeverExpire = $false) {
+        if (-not (Get-ADUser -Filter "SamAccountName -eq '$Sam'")) {
+          $given, $sur = ($Sam -split '[._]')[0], (($Sam -split '[._]')[-1])
+          New-ADUser -Name $Sam -GivenName $given -Surname $sur -SamAccountName $Sam -UserPrincipalName "$Sam@$root" `
+            -AccountPassword (ConvertTo-SecureString $Pwd -AsPlainText -Force) -Enabled $true -PasswordNeverExpires:$NeverExpire -ErrorAction Stop
+        }
+      }
+
+      # People, each enabled with a strong random password.
+      $people = @('amelia.shaw','daniel.obrien','grace.lindqvist','henry.mueller','isla.nakamura','owen.delgado','ruby.fontaine','theo.vasquez','zara.okafor','felix.andersen')
+      foreach ($sam in $people) { Try-Step "user $sam" { Ensure-User $sam (New-Pwd) } }
+      foreach ($g in 'IT Operations','Finance','Logistics','Helpdesk','Backup Operators Team') {
+        Try-Step "group $g" { if (-not (Get-ADGroup -Filter "Name -eq '$g'")) { New-ADGroup -Name $g -GroupScope Global } }
+      }
+      Try-Step 'group members' {
+        Add-ADGroupMember -Identity 'IT Operations' -Members 'daniel.obrien','henry.mueller' -ErrorAction SilentlyContinue
+        Add-ADGroupMember -Identity 'Finance' -Members 'amelia.shaw','ruby.fontaine' -ErrorAction SilentlyContinue
+        Add-ADGroupMember -Identity 'Helpdesk' -Members 'isla.nakamura','owen.delgado' -ErrorAction SilentlyContinue
+      }
+
+      # --- Service accounts (chain the attack path) ---
+      # svc_portal: the web portal's domain account. Its password is leaked by the portal's config file
+      # (meridian-web writes the same value). Domain user, nothing special on its own.
+      Try-Step 'svc_portal' { Ensure-User 'svc_portal' 'Autumn2025-Portal!' $true }
+      # svc_sql: Kerberoastable (a service principal name) with a weak, crackable password. It has a SQL
+      # Server sysadmin login on sql (meridian-member), so cracking it leads to xp_cmdshell on SQL01.
+      Try-Step 'svc_sql (kerberoastable)' {
+        Ensure-User 'svc_sql' 'Summer2025!' $true
+        Set-ADUser -Identity 'svc_sql' -ServicePrincipalNames @{Replace = "MSSQLSvc/sql.$root:1433"}
+      }
+      # svc_backup: granted Replicating Directory Changes (All) on the domain, i.e. DCSync without being a
+      # Domain Admin. A strong password: it's reached through the ESC8/ESC1 or the weak-ACL routes, not cracked.
+      Try-Step 'svc_backup (DCSync rights)' {
+        Ensure-User 'svc_backup' (New-Pwd) $true
+        $backupSid = New-Object Security.Principal.SecurityIdentifier (Get-ADUser 'svc_backup').SID
+        $root = [ADSI]("LDAP://$dn")
+        # DS-Replication-Get-Changes and -All: the two extended rights DCSync needs.
+        foreach ($guid in '1131f6aa-9c07-11d1-f79f-00c04fc2dcd2','1131f6ad-9c07-11d1-f79f-00c04fc2dcd2') {
+          $ace = New-Object DirectoryServices.ActiveDirectoryAccessRule($backupSid, 'ExtendedRight', 'Allow', [Guid]$guid)
+          $root.psbase.ObjectSecurity.AddAccessRule($ace)
+        }
+        $root.psbase.CommitChanges()
+      }
+
+      # --- Other weaknesses ---
+      # AS-REP roasting: a user that doesn't require Kerberos pre-authentication.
+      Try-Step 'as-rep roastable user' { Set-ADAccountControl -Identity 'grace.lindqvist' -DoesNotRequirePreAuth $true }
+      # A password left in a description (a quick early win on the way in).
+      Try-Step 'password in description' {
+        Set-ADAccountPassword -Identity 'owen.delgado' -Reset -NewPassword (ConvertTo-SecureString 'Welcome2Meridian!' -AsPlainText -Force)
+        Set-ADUser -Identity 'owen.delgado' -Description 'Temp contractor account, password Welcome2Meridian!'
+      }
+      # A weak ACL chain: Helpdesk can reset svc_backup's password (ForceChangePassword), a second route to
+      # DCSync for anyone who reaches a Helpdesk member.
+      Try-Step 'weak acl: Helpdesk -> svc_backup' {
+        $helpdeskSid = New-Object Security.Principal.SecurityIdentifier (Get-ADGroup 'Helpdesk').SID
+        $target = [ADSI]("LDAP://" + (Get-ADUser 'svc_backup').DistinguishedName)
+        # ForceChangePassword extended right (User-Force-Change-Password).
+        $pwReset = [Guid]'00299570-246d-11d0-a768-00aa006e0529'
+        $ace = New-Object DirectoryServices.ActiveDirectoryAccessRule($helpdeskSid, 'ExtendedRight', 'Allow', $pwReset)
+        $target.psbase.ObjectSecurity.AddAccessRule($ace); $target.psbase.CommitChanges()
+      }
+      Try-Step 'admin password never expires' { Set-ADUser -Identity 'Administrator' -PasswordNeverExpires $true }
+
+      # A Group Policy Preferences password in SYSVOL (replicated by DFSR to dc2, for the 'sysvol' flag).
+      # The cpassword is AES-encrypted with the key Microsoft published (MS14-025), so it's decryptable;
+      # this one decrypts to "Local*8!" (a local admin the policy would set). Written under the Default
+      # Domain Policy so SYSVOL replication carries it to the second controller.
+      Try-Step 'gpp cpassword in SYSVOL' {
+        $gpoDir = "C:\Windows\SYSVOL\sysvol\$root\Policies\{31B2F340-016D-11D2-945F-00C04FB984F9}\Machine\Preferences\Groups"
+        New-Item -ItemType Directory -Force -Path $gpoDir | Out-Null
+        $cpassword = 'j1Uyj3Vx8TY9LtLZil2uAuZkFQA/4latT76ZwgdHdhw'
+        $xml = @(
+          '<?xml version="1.0" encoding="utf-8"?>',
+          '<Groups clsid="{3125E937-EB16-4b4c-9934-544FC6D24D26}">',
+          '  <User clsid="{DF5F1855-51E5-4d24-8B1A-D9BDE98BA1D1}" name="svc_localadmin" image="2" changed="2025-09-01 12:00:00" uid="{9A4D8C1E-1234-4C2A-9F3B-1122334455AA}">',
+          '    <Properties action="U" newName="" fullName="Local Admin" description="Managed local administrator" cpassword="' + $cpassword + '" changeLogon="0" noChange="1" neverExpires="1" acctDisabled="0" userName="svc_localadmin"/>',
+          '  </User>',
+          '</Groups>')
+        Set-Content -Path "$gpoDir\Groups.xml" -Value ($xml -join [Environment]::NewLine) -Encoding UTF8
+      }
+
+      # An ESC1 certificate template on top of the ESC8 the adcs extra leaves: a template that lets the
+      # enrollee supply the subject (so any domain user can request a certificate as a domain admin) with a
+      # client-authentication EKU, enrollable by Domain Users. Best-effort: the centrepiece chain is ESC8.
+      Try-Step 'esc1 template' {
+        $confNC = (Get-ADRootDSE).configurationNamingContext
+        $tmplContainer = "CN=Certificate Templates,CN=Public Key Services,CN=Services,$confNC"
+        $name = 'MeridianAuth'
+        if (-not (Get-ADObject -Filter "Name -eq '$name'" -SearchBase $tmplContainer -ErrorAction SilentlyContinue)) {
+          $attrs = @{
+            'displayName' = 'Meridian Authentication'
+            'flags' = [int]131680
+            'revision' = [int]100
+            'msPKI-Cert-Template-OID' = "1.3.6.1.4.1.311.21.8.$(Get-Random -Minimum 1000000 -Maximum 9999999).1"
+            'msPKI-Certificate-Name-Flag' = [int]1                 # ENROLLEE_SUPPLIES_SUBJECT (the ESC1 flaw)
+            'msPKI-Enrollment-Flag' = [int]0                        # no manager approval
+            'msPKI-Private-Key-Flag' = [int]16842752
+            'msPKI-Minimal-Key-Size' = [int]2048
+            'msPKI-RA-Signature' = [int]0
+            'msPKI-Template-Schema-Version' = [int]2
+            'msPKI-Template-Minor-Revision' = [int]1
+            'pKIDefaultKeySpec' = [int]1
+            'pKIMaxIssuingDepth' = [int]0
+            'pKICriticalExtensions' = @('2.5.29.15')
+            'pKIExtendedKeyUsage' = @('1.3.6.1.5.5.7.3.2')          # Client Authentication
+            'msPKI-Certificate-Application-Policy' = @('1.3.6.1.5.5.7.3.2')
+          }
+          New-ADObject -Name $name -Type 'pKICertificateTemplate' -Path $tmplContainer -OtherAttributes $attrs
+          # Enroll right for Domain Users (extended right Certificate-Enrollment).
+          $tmpl = [ADSI]("LDAP://CN=$name,$tmplContainer")
+          $usersSid = New-Object Security.Principal.SecurityIdentifier (Get-ADGroup 'Domain Users').SID
+          $enroll = [Guid]'0e10c968-78fb-11d2-90d4-00c04f79dc55'
+          foreach ($right in 'GenericRead','ExtendedRight') {
+            $g = if ($right -eq 'ExtendedRight') { $enroll } else { [Guid]::Empty }
+            $ace = New-Object DirectoryServices.ActiveDirectoryAccessRule($usersSid, $right, 'Allow', $g)
+            $tmpl.psbase.ObjectSecurity.AddAccessRule($ace)
+          }
+          $tmpl.psbase.CommitChanges()
+          # Publish it on the enterprise CA.
+          $caContainer = "CN=Enrollment Services,CN=Public Key Services,CN=Services,$confNC"
+          $ca = Get-ADObject -SearchBase $caContainer -Filter "objectClass -eq 'pKIEnrollmentService'" -Properties certificateTemplates | Select-Object -First 1
+          if ($ca) { Set-ADObject -Identity $ca.DistinguishedName -Add @{certificateTemplates = $name} }
+        }
+      }
+
+      # The Logistics file share (the 'share' flag goes in it), with a decoy document.
+      Try-Step 'logistics share' {
+        New-Item -ItemType Directory -Force -Path 'C:\Shares\Logistics' | Out-Null
+        Set-Content -Path 'C:\Shares\Logistics\handover-notes.txt' -Value "Portal service account: svc_portal`r`nSee the portal host's config for the password." -ErrorAction SilentlyContinue
+        if (-not (Get-SmbShare -Name 'Logistics' -ErrorAction SilentlyContinue)) {
+          New-SmbShare -Name 'Logistics' -Path 'C:\Shares\Logistics' -ChangeAccess 'Everyone' | Out-Null
+        }
+      }
+      # Where the panel plants the flags: the share, a SYSVOL folder (replicated to dc2), and the
+      # Administrator's desktop (root.txt).
+      New-Item -ItemType Directory -Force -Path 'C:\Shares\Logistics' | Out-Null
+      New-Item -ItemType Directory -Force -Path "C:\Windows\SYSVOL\sysvol\$root\scripts" | Out-Null
+      New-Item -ItemType Directory -Force -Path 'C:\Users\Administrator\Desktop' | Out-Null
+      exit 0
+
+- id: meridian-dc2
+  name: Meridian lab (second controller)
+  category: Pro Labs
+  description: Prepares the Meridian Pro Lab's second domain controller — the coercion target for the certificate relay, and a check that the first controller's objects have replicated. For the Meridian lab.
+  setupMinutes: 8
+  windows:
+    script: |
+      # Runs on dc2 after the additional-dc extra has promoted it and replication is healthy.
+      Import-Module ActiveDirectory
+      $deadline = (Get-Date).AddMinutes(15)
+      while ($true) {
+        try { Get-ADDomainController -Server localhost | Out-Null; break } catch { if ((Get-Date) -gt $deadline) { throw "Active Directory didn't come up." }; Start-Sleep -Seconds 10 }
+      }
+      # The Print Spooler on and started: the coercion target (PrinterBug/PetitPotam-style) that makes dc2
+      # authenticate to an attacker, who relays it to dc1's AD CS web enrolment (ESC8) for a dc2 certificate.
+      try {
+        Set-Service -Name Spooler -StartupType Automatic
+        Start-Service -Name Spooler
+      } catch { Write-Output "skipped spooler : $($_.Exception.Message)" }
+      # Confirm the first controller's seeded objects have replicated here (svc_backup is made on dc1).
+      $deadline = (Get-Date).AddMinutes(20)
+      while (-not (Get-ADUser -Server localhost -Filter "SamAccountName -eq 'svc_backup'" -ErrorAction SilentlyContinue)) {
+        if ((Get-Date) -gt $deadline) { throw "The first controller's objects haven't replicated to this one (svc_backup not found)." }
+        Start-Sleep -Seconds 20
+      }
+      Write-Output "First controller's objects have replicated (svc_backup present)."
+      exit 0
+
+- id: meridian-member
+  name: Meridian lab (member)
+  category: Pro Labs
+  description: Seeds a Meridian Pro Lab member — the SQL Server (xp_cmdshell for a cracked service account) or the staff workstation (weakened, with the user flag). For the Meridian lab, not for a machine on its own.
+  setupMinutes: 10
+  options:
+    - id: role
+      label: Role in the lab
+      type: choice
+      default: ws
+      choices:
+        - {value: sql, label: SQL Server}
+        - {value: ws, label: Staff workstation}
+      help: Which Meridian machine this is.
+    - id: dc
+      label: Domain controller
+      type: machine
+      extra: domain-controller
+      help: The lab's domain controller (the panel wires this to the instance's own).
+  windows:
+    script: |
+      function Try-Step([string]$What, [scriptblock]$Do) {
+        try { & $Do } catch { Write-Output "skipped $What : $($_.Exception.Message)" }
+      }
+      $netbios = $dc_netbios.ToUpper()
+      # A local administrator password reused across sql and ws (lateral movement once one is cracked).
+      $localAdminPw = 'Sup3rLocal-Reuse!'
+      Try-Step 'local admin password reuse' {
+        $admin = Get-LocalUser | Where-Object { $_.SID.Value -like 'S-1-5-21-*-500' } | Select-Object -First 1
+        if ($admin) {
+          Set-LocalUser -Name $admin.Name -Password (ConvertTo-SecureString $localAdminPw -AsPlainText -Force)
+          Enable-LocalUser -Name $admin.Name
+        }
+      }
+      Try-Step 'smb signing off' { Set-SmbServerConfiguration -RequireSecuritySignature $false -EnableSecuritySignature $false -Force -Confirm:$false }
+
+      if ($role -eq 'sql') {
+        # Wait for SQL Server (the mssql extra installs it; it can take ~10 minutes).
+        $deadline = (Get-Date).AddMinutes(20)
+        while (-not (Get-Service -Name MSSQLSERVER -ErrorAction SilentlyContinue)) {
+          if ((Get-Date) -gt $deadline) { throw "SQL Server didn't come up." }
+          Start-Sleep -Seconds 20
+        }
+        Start-Service -Name MSSQLSERVER -ErrorAction SilentlyContinue
+        # SYSTEM (this runner) is a SQL sysadmin (the mssql extra adds BUILTIN\Administrators and SYSTEM),
+        # so sqlcmd -E can configure the server. svc_sql gets a sysadmin login, so the cracked Kerberoast
+        # password opens a sysadmin session; xp_cmdshell then runs commands as the service account.
+        $tsql = @(
+          "IF SUSER_ID('$netbios\svc_sql') IS NULL CREATE LOGIN [$netbios\svc_sql] FROM WINDOWS;",
+          "EXEC sp_addsrvrolemember '$netbios\svc_sql', 'sysadmin';",
+          "EXEC sp_configure 'show advanced options', 1; RECONFIGURE;",
+          "EXEC sp_configure 'xp_cmdshell', 1; RECONFIGURE;"
+        ) -join ' '
+        Try-Step 'sql: svc_sql sysadmin + xp_cmdshell' {
+          & sqlcmd -S localhost -E -b -Q $tsql
+          if ($LASTEXITCODE -ne 0) { throw "sqlcmd exited $LASTEXITCODE" }
+        }
+        New-Item -ItemType Directory -Force -Path 'C:\Users\Administrator\Desktop' | Out-Null
+        exit 0
+      }
+
+      # Staff workstation.
+      New-Item -ItemType Directory -Force -Path 'C:\Users\Public\Desktop' | Out-Null
+      Try-Step 'wdigest plaintext creds' {
+        New-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\WDigest' -Name 'UseLogonCredential' -Value 1 -PropertyType DWord -Force | Out-Null
+      }
+      Try-Step 'smb client signing off' { Set-SmbClientConfiguration -RequireSecuritySignature $false -EnableSecuritySignature $false -Force -Confirm:$false }
+      # A domain user who is a local administrator here (a foothold account for lateral movement).
+      Try-Step 'domain user in local admins' { Add-LocalGroupMember -Group (Get-LocalGroup -SID 'S-1-5-32-544') -Member "$netbios\owen.delgado" -ErrorAction SilentlyContinue }
+      exit 0
+
+- id: meridian-web
+  name: Meridian lab (web portal)
+  category: Pro Labs
+  description: Seeds the Meridian Pro Lab's Linux web portal — a small site with a file-inclusion flaw, a config file that leaks the portal's domain password, and a sudo misconfiguration to root. For the Meridian lab.
+  setupMinutes: 8
+  debian:
+    packages: [apache2, libapache2-mod-php]
+    script: |
+      # The Ubuntu portal (joined to the domain by join-domain-linux). Apache + PHP are baked into the
+      # template. The portal has a local-file-inclusion flaw for the foothold, and its config leaks
+      # svc_portal's domain password (the same value meridian-dc set), which opens AD enumeration.
+      export DEBIAN_FRONTEND=noninteractive
+      web=/var/www/html
+      install -d "$web"
+      # The config with the leaked service-account password (world-readable once the foothold reads it).
+      cat >"$web/config.php" <<'PHP'
+      <?php
+      // Portal service account (Active Directory). TODO: move to a secret store.
+      $AD_DOMAIN   = 'meridian.example';
+      $AD_USER     = 'svc_portal';
+      $AD_PASSWORD = 'Autumn2025-Portal!';
+      PHP
+      # The vulnerable front page: ?page=<name> is included with no sanitisation (LFI; path traversal
+      # reaches config.php and /etc/passwd, and the attacker can read the service password).
+      cat >"$web/index.php" <<'PHP'
+      <?php
+      $page = isset($_GET['page']) ? $_GET['page'] : 'home';
+      echo "<h1>Meridian Logistics — Staff Portal</h1>";
+      echo "<p>Shipment tracking and internal tools.</p>";
+      // Deliberately unsafe: no validation on the included path.
+      @include($page . '.php');
+      PHP
+      cat >"$web/home.php" <<'PHP'
+      <?php echo "<p>Welcome. Choose a tool from the menu.</p>"; ?>
+      PHP
+      chown -R www-data:www-data "$web"
+      # A sudo misconfiguration: www-data may run tar as root with no password. GTFOBins turns that into a
+      # root shell, so the web foothold escalates to local root (the 'web-root' flag lives in /root).
+      install -d /etc/sudoers.d
+      echo 'www-data ALL=(root) NOPASSWD: /usr/bin/tar' >/etc/sudoers.d/90-portal-backup
+      chmod 440 /etc/sudoers.d/90-portal-backup
+      install -d -m 700 /root
+      # Make sure Apache serves PHP and is running.
+      lab_apache 2>/dev/null || systemctl enable --now apache2

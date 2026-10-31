@@ -49,6 +49,24 @@ def test_the_real_labs_yaml_loads():
     assert labs.unavailable_reason(lab) == ""
 
 
+def test_meridian_loads_and_wires_to_its_first_controller():
+    labs.labs.cache_clear()
+    lab = labs.labs()["meridian"]
+    assert lab.domain == "meridian.example" and lab.planned is True
+    assert [m.name for m in lab.machines] == ["dc1", "dc2", "sql", "ws", "web"]
+    assert [m.boot_order for m in lab.machines] == [1, 2, 3, 3, 3]
+    assert {f.id for f in lab.flags} == {"web-user", "web-root", "sql", "ws", "share", "sysvol", "root"}
+    # Members (and the second controller) wire to the instance's own first controller through @dc1.
+    for name, extra in (("dc2", "additional-dc"), ("sql", "join-domain"), ("ws", "join-domain"), ("web", "join-domain-linux")):
+        m = next(x for x in lab.machines if x.name == name)
+        assert dict(next(x for x in m.extras if x.id == extra).options)["dc"] == "@dc1"
+    # dc1 offers AD CS and the first-controller seeding; it has no @ref of its own (it boots first).
+    dc1 = next(m for m in lab.machines if m.name == "dc1")
+    assert {x.id for x in dc1.extras} == {"domain-controller", "adcs", "meridian-dc"}
+    # Planned, so it lists as coming soon until its end-to-end walk-through passes.
+    assert labs.unavailable_reason(lab) == "Meridian Logistics isn't built yet"
+
+
 def test_a_planned_lab_doesnt_need_built_templates(load):
     all_labs = load(PLANNED)
     assert all_labs["demo"].planned is True

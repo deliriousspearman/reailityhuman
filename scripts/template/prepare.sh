@@ -101,6 +101,8 @@ declare -A EXTRA_PACKAGES_DEBIAN=(
 	# realmd and SSSD, for the Join a domain (Linux) extra: joined to a domain controller at deploy, so
 	# the packages must be here (the lab controller isn't on the internet). SSSD stays off (joined first).
 	[join-domain-linux]="realmd sssd sssd-tools libnss-sss libpam-sss adcli samba-common-bin krb5-user packagekit"
+	# The Meridian Pro Lab's web portal: Apache and PHP (already baked for the web extras), so it needs no rebuild.
+	[meridian-web]="apache2 libapache2-mod-php"
 )
 # shellcheck disable=SC2034 # used through EXTRA_PACKAGES, a reference to the family's list
 declare -A EXTRA_PACKAGES_RHEL=(

@@ -74,3 +74,92 @@
       where: the domain controller, on the Administrator's desktop (root.txt)
       machine: dc
       file: C:\Users\Administrator\Desktop\root.txt
+
+# Meridian Logistics: a larger Active Directory domain with two replicating controllers, a certificate
+# authority (AD CS), a SQL Server, a staff workstation and a Linux web portal. Built from the base
+# templates with the Active Directory, AD CS, SQL Server and domain-join extras, then seeded into the
+# lab by the meridian-* extras (extras.yaml). The centrepiece is a certificate relay across the two
+# controllers (coerce dc2 -> relay to dc1's web enrolment, ESC8 -> a dc2 certificate -> DCSync); other
+# routes are Kerberoasting, a backup account with replication rights, a GPP password in SYSVOL and an
+# ESC1 template. Members wire to the instance's own first controller through "@dc1". Flat LAN with DHCP
+# for now (the DMZ/Internal split waits for Networks). planned until its end-to-end walk-through passes.
+- slug: meridian
+  title: Meridian Logistics
+  description: A larger Windows domain — two replicating controllers with a certificate authority, a SQL Server, a workstation and a Linux portal — chaining a web foothold to a full domain takeover via a certificate relay.
+  level: Advanced
+  domain: meridian.example
+  resetScope: lab
+  planned: true
+  machines:
+    - name: dc1
+      template: windows-server
+      version: "2025"
+      role: First domain controller (with AD CS)
+      bootOrder: 1
+      extras:
+        - {domain-controller: {domain: meridian.example, netbios: MERIDIAN}}
+        - adcs
+        - meridian-dc
+    - name: dc2
+      template: windows-server
+      version: "2025"
+      role: Second domain controller (replica)
+      bootOrder: 2
+      extras:
+        - {additional-dc: {dc: "@dc1"}}
+        - meridian-dc2
+    - name: sql
+      template: windows-server
+      version: "2025"
+      role: SQL Server
+      bootOrder: 3
+      extras:
+        - {join-domain: {dc: "@dc1"}}
+        - mssql
+        - {meridian-member: {role: sql, dc: "@dc1"}}
+    - name: ws
+      template: windows
+      version: "11"
+      role: Staff workstation
+      bootOrder: 3
+      extras:
+        - {join-domain: {dc: "@dc1"}}
+        - {meridian-member: {role: ws, dc: "@dc1"}}
+    - name: web
+      template: ubuntu
+      version: "24.04"
+      role: Public web portal (domain-joined)
+      bootOrder: 3
+      extras:
+        - {join-domain-linux: {dc: "@dc1"}}
+        - meridian-web
+  # Planted fresh per instance (actions.plant_flags) once each machine is running.
+  flags:
+    - id: web-user
+      where: the web portal, readable after the foothold (/var/www/user.txt)
+      machine: web
+      file: /var/www/user.txt
+    - id: web-root
+      where: the web portal, after escalating to root (/root/root.txt)
+      machine: web
+      file: /root/root.txt
+    - id: sql
+      where: the SQL Server, on the Administrator's desktop (flag.txt)
+      machine: sql
+      file: C:\Users\Administrator\Desktop\flag.txt
+    - id: ws
+      where: the staff workstation, on the public desktop (user.txt)
+      machine: ws
+      file: C:\Users\Public\Desktop\user.txt
+    - id: share
+      where: the Logistics file share on the first controller (flag.txt)
+      machine: dc1
+      file: C:\Shares\Logistics\flag.txt
+    - id: sysvol
+      where: SYSVOL on the first controller (replicated to the second — confirm it there)
+      machine: dc1
+      file: C:\Windows\SYSVOL\sysvol\meridian.example\scripts\flag.txt
+    - id: root
+      where: the first domain controller, on the Administrator's desktop (root.txt)
+      machine: dc1
+      file: C:\Users\Administrator\Desktop\root.txt
