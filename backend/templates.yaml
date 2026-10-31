@@ -81,7 +81,7 @@
   diskGB: 40
   username: ubuntu
   family: debian
-  extras: [nginx, apache, apache-https, tomcat, wordpress, nextcloud, nextcloud-snap, postgresql, mariadb, mysql, sqlite, redis, mongodb, mail, iredmail, ftp, desktop, docker, python, juice-shop, dvwa, uptime-kuma, node-exporter, prometheus, grafana, vaultwarden, gitea, k3s, gitlab, jenkins, minio, elk, graylog, wazuh, wazuh-agent, zabbix, zabbix-agent, join-domain-linux]
+  extras: [nginx, apache, apache-https, tomcat, wordpress, nextcloud, nextcloud-snap, postgresql, mariadb, mysql, sqlite, redis, mongodb, mail, iredmail, ftp, desktop, docker, python, juice-shop, dvwa, uptime-kuma, node-exporter, prometheus, grafana, vaultwarden, gitea, k3s, gitlab, jenkins, minio, elk, graylog, wazuh, wazuh-agent, zabbix, zabbix-agent, join-domain-linux, meridian-web]
   # PHP versions for the Apache extras: Ondřej Surý's PPA's, baked in (prepare.sh's PHP_VERSIONS).
   choices: {php: ["5.6", "7.0", "7.1", "7.2", "7.3", "7.4", "8.0", "8.1", "8.2", "8.3", "8.4", "8.5"]}
 - template: ubuntu
@@ -232,7 +232,7 @@
   username: labadmin
   family: windows
   access: [rdp, ssh, console]
-  extras: [iis, mssql, outlook, domain-controller, additional-dc, adcs, join-domain, winlogbeat, brookfield-dc]   # SQL Server and Outlook: built with prepare.ps1 -SqlServer and -Office
+  extras: [iis, mssql, outlook, domain-controller, additional-dc, adcs, join-domain, winlogbeat, brookfield-dc, meridian-dc, meridian-dc2, meridian-member]   # SQL Server and Outlook: built with prepare.ps1 -SqlServer and -Office
 - template: windows-server
   version: "2022"
   # Built by Packer (packer/build.sh windows-server -var version=2022) on 2026-10-28, with Office's and
@@ -346,7 +346,7 @@
   username: labuser
   family: windows
   access: [rdp, ssh, console]
-  extras: [iis, mssql, outlook, join-domain, winlogbeat, brookfield-member]
+  extras: [iis, mssql, outlook, join-domain, winlogbeat, brookfield-member, meridian-member]
 
 # pfSense CE: a firewall (packer/pfsense). 2.7.2 is the last release with an offline installer. No
 # cloud-init: scripts/template/pfsense/lab-firstboot sets admin's password, SSH key and the host name
