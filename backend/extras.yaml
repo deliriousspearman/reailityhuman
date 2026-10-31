@@ -2669,8 +2669,10 @@
         realm discover "$dc_domain" >/dev/null 2>&1 && break
         sleep 10
       done
-      # Join as the controller's user; SSSD then serves the domain's accounts.
-      printf '%s' "$dc_password" | realm join --user="$dc_username" "$dc_domain"
+      # Join as the controller's user; SSSD then serves the domain's accounts. Use Samba's net to join:
+      # against Windows Server 2025, adcli's Kerberos password-set fails "Message stream modified", so
+      # realmd's default adcli path can't complete the join (a known Server 2025 issue).
+      printf '%s' "$dc_password" | realm join --membership-software=samba --user="$dc_username" "$dc_domain"
       # Short names (alice, not alice@domain), a home directory on first sign-in, and any domain user
       # may sign in.
       conf=/etc/sssd/sssd.conf
