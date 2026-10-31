@@ -184,7 +184,7 @@ and an ESC1 template. 7 flags.
 | Step | What | State |
 |---|---|---|
 | 1 | `additional-dc` extra (a general one): a second controller of a deployed domain, signing in as the first one's user (`account: dc`) | Done 2026-10-30: the e2e test passes (promotes, replicates both ways, a user made on each controller reaches the other) |
-| 2 | `adcs` and `join-domain-linux` extras | Code done 2026-10-30 (both extras, prepare.sh, tests pass). `adcs` needs no rebuild (AD CS is a Windows role); `join-domain-linux` is `plannedExtras` on Ubuntu 24.04/26.04 until those templates are rebuilt with its packages. e2e of each still to run |
+| 2 | `adcs` and `join-domain-linux` extras | Done 2026-10-31, both e2e pass. `adcs`: Enterprise Root CA + HTTP web enrolment (ESC8), needing a Netlogon-locator wait, a domain-user credential, the software KSP, and sslFlags off on Server 2025. `join-domain-linux`: realmd join via Samba (adcli hits a Server 2025 "Message stream modified" bug); Ubuntu 24.04 rebuilt with its packages; the first-boot DC branch now fixes the locator so members can find a fresh controller |
 | 3 | Meridian in `labs.yaml`, its seeding extras (`meridian-dc`, `meridian-dc2`, `meridian-member`, `meridian-web`), the frontend entry | |
 | 4 | Flags on the Linux machine, if `plant_flags` needs it | |
 | 5 | End-to-end instance test, walking the attack path | |
