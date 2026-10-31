@@ -12,7 +12,7 @@ export const labs: Lab[] = [
 		image: '/images/labs/meridian.svg',
 		level: 'Advanced',
 		environment: 'domain',
-		domain: 'meridian.example',
+		domain: 'meridian.corp',
 		// Flat LAN with DHCP for now; the DMZ/Internal split comes with Networks.
 		networks: [{ name: 'LAN', cidr: '198.51.100.0/24', entry: true }],
 		machines: [

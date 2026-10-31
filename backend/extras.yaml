@@ -3472,7 +3472,7 @@
       cat >"$web/config.php" <<'PHP'
       <?php
       // Portal service account (Active Directory). TODO: move to a secret store.
-      $AD_DOMAIN   = 'meridian.example';
+      $AD_DOMAIN   = 'meridian.corp';
       $AD_USER     = 'svc_portal';
       $AD_PASSWORD = 'Autumn2025-Portal!';
       PHP

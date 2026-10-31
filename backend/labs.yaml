@@ -87,7 +87,7 @@
   title: Meridian Logistics
   description: A larger Windows domain — two replicating controllers with a certificate authority, a SQL Server, a workstation and a Linux portal — chaining a web foothold to a full domain takeover via a certificate relay.
   level: Advanced
-  domain: meridian.example
+  domain: meridian.corp
   resetScope: lab
   planned: true
   machines:
@@ -97,7 +97,7 @@
       role: First domain controller (with AD CS)
       bootOrder: 1
       extras:
-        - {domain-controller: {domain: meridian.example, netbios: MERIDIAN}}
+        - {domain-controller: {domain: meridian.corp, netbios: MERIDIAN}}
         - adcs
         - meridian-dc
     - name: dc2
@@ -158,7 +158,7 @@
     - id: sysvol
       where: SYSVOL on the first controller (replicated to the second — confirm it there)
       machine: dc1
-      file: C:\Windows\SYSVOL\sysvol\meridian.example\scripts\flag.txt
+      file: C:\Windows\SYSVOL\sysvol\meridian.corp\scripts\flag.txt
     - id: root
       where: the first domain controller, on the Administrator's desktop (root.txt)
       machine: dc1

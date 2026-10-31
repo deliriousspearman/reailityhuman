@@ -166,7 +166,7 @@ three templates retired to make room (Windows Server 2019/2022, Metasploitable 3
 ### 1a. Meridian: the second Pro Lab, with two replicating domain controllers (large) — started 2026-10-30
 
 **Goal.** The LMS's Meridian lab, cut from seven machines to five (four Windows, one Linux). Jake's main
-requirement is **two domain controllers replicating with each other**. Domain `meridian.example`:
+requirement is **two domain controllers replicating with each other**. Domain `meridian.corp`:
 - **dc1** (Windows Server 2025): the first domain controller, plus AD CS with web enrolment;
 - **dc2** (Windows Server 2025): a second, writable domain controller in the same site, replicating both ways;
 - **sql** (Windows Server 2025): SQL Server, running as a domain service account;

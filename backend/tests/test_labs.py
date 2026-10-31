@@ -52,7 +52,7 @@ def test_the_real_labs_yaml_loads():
 def test_meridian_loads_and_wires_to_its_first_controller():
     labs.labs.cache_clear()
     lab = labs.labs()["meridian"]
-    assert lab.domain == "meridian.example" and lab.planned is True
+    assert lab.domain == "meridian.corp" and lab.planned is True
     assert [m.name for m in lab.machines] == ["dc1", "dc2", "sql", "ws", "web"]
     assert [m.boot_order for m in lab.machines] == [1, 2, 3, 3, 3]
     assert {f.id for f in lab.flags} == {"web-user", "web-root", "sql", "ws", "share", "sysvol", "root"}
