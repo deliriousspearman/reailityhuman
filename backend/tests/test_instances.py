@@ -233,9 +233,13 @@ def test_flags_are_generated_and_planted(queued, plantable):
     f = flags(i)
     assert f["root"]["planted"] and f["mail"]["planted"]
     assert not f["note"]["planted"]  # no file or run: just listed
-    # Planted where the lab says, with the flag's value.
-    assert plantable["files"]["/root/root.txt"].decode().strip() == f["root"]["value"]
-    assert f["mail"]["value"] in plantable["runs"][actions.POWERSHELL]
+    # These are Linux machines (ubuntu), so flags are planted by a script written to /tmp and run with
+    # /bin/sh: the file flag writes to its path as root (sudo), the run flag runs its program.
+    root_script = plantable["files"]["/tmp/.lab-plant-root.sh"].decode()
+    assert f["root"]["value"] in root_script and "/root/root.txt" in root_script
+    mail_script = plantable["files"]["/tmp/.lab-plant-mail.sh"].decode()
+    assert f["mail"]["value"] in mail_script and "plant.ps1" in mail_script
+    assert plantable["runs"]["/bin/sh"].startswith("/tmp/.lab-plant-")
 
 
 def test_reset_makes_new_flag_values(queued, plantable):

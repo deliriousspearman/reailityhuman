@@ -6,6 +6,7 @@ transaction, so the panel shows progress while a job runs.
 
 import logging
 import secrets
+import shlex
 import time
 from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
@@ -442,6 +443,15 @@ def _run(job_id: int, machine_id: str, action: str) -> None:
 POWERSHELL = r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
 
 
+def _run_linux_guest(vc: VCenter, vm, m: Machine, name: str, command: str) -> None:
+    """Runs a short shell command in a Linux guest by writing it to a script in /tmp (which the user can
+    write) and running it with /bin/sh, so the argument is a single token with no quoting to get wrong.
+    Fire-and-forget, as the Windows `run` path is."""
+    path = f"/tmp/.lab-{name}.sh"
+    vc.write_guest_file(vm, m.username, m.password, path, ("#!/bin/sh\n" + command + "\n").encode())
+    vc.run_guest_program(vm, m.username, m.password, "/bin/sh", path)
+
+
 def new_flag() -> str:
     return f"LAB{{{secrets.token_hex(6)}}}"
 
@@ -468,6 +478,8 @@ def plant_flags(vc: VCenter, m: Machine) -> None:
     flags = [f for f in lab.flags if f.machine == m.role and (f.file or f.run)]
     if not flags:
         return
+    t = catalogue.find(m.template, m.version)
+    windows = (t.family if t else "windows") == "windows"
     with session() as s:
         values = dict(s.execute(select(InstanceFlag.flag_id, InstanceFlag.value).where(InstanceFlag.instance_id == m.instance_id)).all())
     vm = vc.require_vm(m.vm_name)
@@ -476,11 +488,19 @@ def plant_flags(vc: VCenter, m: Machine) -> None:
         if value is None:
             continue
         try:
-            if f.file:
+            if f.file and windows:
                 vc.write_guest_file(vm, m.username, m.password, f.file, (value + "\r\n").encode())
-            else:
+            elif f.file:
+                # Linux: write as root (the flag paths include /root) with a unix newline. The lab's user
+                # is in the sudo group, so sudo -S takes its (known) password on stdin.
+                write = f"printf '%s\\n' {shlex.quote(value)} > {shlex.quote(f.file)}"
+                command = f"echo {shlex.quote(m.password)} | sudo -S -p '' sh -c {shlex.quote(write)}"
+                _run_linux_guest(vc, vm, m, f"plant-{f.id}", command)
+            elif windows:
                 vc.run_guest_program(vm, m.username, m.password, POWERSHELL,
                                      f'-NoProfile -ExecutionPolicy Bypass -File "{f.run}" "{value}"')
+            else:
+                _run_linux_guest(vc, vm, m, f"plant-{f.id}", f"{f.run} {shlex.quote(value)}")
         except VSphereError as e:
             add_log(m.id, f"Couldn't plant the '{f.id}' flag: {e}", "warn")
             continue
