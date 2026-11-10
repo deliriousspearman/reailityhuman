@@ -75,6 +75,8 @@ backend-test:
       files: [backend/pyproject.toml]
     paths: [.pip/]
   script:
+    # ssh-keygen, as in the panel's image: the capture tests make the panel's key.
+    - apt-get update -qq && apt-get install -y -qq --no-install-recommends openssh-client >/dev/null
     - cd backend
     - pip install --quiet '.[test]' && pip uninstall --quiet -y lab-deploy
     - pytest -q -p no:cacheprovider
