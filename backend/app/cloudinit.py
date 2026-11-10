@@ -126,12 +126,13 @@ def userdata(
     hostname: str, username: str, password: str, ssh_key: str | None, admin_group: str = "sudo", extra: dict | None = None
 ) -> str:
     """`extra`: more cloud-config, e.g. extras.cloud_config()'s write_files and runcmd."""
+    hashed = hash_password(password)
     user: dict = {
         "name": username,
         "groups": [admin_group],
         "shell": "/bin/bash",
         "lock_passwd": False,
-        "passwd": hash_password(password),
+        "passwd": hashed,
     }
     if ssh_key:
         user["ssh_authorized_keys"] = [ssh_key.strip()]
@@ -142,6 +143,12 @@ def userdata(
         "ssh_pwauth": True,
         **(extra or {}),
     }
+    # The password again, first thing after the user is made. cloud-init unlocks the new user with
+    # `passwd -u`, and if that prints anything on stderr it blanks the password (`passwd -d`): it does
+    # on a template with SSSD's tools but no SSSD set up (Join a domain (Linux)'s packages), where
+    # sss_cache complains on every change to a user. Ubuntu 26.04's rebuild of 2026-11-10 made
+    # machines whose user had no password. usermod sets it whatever sss_cache says.
+    config["runcmd"] = [["usermod", "-p", hashed, username], *config.get("runcmd", [])]
     return "#cloud-config\n" + yaml.safe_dump(config, sort_keys=False)
 
 

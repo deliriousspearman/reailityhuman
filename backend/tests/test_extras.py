@@ -333,7 +333,9 @@ def test_cloud_config_quotes_values_and_runs_each_extra():
     assert [f["path"] for f in none["write_files"]] == [f"{extras.DIR}/extras/run.sh"]
 
     data = yaml.safe_load(cloudinit.userdata("web01", "ubuntu", "pw", None, extra=config).removeprefix("#cloud-config\n"))
-    assert data["runcmd"] == config["runcmd"]
+    # The user's password is set again first (cloud-init can blank it: cloudinit.userdata), then the extras.
+    assert data["runcmd"] == [["usermod", "-p", data["users"][0]["passwd"], "ubuntu"], *config["runcmd"]]
+    assert data["users"][0]["passwd"].startswith("$6$")
     assert data["users"][0]["name"] == "ubuntu"
 
 
