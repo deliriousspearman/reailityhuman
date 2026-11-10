@@ -1102,16 +1102,9 @@
         allowed="$allowed, $lan"
         echo "net.ipv4.ip_forward = 1" >/etc/sysctl.d/90-lab-wireguard.conf
         sysctl -q -p /etc/sysctl.d/90-lab-wireguard.conf
-        cat >/etc/wireguard/lab-nat.nft <<EOF
-      # Written by the lab panel's WireGuard extra: the client's traffic to the LAN leaves as this machine.
-      table ip lab_wireguard {
-        chain nat {
-          type nat hook postrouting priority 100;
-          ip saddr $subnet.0/24 oifname "$dev" masquerade
-        }
-      }
-      EOF
-        nat="PostUp = nft -f /etc/wireguard/lab-nat.nft
+        # The client's traffic to the LAN leaves as this machine. As nft commands, not a rules file:
+        # Ubuntu 26.04's AppArmor profile for wg-quick lets the nft it runs read no files.
+        nat="PostUp = nft add table ip lab_wireguard; nft 'add chain ip lab_wireguard nat { type nat hook postrouting priority 100; }'; nft add rule ip lab_wireguard nat ip saddr $subnet.0/24 oifname $dev masquerade
       PostDown = nft delete table ip lab_wireguard"
       fi
       cat >/etc/wireguard/wg0.conf <<EOF
