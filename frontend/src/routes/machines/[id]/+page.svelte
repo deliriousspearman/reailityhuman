@@ -348,10 +348,15 @@
 				<a class="cmd" href={webUrl} target="_blank" rel="noreferrer">{webUrl}</a>
 			</li>
 		{/if}
-		{#each m.extras.filter((x) => x.links.length || x.notes.length) as x (x.id)}
+		{#each m.extras.filter((x) => x.links.length || x.notes.length || x.download) as x (x.id)}
 			<li class="extra-way">
 				<span class="way">{x.name}</span>
 				<div class="extra-details">
+					{#if x.download}
+						<a class="btn btn-sm extra-download" href="/api/machines/{m.id}/downloads/{x.id}" download={x.download.filename}>
+							<Icon name="download" /> Download {x.download.label}
+						</a>
+					{/if}
 					{#each x.links as url (url)}
 						<a class="cmd" href={url} target="_blank" rel="noreferrer">{url}</a>
 					{/each}
@@ -624,6 +629,9 @@
 		gap: 0.3rem;
 		flex: 1 1 12rem;
 		min-width: 0;
+	}
+	.extra-details .extra-download {
+		justify-self: start;
 	}
 	.extra-details .note {
 		font-size: 0.85rem;

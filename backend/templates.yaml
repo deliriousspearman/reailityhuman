@@ -58,8 +58,9 @@
   diskGB: 40
   username: ubuntu
   family: debian
-  extras: [nginx, apache, apache-https, tomcat, wordpress, nextcloud, nextcloud-snap, postgresql, mariadb, mysql, sqlite, redis, mongodb, mail, iredmail, ftp, desktop, docker, python, juice-shop, dvwa, uptime-kuma, node-exporter, prometheus, grafana, vaultwarden, gitea, k3s, gitlab, jenkins, minio, elk, graylog, wazuh-agent, zabbix, zabbix-agent]
-  # Prepped in prepare.sh, baked in on the next rebuild: the Join a domain (Linux) extra (realmd, SSSD).
+  extras: [nginx, apache, apache-https, tomcat, wordpress, nextcloud, nextcloud-snap, postgresql, mariadb, mysql, sqlite, redis, mongodb, mail, iredmail, ftp, desktop, docker, python, juice-shop, dvwa, uptime-kuma, node-exporter, prometheus, grafana, vaultwarden, gitea, k3s, gitlab, jenkins, minio, elk, graylog, wazuh-agent, zabbix, zabbix-agent, wireguard, openvpn]
+  # VPN servers: baked in by the rebuild of 2026-11-10. Join a domain (Linux): its packages (realmd, SSSD)
+  # are in that rebuild too, but it's untested here, so still planned.
   plannedExtras: [join-domain-linux]
   # PHP versions for the Apache extras: Ubuntu's own, which the template has with the web apps.
   choices: {php: ["8.5"]}
@@ -82,6 +83,8 @@
   username: ubuntu
   family: debian
   extras: [nginx, apache, apache-https, tomcat, wordpress, nextcloud, nextcloud-snap, postgresql, mariadb, mysql, sqlite, redis, mongodb, mail, iredmail, ftp, desktop, docker, python, juice-shop, dvwa, uptime-kuma, node-exporter, prometheus, grafana, vaultwarden, gitea, k3s, gitlab, jenkins, minio, elk, graylog, wazuh, wazuh-agent, zabbix, zabbix-agent, join-domain-linux, meridian-web]
+  # Prepped in prepare.sh, baked in on the next rebuild: the VPN servers.
+  plannedExtras: [wireguard, openvpn]
   # PHP versions for the Apache extras: Ondřej Surý's PPA's, baked in (prepare.sh's PHP_VERSIONS).
   choices: {php: ["5.6", "7.0", "7.1", "7.2", "7.3", "7.4", "8.0", "8.1", "8.2", "8.3", "8.4", "8.5"]}
 - template: ubuntu
@@ -102,6 +105,8 @@
   family: debian
   # Not Nextcloud: it needs PHP 8.3, and 22.04 has 8.1 (the snap brings its own).
   extras: [nginx, apache, apache-https, tomcat, wordpress, nextcloud-snap, postgresql, mariadb, mysql, sqlite, redis, mongodb, mail, ftp, desktop, docker, python, juice-shop, dvwa, uptime-kuma, node-exporter, prometheus, grafana, vaultwarden, gitea, k3s, gitlab, jenkins, minio, elk, graylog, wazuh, wazuh-agent, zabbix, zabbix-agent]
+  # Prepped in prepare.sh, baked in on the next rebuild: the VPN servers.
+  plannedExtras: [wireguard, openvpn]
   # PHP versions for the Apache extras: Ondřej Surý's PPA's, baked in (prepare.sh's PHP_VERSIONS).
   choices: {php: ["5.6", "7.0", "7.1", "7.2", "7.3", "7.4", "8.0", "8.1", "8.2", "8.3", "8.4", "8.5"]}
 
@@ -122,6 +127,8 @@
   username: labuser
   family: debian
   extras: [nginx, apache, apache-https, tomcat, wordpress, nextcloud, nextcloud-snap, postgresql, mariadb, sqlite, redis, mongodb, mail, iredmail, ftp, desktop, docker, python, juice-shop, dvwa, uptime-kuma, node-exporter, prometheus, grafana, vaultwarden, gitea, k3s, gitlab, jenkins, minio, elk, graylog, wazuh-agent, zabbix, zabbix-agent]
+  # Prepped in prepare.sh, baked in on the next rebuild: the VPN servers.
+  plannedExtras: [wireguard, openvpn]
 - template: debian
   version: "12"
   # Built by Packer (packer/build.sh debian -var version=12 -var iso=debian-12.15.0-amd64-netinst.iso) on 2026-10-23.
@@ -139,6 +146,8 @@
   family: debian
   # Not Nextcloud: it needs PHP 8.3, and 12 has 8.2 (the snap brings its own).
   extras: [nginx, apache, apache-https, tomcat, wordpress, nextcloud-snap, postgresql, mariadb, sqlite, redis, mongodb, mail, iredmail, ftp, desktop, docker, python, juice-shop, dvwa, uptime-kuma, node-exporter, prometheus, grafana, vaultwarden, gitea, k3s, gitlab, jenkins, minio, elk, graylog, wazuh, wazuh-agent, zabbix, zabbix-agent]
+  # Prepped in prepare.sh, baked in on the next rebuild: the VPN servers.
+  plannedExtras: [wireguard, openvpn]
 
 # Debian 11 and 10 (and 9, 8): legacy practice targets, out of support. Their cloud-init can't read the
 # panel's data, so they get lab-firstboot (family legacy) and no extras; 10 and older install from
@@ -699,8 +708,9 @@
 
 # Kali Linux and Parrot Security: attack boxes, reached over Remote Desktop to their own desktop
 # (packer/kali, or by hand: docs/setup-vsphere.md, "Kali Linux and Parrot Security templates"). Not
-# the desktop extra: they have their own. Only web servers, FTP, Docker and Python (packer/kali and
-# packer/parrot's extras default): not the web apps, databases, mail, monitoring and practice targets.
+# the desktop extra: they have their own. Only web servers, FTP, Docker, Python and the VPN servers
+# (packer/kali and packer/parrot's extras default): not the web apps, databases, mail, monitoring and
+# practice targets.
 - template: kali
   version: "2026.2"
   # Built by Packer (packer/build.sh kali) on 2026-10-23.
@@ -717,6 +727,8 @@
   family: debian
   access: [ssh, rdp, console]
   extras: [nginx, apache, apache-https, ftp, docker, python]
+  # Prepped in prepare.sh, baked in on the next rebuild: the VPN servers.
+  plannedExtras: [wireguard, openvpn]
 - template: parrot
   version: "7"
   # Built by Packer (packer/build.sh parrot) on 2026-10-29, from Parrot Security 7.4's own image.
@@ -728,6 +740,8 @@
   family: debian
   access: [ssh, rdp, console]
   extras: [nginx, apache, apache-https, ftp, docker, python]
+  # Prepped in prepare.sh, baked in on the next rebuild: the VPN servers.
+  plannedExtras: [wireguard, openvpn]
 
 # The RHEL family: CentOS Stream, Rocky Linux, AlmaLinux (packer/rhel, kickstart from the boot ISO).
 # Its extras so far are the web servers. Planned until each template is built.

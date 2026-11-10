@@ -81,7 +81,7 @@ variable "media_url" {
 # and run tools), not the web apps, databases, mail, monitoring and practice targets servers get.
 variable "extras" {
   type    = string
-  default = "nginx,apache,apache-https,ftp,docker,python"
+  default = "nginx,apache,apache-https,ftp,docker,python,wireguard,openvpn"
 }
 variable "vm_name" {
   type    = string

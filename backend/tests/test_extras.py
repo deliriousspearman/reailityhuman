@@ -703,3 +703,98 @@ def test_apache_switches_on_the_php_chosen():
     assert "php=8.5" in script.replace("'", "") and 'lab_php "$php"' in script
     lib = next(f["content"] for f in config["write_files"] if f["path"].endswith("/lib.sh"))
     assert "lab_php()" in lib and "a2enmod -q mpm_prefork" in lib
+
+
+# Downloads: a file an extra makes for people to download, e.g. a VPN client's config -------------------
+
+WG_CONFIG = "/home/ubuntu/wireguard/client.conf"
+
+
+@pytest.fixture
+def vpn(monkeypatch):
+    """The Ubuntu template, as if built with WireGuard; the machine's files by path (None: not there)."""
+    key = ("ubuntu", "26.04")
+    monkeypatch.setitem(catalogue.catalogue(), key, replace(catalogue.catalogue()[key], extras=("wireguard",), planned_extras=()))
+    files = {extras.STATUS_FILE: "ok wireguard\n", WG_CONFIG: "[Interface]\nPrivateKey = first\n"}
+    monkeypatch.setattr(VCenter, "read_guest_file", lambda self, vm, username, password, path: files.get(path))
+    return files
+
+
+def test_vpn_extras_make_the_file_they_offer():
+    for i, path, filename in (("wireguard", "wireguard/client.conf", "vpn01.conf"), ("openvpn", "openvpn/client.ovpn", "vpn01.ovpn")):
+        x = extras.find(i)
+        assert x.download.path == path
+        assert extras.download_filename(x, "vpn01") == filename
+        _, script = x.families["debian"]
+        assert f'"$home/{path}"' in script, i
+
+
+def test_tunnel_networks_are_private_slash_24s():
+    for subnet in ("10.66.0", "172.16.5", "192.168.200"):
+        extras.resolve(("wireguard",), [{"id": "wireguard", "options": {"subnet": subnet}}], "vpn01")
+    for subnet in ("8.8.8", "10.300.0", "172.32.0", "10.66.0.0", "10.66", "10.66.0; reboot"):
+        with pytest.raises(extras.ExtraError, match="isn't a valid tunnel network"):
+            extras.resolve(("wireguard",), [{"id": "wireguard", "options": {"subnet": subnet}}], "vpn01")
+
+
+@pytest.mark.parametrize(
+    "download, problem",
+    [
+        ("{path: ../etc/shadow, filename: x.conf, label: X}", "plain path inside the user's home"),
+        ("{path: /etc/shadow, filename: x.conf, label: X}", "plain path inside the user's home"),
+        ("{path: x/client.conf, filename: 'a/{hostname}.conf', label: X}", "plain file name"),
+        ("{path: x/client.conf, filename: 'a b.conf', label: X}", "plain file name"),
+    ],
+)
+def test_downloads_are_files_in_the_users_home(tmp_path, monkeypatch, download, problem):
+    (tmp_path / "extras.yaml").write_text(f"- id: x\n  name: X\n  description: ''\n  download: {download}\n  debian: {{script: 'true'}}\n")
+    monkeypatch.setattr(extras, "_path", lambda: tmp_path / "extras.yaml")
+    extras.extras.cache_clear()
+    try:
+        with pytest.raises(ValueError, match=problem):
+            extras.extras()
+    finally:
+        monkeypatch.undo()
+        extras.extras.cache_clear()
+
+
+def test_an_extras_download_is_kept_served_and_made_again(queued, vpn):
+    r = deploy(name="vpn01", chosen=[{"id": "wireguard"}])
+    assert r.status_code == 201, r.text
+    run_queued(queued)
+    m = client.get(f"/api/machines/{r.json()['id']}").json()
+    assert m["state"] == "running"
+    assert m["extras"][0]["download"] == {"label": "WireGuard config", "filename": "vpn01.conf"}
+    assert "PrivateKey" not in str(client.get("/api/state").json())  # listed, never sent with the machine
+    url = f"/api/machines/{m['id']}/downloads/wireguard"
+    f = client.get(url)
+    assert f.status_code == 200
+    assert f.text == "[Interface]\nPrivateKey = first\n"
+    assert f.headers["content-disposition"] == 'attachment; filename="vpn01.conf"'
+    assert f.headers["cache-control"] == "no-store"
+    assert client.get(f"/api/machines/{m['id']}/downloads/openvpn").status_code == 404
+    assert "WireGuard config: ready to download from this page" in [line["text"] for line in m["log"]]
+
+    # A reset makes new keys, so a new file: the copy is the new one.
+    vpn[WG_CONFIG] = "[Interface]\nPrivateKey = second\n"
+    assert client.post(f"/api/machines/{m['id']}/reset").status_code == 200
+    run_queued(queued)
+    assert client.get(url).text == "[Interface]\nPrivateKey = second\n"
+
+    # One that can't be read after a reset: the old keys aren't offered any more.
+    del vpn[WG_CONFIG]
+    assert client.post(f"/api/machines/{m['id']}/reset").status_code == 200
+    run_queued(queued)
+    assert client.get(url).status_code == 404
+
+
+def test_a_download_that_cant_be_read_is_only_a_warning(queued, vpn):
+    del vpn[WG_CONFIG]
+    r = deploy(name="vpn01", chosen=[{"id": "wireguard"}])
+    run_queued(queued)
+    m = client.get(f"/api/machines/{r.json()['id']}").json()
+    assert m["state"] == "running"
+    assert "download" not in m["extras"][0]
+    warning = f"Couldn't read the WireGuard config from the machine: copy {WG_CONFIG} from it over SSH instead."
+    assert {"text": warning, "tone": "warn"}.items() <= next(line for line in m["log"] if line["text"] == warning).items()
+    assert client.get(f"/api/machines/{m['id']}/downloads/wireguard").status_code == 404

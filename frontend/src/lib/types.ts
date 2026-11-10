@@ -211,8 +211,19 @@ export interface SingleMachine {
 	 * Extras chosen at deploy, with every option as applied (defaults filled in), and the addresses
 	 * they serve and notes on them (e.g. how to sign in); those are empty until it has an address.
 	 */
-	/** docker: runs in a Docker container. */
-	extras: { id: string; name: string; options: Record<string, string>; docker?: boolean; links: string[]; notes: string[] }[];
+	/**
+	 * docker: runs in a Docker container. download: a file it made to download (e.g. a VPN client's
+	 * config), from GET /api/machines/{id}/downloads/{extra id}; absent until it's ready.
+	 */
+	extras: {
+		id: string;
+		name: string;
+		options: Record<string, string>;
+		docker?: boolean;
+		links: string[];
+		notes: string[];
+		download?: { label: string; filename: string };
+	}[];
 	/** Machines whose extras point at this one, e.g. the agents of a Wazuh server. */
 	usedBy?: { id: string; name: string }[];
 	/** Pro Labs: the instance it's part of, its lab and its role there; empty for a machine on its own. */

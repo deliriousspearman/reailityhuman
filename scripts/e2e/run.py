@@ -53,6 +53,10 @@ class Failed(Exception):
     pass
 
 
+# The panel under test (main sets it): "download" checks fetch from it.
+PANEL: "Panel"
+
+
 # The panel's API ------------------------------------------------------------------------------------
 
 
@@ -215,6 +219,17 @@ def check_once(check: tuple, m: dict, windows: bool) -> None:
             raise Failed(f"{url}: HTTP {e.code}") from e
         if text and text not in body:
             raise Failed(f"{url}: no {text!r} in the page")
+    elif kind == "download":
+        _, extra_id, text = check
+        url = f"{PANEL.url}/api/machines/{m['id']}/downloads/{extra_id}"
+        try:
+            req = urllib.request.Request(url, headers={"X-Lab-User": OWNER})
+            with urllib.request.urlopen(req, context=INSECURE, timeout=30) as res:
+                body = res.read().decode(errors="replace")
+        except urllib.error.HTTPError as e:
+            raise Failed(f"{extra_id}'s download: HTTP {e.code}") from e
+        if (expected := fill(text, m, windows)) not in body:
+            raise Failed(f"{extra_id}'s download: no {expected!r} in it")
     elif kind == "ssh":
         _, command, expected = check
         out = ssh(m["ip"], m["username"], m["password"], fill(command, m, windows), windows)
@@ -243,6 +258,8 @@ def describe(check: tuple) -> str:
         return f"port {check[1]}"
     if check[0] == "http":
         return f"{check[1]}://…:{check[2]}{check[3]}"
+    if check[0] == "download":
+        return f"{check[1]}'s download"
     return f"ssh {check[1][:40]}"
 
 
@@ -412,7 +429,8 @@ def main() -> int:
     p.add_argument("--report", type=Path, default=Path("e2e-report.md"))
     args = p.parse_args()
 
-    panel = Panel(args.panel)
+    global PANEL
+    panel = PANEL = Panel(args.panel)
     config = panel.get("/config")
     if not config.get("vcenterConfigured"):
         print("The panel says vCenter isn't configured.", file=sys.stderr)

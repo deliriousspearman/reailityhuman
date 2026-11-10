@@ -6,11 +6,50 @@ Checks are tuples:
   ("http", scheme, port, path, text)         answers 2xx/3xx, and the page has `text` (or None)
   ("ssh", command, expected)                 run on the machine as its user (Windows: PowerShell);
                                              the output, stripped, must contain `expected`
+  ("download", extra id, text)               the panel serves the extra's download, containing `text`
 Commands can use {ip}, {username} and {password} (single-quote-safe for sh, and for PowerShell).
 An extra not listed here only gets the checks every machine gets.
 """
 
+import base64
+
 CHINOOK_TRACKS = "3503"
+
+
+def as_root(script: str) -> str:
+    """An ssh check's command running a shell script as root (sudo with the machine's password)."""
+    encoded = base64.b64encode(script.encode()).decode()
+    return f"echo {{password}} | sudo -S -p '' bash -c \"$(echo {encoded} | base64 -d)\""
+
+
+# A WireGuard client on the server itself, from the config the panel offers: its interface goes into
+# a network namespace, while its UDP socket stays outside, so the tunnel runs over the LAN address.
+WG_CLIENT = """
+ip netns del e2e 2>/dev/null || true
+trap 'ip netns del e2e 2>/dev/null' EXIT
+ip netns add e2e
+ip link add wge2e type wireguard
+wg setconf wge2e <(wg-quick strip /home/$SUDO_USER/wireguard/client.conf)
+ip link set wge2e netns e2e
+ip -n e2e addr add 10.66.0.2/32 dev wge2e
+ip -n e2e link set lo up
+ip -n e2e link set wge2e up
+ip -n e2e route add 10.66.0.0/24 dev wge2e
+ip netns exec e2e ping -c3 -W2 10.66.0.1 >/dev/null && echo tunnel-ok
+"""
+
+# An OpenVPN client on the server itself, from the config the panel offers (no routes, as both ends
+# are on one machine).
+# (By its PID file: pkill -f would match this script's own command line.)
+OVPN_CLIENT = """
+pid=/tmp/e2e-openvpn.pid
+[ -s $pid ] && kill "$(cat $pid)" 2>/dev/null; rm -f $pid /tmp/e2e-openvpn.log
+trap '[ -s $pid ] && kill "$(cat $pid)" 2>/dev/null' EXIT
+cp /home/$SUDO_USER/openvpn/client.ovpn /tmp/e2e-client.ovpn
+openvpn --config /tmp/e2e-client.ovpn --route-nopull --daemon --writepid $pid --log /tmp/e2e-openvpn.log
+for i in $(seq 30); do grep -q 'Initialization Sequence Completed' /tmp/e2e-openvpn.log && break; sleep 1; done
+grep -q 'Initialization Sequence Completed' /tmp/e2e-openvpn.log && echo tunnel-ok
+"""
 
 CASES: dict[str, list[dict]] = {
     "nginx": [{"options": {}, "checks": [("http", "http", 80, "/", None)]}],
@@ -79,6 +118,42 @@ CASES: dict[str, list[dict]] = {
         }
     ],
     "ftp": [{"options": {}, "checks": [("tcp", 21)]}],
+    "wireguard": [
+        {
+            "options": {},
+            "checks": [
+                ("ssh", "systemctl is-active -q wg-quick@wg0 && echo wg-up", "wg-up"),
+                ("download", "wireguard", "Endpoint = {ip}:51820"),
+                ("ssh", as_root(WG_CLIENT), "tunnel-ok"),
+            ],
+        },
+        {
+            "options": {"gateway": "yes"},
+            "checks": [
+                ("ssh", "sysctl -n net.ipv4.ip_forward", "1"),
+                ("download", "wireguard", "AllowedIPs = 10.66.0.0/24, "),
+                ("ssh", as_root(WG_CLIENT), "tunnel-ok"),
+            ],
+        },
+    ],
+    "openvpn": [
+        {
+            "options": {},
+            "checks": [
+                ("ssh", "systemctl is-active -q openvpn-server@server && echo ovpn-up", "ovpn-up"),
+                ("download", "openvpn", "remote {ip} 1194"),
+                ("ssh", as_root(OVPN_CLIENT), "tunnel-ok"),
+            ],
+        },
+        {
+            "options": {"proto": "tcp", "gateway": "yes"},
+            "checks": [
+                ("tcp", 1194),
+                ("download", "openvpn", "proto tcp"),
+                ("ssh", as_root(OVPN_CLIENT), "tunnel-ok"),
+            ],
+        },
+    ],
     "minio": [
         {
             "options": {"bucket": "e2e"},

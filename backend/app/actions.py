@@ -295,6 +295,8 @@ def _await_setup(vc: VCenter, vm, m: Machine) -> None:
     password and SSH, then any extras; Windows: after sysprep, a restart and its first-boot script), so
     "ready" means people can sign in. Each extra's own log is on the machine (extras.log_file)."""
     family = m.family
+    # Files from before (a reset or redeploy makes new ones, e.g. a VPN's new keys) are gone at once.
+    set_machine(m.id, downloads=None)
     if family == "image":
         add_log(m.id, "A complete image, as it is: nothing to set up.", "muted")
         return
@@ -339,12 +341,41 @@ def _await_setup(vc: VCenter, vm, m: Machine) -> None:
         if outcome == "ok":
             x = extras.find(what)
             add_log(m.id, f"{x.name if x else what} is ready")
+    _collect_downloads(vc, vm, m, [what for outcome, what, _ in results if outcome == "ok"])
     if failed:
         first = failed[0][0]
         raise SetupError(
             "; ".join(f"{i} didn't install: {detail or 'no output'} (log: {extras.log_file(family, i)})" for i, detail in failed),
             _log_tail(vc, vm, m, extras.log_file(family, first)),
         )
+
+
+DOWNLOAD_MAX_BYTES = 256 * 1024
+
+
+def _collect_downloads(vc: VCenter, vm, m: Machine, ready: list[str]) -> None:
+    """Keeps a copy of the files the ready extras made for people to download (extras.yaml
+    `download`), read from the user's home as the user, so the machine page offers them even while
+    the machine is off. One that can't be read is only a warning: the machine works, and the file can
+    be fetched over SSH."""
+    out = {}
+    for extra_id in ready:
+        x = extras.find(extra_id)
+        if x is None or x.download is None:
+            continue
+        path = f"/home/{m.username}/{x.download.path}"
+        try:
+            content = vc.read_guest_file(vm, m.username, m.password, path)
+        except VSphereError as e:
+            log.warning("reading %s on %s: %s", path, m.name, e)
+            content = None
+        if not content or len(content.encode()) > DOWNLOAD_MAX_BYTES:
+            add_log(m.id, f"Couldn't read the {x.download.label} from the machine: copy {path} from it over SSH instead.", "warn")
+            continue
+        out[extra_id] = {"filename": extras.download_filename(x, m.name), "label": x.download.label, "content": content}
+        add_log(m.id, f"{x.download.label}: ready to download from this page", "muted")
+    if out:
+        set_machine(m.id, downloads=out)
 
 
 ACTIONS: dict[str, Callable[[VCenter, Machine], None]] = {

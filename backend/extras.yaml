@@ -18,6 +18,10 @@
 #   notes      sentences shown with them, e.g. how to sign in. In both, {ip} is its address,
 #              {username} its user, {hostname} its name, and {<option id>} that option's value. A
 #              link or note can be {text, when: {<option id>: [values]}}, shown only for those values.
+#   download   optional, Linux only: a file the script makes for people to download from the machine
+#              page, e.g. a VPN client's config: {path (in the user's home, e.g. wireguard/client.conf),
+#              filename (what it's saved as; {hostname} is filled in), label (the button's text)}. The
+#              panel reads it once the extra is ready and keeps a copy; a reset makes it again.
 #   options    fields shown when the extra is ticked. Each value reaches the script as a shell
 #              variable of the same name, already validated and quoted; scripts never get raw input.
 #                type      hostname: a DNS name, optionally "*."-prefixed; text: matched by `pattern`;
@@ -1045,6 +1049,238 @@
       fi
       systemctl enable -q vsftpd
       systemctl restart vsftpd
+
+# VPN servers to practise with: each makes one client config, which the panel reads once it's ready
+# and offers on the machine page (`download`), so it can be downloaded without SSH. The client
+# connects to this machine's address on the LAN. A reset or redeploy makes new keys and a new config.
+
+- id: wireguard
+  name: WireGuard server
+  category: VPN
+  description: A WireGuard VPN server (wg-quick, interface wg0) with one client, whose config you download from this page. Optionally a gateway to the LAN, with NAT.
+  ports: [51820]
+  download:
+    path: wireguard/client.conf
+    filename: "{hostname}.conf"
+    label: WireGuard config
+  notes:
+    - "Download the client config here and import it into the WireGuard app, or on Linux: sudo wg-quick up ./{hostname}.conf. In the tunnel the server is {subnet}.1 and the client {subnet}.2."
+    - text: "The client reaches the LAN through this machine too, with NAT."
+      when: {gateway: ["yes"]}
+    - "It connects to {ip} on UDP port 51820: if this machine's address changes, change Endpoint in the config to match. On the machine, sudo wg show shows the peer; its configuration is /etc/wireguard/wg0.conf."
+  options:
+    - id: subnet
+      label: Tunnel network
+      help: The first three numbers of the tunnel's /24 network, e.g. 10.66.0 for 10.66.0.0/24. A private range other than the LAN's.
+      type: text
+      default: "10.66.0"
+      pattern: "(10\\.(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)|172\\.(1[6-9]|2\\d|3[01])|192\\.168)\\.(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)"
+    - id: gateway
+      label: Gateway to the LAN
+      help: The client reaches the LAN through this machine (IP forwarding and NAT), not just this machine.
+      type: boolean
+      default: "no"
+  debian:
+    packages: [wireguard-tools, nftables]
+    script: |
+      command -v wg >/dev/null || { echo "This template has no WireGuard: rebuild it with today's prepare.sh."; exit 1; }
+      ip=$(lab_ip)
+      case "$ip" in "$subnet".*) echo "The tunnel network $subnet.0/24 is the LAN's own: choose another."; exit 1 ;; esac
+      dev=$(ip -4 route show default | awk '{print $5; exit}')
+      lan=$(ip -o -4 route show dev "$dev" scope link proto kernel | awk '{print $1; exit}')
+      umask 077
+      mkdir -p /etc/wireguard
+      server_key=$(wg genkey)
+      client_key=$(wg genkey)
+      psk=$(wg genpsk)
+      server_pub=$(printf '%s' "$server_key" | wg pubkey)
+      client_pub=$(printf '%s' "$client_key" | wg pubkey)
+      allowed="$subnet.0/24"
+      nat=""
+      if [ "$gateway" = yes ]; then
+        [ -n "$lan" ] || { echo "Couldn't find the LAN's network on $dev, to be its gateway."; exit 1; }
+        allowed="$allowed, $lan"
+        echo "net.ipv4.ip_forward = 1" >/etc/sysctl.d/90-lab-wireguard.conf
+        sysctl -q -p /etc/sysctl.d/90-lab-wireguard.conf
+        cat >/etc/wireguard/lab-nat.nft <<EOF
+      # Written by the lab panel's WireGuard extra: the client's traffic to the LAN leaves as this machine.
+      table ip lab_wireguard {
+        chain nat {
+          type nat hook postrouting priority 100;
+          ip saddr $subnet.0/24 oifname "$dev" masquerade
+        }
+      }
+      EOF
+        nat="PostUp = nft -f /etc/wireguard/lab-nat.nft
+      PostDown = nft delete table ip lab_wireguard"
+      fi
+      cat >/etc/wireguard/wg0.conf <<EOF
+      # Written by the lab panel's WireGuard extra.
+      [Interface]
+      Address = $subnet.1/24
+      ListenPort = 51820
+      PrivateKey = $server_key
+      $nat
+
+      # The client: its config is on the machine page, and in /home/$username/wireguard.
+      [Peer]
+      PublicKey = $client_pub
+      PresharedKey = $psk
+      AllowedIPs = $subnet.2/32
+      EOF
+      home=/home/$username
+      install -d -m 700 -o "$username" -g "$(id -gn "$username")" "$home/wireguard"
+      cat >"$home/wireguard/client.conf" <<EOF
+      # WireGuard client for $hostname ($ip), made by the lab panel.
+      [Interface]
+      PrivateKey = $client_key
+      Address = $subnet.2/32
+
+      [Peer]
+      PublicKey = $server_pub
+      PresharedKey = $psk
+      Endpoint = $ip:51820
+      AllowedIPs = $allowed
+      PersistentKeepalive = 25
+      EOF
+      chown "$username:$(id -gn "$username")" "$home/wireguard/client.conf"
+      systemctl enable -q wg-quick@wg0
+      systemctl restart wg-quick@wg0
+      lab_open 51820/udp
+      systemctl is-active -q wg-quick@wg0 || { echo "WireGuard didn't start: journalctl -u wg-quick@wg0 says why."; exit 1; }
+
+- id: openvpn
+  name: OpenVPN server
+  category: VPN
+  description: An OpenVPN server with its own certificate authority (easy-rsa) and one client, whose .ovpn config (certificates inline) you download from this page. Optionally a gateway to the LAN, with NAT.
+  ports: [1194]
+  download:
+    path: openvpn/client.ovpn
+    filename: "{hostname}.ovpn"
+    label: OpenVPN config
+  notes:
+    - "Download the client config here and import it into OpenVPN Connect, or on Linux: sudo openvpn --config {hostname}.ovpn. In the tunnel the server is {subnet}.1."
+    - text: "The client reaches the LAN through this machine too, with NAT."
+      when: {gateway: ["yes"]}
+    - "It connects to {ip} on port 1194 ({proto}): if this machine's address changes, change remote in the config to match. On the machine, the configuration is /etc/openvpn/server/server.conf and the certificate authority is in /etc/openvpn/server/easy-rsa/pki."
+  options:
+    - id: proto
+      label: Protocol
+      help: UDP is usual; TCP gets through firewalls that only let TCP out.
+      type: choice
+      default: udp
+      choices:
+        - {value: udp, label: UDP}
+        - {value: tcp, label: TCP}
+    - id: subnet
+      label: Tunnel network
+      help: The first three numbers of the tunnel's /24 network, e.g. 10.67.0 for 10.67.0.0/24. A private range other than the LAN's.
+      type: text
+      default: "10.67.0"
+      pattern: "(10\\.(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)|172\\.(1[6-9]|2\\d|3[01])|192\\.168)\\.(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)"
+    - id: gateway
+      label: Gateway to the LAN
+      help: The client reaches the LAN through this machine (IP forwarding and NAT), not just this machine.
+      type: boolean
+      default: "no"
+  debian:
+    packages: [openvpn, easy-rsa, nftables]
+    script: |
+      [ -x /usr/share/easy-rsa/easyrsa ] && command -v openvpn >/dev/null || { echo "This template has no OpenVPN: rebuild it with today's prepare.sh."; exit 1; }
+      ip=$(lab_ip)
+      case "$ip" in "$subnet".*) echo "The tunnel network $subnet.0/24 is the LAN's own: choose another."; exit 1 ;; esac
+      dev=$(ip -4 route show default | awk '{print $5; exit}')
+      lan=$(ip -o -4 route show dev "$dev" scope link proto kernel | awk '{print $1; exit}')
+      conf=/etc/openvpn/server
+      umask 077
+      # The certificate authority, the server's certificate and the client's: elliptic-curve keys, no passphrases.
+      rm -rf "$conf/easy-rsa"
+      cp -r /usr/share/easy-rsa "$conf/easy-rsa"
+      cd "$conf/easy-rsa"
+      export EASYRSA_BATCH=1 EASYRSA_ALGO=ec EASYRSA_CURVE=prime256v1 EASYRSA_PKI="$conf/easy-rsa/pki"
+      ./easyrsa init-pki >/dev/null
+      EASYRSA_REQ_CN="$hostname VPN CA" ./easyrsa build-ca nopass >/dev/null 2>&1
+      ./easyrsa build-server-full server nopass >/dev/null 2>&1
+      ./easyrsa build-client-full client nopass >/dev/null 2>&1
+      openvpn --genkey secret "$conf/tls-crypt.key"
+      pki=$conf/easy-rsa/pki
+      push=""
+      if [ "$gateway" = yes ]; then
+        [ -n "$lan" ] || { echo "Couldn't find the LAN's network on $dev, to be its gateway."; exit 1; }
+        read -r lan_net lan_mask < <(python3 -c 'import ipaddress, sys; n = ipaddress.ip_network(sys.argv[1]); print(n.network_address, n.netmask)' "$lan")
+        push="push \"route $lan_net $lan_mask\""
+        echo "net.ipv4.ip_forward = 1" >/etc/sysctl.d/90-lab-openvpn.conf
+        sysctl -q -p /etc/sysctl.d/90-lab-openvpn.conf
+        cat >"$conf/lab-nat.nft" <<EOF
+      # Written by the lab panel's OpenVPN extra: the client's traffic to the LAN leaves as this machine.
+      table ip lab_openvpn {
+        chain nat {
+          type nat hook postrouting priority 100;
+          ip saddr $subnet.0/24 oifname "$dev" masquerade
+        }
+      }
+      EOF
+        cat >/etc/systemd/system/lab-openvpn-nat.service <<EOF
+      [Unit]
+      Description=NAT for the OpenVPN server's clients (lab panel)
+      Before=openvpn-server@server.service
+
+      [Service]
+      Type=oneshot
+      RemainAfterExit=yes
+      ExecStart=/usr/sbin/nft -f $conf/lab-nat.nft
+      ExecStop=/usr/sbin/nft delete table ip lab_openvpn
+
+      [Install]
+      WantedBy=multi-user.target
+      EOF
+        systemctl daemon-reload
+        systemctl enable -q --now lab-openvpn-nat
+      fi
+      cat >"$conf/server.conf" <<EOF
+      # Written by the lab panel's OpenVPN extra.
+      port 1194
+      proto $proto
+      dev tun
+      topology subnet
+      server $subnet.0 255.255.255.0
+      ca $pki/ca.crt
+      cert $pki/issued/server.crt
+      key $pki/private/server.key
+      dh none
+      tls-crypt $conf/tls-crypt.key
+      tls-version-min 1.2
+      keepalive 10 60
+      persist-key
+      persist-tun
+      verb 3
+      $push
+      EOF
+      [ "$proto" = udp ] && echo "explicit-exit-notify 1" >>"$conf/server.conf"
+      home=/home/$username
+      install -d -m 700 -o "$username" -g "$(id -gn "$username")" "$home/openvpn"
+      {
+        echo "# OpenVPN client for $hostname ($ip), made by the lab panel."
+        echo "client"
+        echo "dev tun"
+        echo "proto $proto"
+        echo "remote $ip 1194"
+        echo "resolv-retry infinite"
+        echo "nobind"
+        echo "persist-key"
+        echo "persist-tun"
+        echo "remote-cert-tls server"
+        echo "verb 3"
+        echo "<ca>"; openssl x509 -in "$pki/ca.crt"; echo "</ca>"
+        echo "<cert>"; openssl x509 -in "$pki/issued/client.crt"; echo "</cert>"
+        echo "<key>"; cat "$pki/private/client.key"; echo "</key>"
+        echo "<tls-crypt>"; grep -v '^#' "$conf/tls-crypt.key"; echo "</tls-crypt>"
+      } >"$home/openvpn/client.ovpn"
+      chown "$username:$(id -gn "$username")" "$home/openvpn/client.ovpn"
+      systemctl enable -q openvpn-server@server
+      systemctl restart openvpn-server@server
+      lab_open "1194/$proto"
+      systemctl is-active -q openvpn-server@server || { echo "OpenVPN didn't start: journalctl -u openvpn-server@server says why."; exit 1; }
 
 - id: desktop
   name: Desktop (XFCE)

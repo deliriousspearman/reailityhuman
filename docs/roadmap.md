@@ -1,6 +1,6 @@
 # Roadmap
 
-Where lab-deploy stands and what comes next. Last updated 2026-10-30. The original design is in
+Where lab-deploy stands and what comes next. Last updated 2026-11-10. The original design is in
 [plan.md](plan.md); building templates is in [build-templates.md](build-templates.md).
 
 ## Where things stand
@@ -34,7 +34,8 @@ deployed by CI.
 WordPress, Nextcloud, databases with sample data, mail (and iRedMail), FTP, desktop and RDP, IIS,
 SQL Server, Outlook, MinIO, Python versions (2.7 and 3.8–3.15). Docker, with Juice Shop, DVWA,
 Uptime Kuma, Vaultwarden, Gitea and Grafana baked into the templates so they work offline. Wazuh and
-Zabbix, each as a server and an agent that picks its server machine and registers itself.
+Zabbix, each as a server and an agent that picks its server machine and registers itself. VPN servers
+(WireGuard and OpenVPN, 2026-11-10; see [3b](#3b-vpn-servers-wireguard-and-openvpn--built-2026-11-10)).
 
 **Active Directory** (finished 2026-10-20). Two extras:
 - **Domain controller** (Windows Server): installs AD DS and DNS and creates a new forest; the machine's
@@ -269,6 +270,32 @@ before this keep their old images until they're next rebuilt. Ubuntu 26.04 rebui
 - **[External resources](external-resources.md):** everything downloaded from outside, besides the
   ISOs and the OSes' own packages.
 
+### 3b. VPN servers: WireGuard and OpenVPN — built 2026-11-10
+
+Asked 2026-11-10, after a review of the services (the other suggestions are under "Suggested" below).
+Two Linux extras in a new **VPN** category, each with one client, optionally a gateway to the LAN
+(IP forwarding and NAT):
+- **WireGuard** (UDP 51820): `wg-quick@wg0`, a tunnel /24 (default 10.66.0.0/24), a preshared key;
+- **OpenVPN** (UDP or TCP 1194): its own CA from easy-rsa (EC keys), `dh none`, tls-crypt, a tunnel /24
+  (default 10.67.0.0/24), a `.ovpn` with everything inline.
+
+**The client config downloads from the machine page.** A new `download` field on an extra names a
+file in the user's home; once the extra is ready the worker reads it through VMware Tools (as it reads
+the status file) and keeps a copy in `machines.downloads`, served by
+`GET /api/machines/{id}/downloads/{extra}` and shown as a button by the extra's notes. It works while
+the machine is off; a reset or redeploy clears it and reads the new one (new keys). One that can't be
+read is a warning, with the path to copy over SSH. The configs hold private keys, so like passwords
+they're open to anyone who reaches the panel until there's sign-in.
+
+**Templates:** offered on Ubuntu 26.04, rebuilt for them on 2026-11-10 (its end-to-end run is below
+once done). In `plannedExtras` (shown as Soon) on Ubuntu 24.04, 22.04, Debian 13, 12, Kali and Parrot
+until each is next rebuilt. Enterprise Linux not yet (OpenVPN needs EPEL there).
+
+**Tested:** the backend's tests (9 new: the field's checks, keeping, serving and replacing the file, a
+failed read); both scripts run in Ubuntu 26.04 containers with a real client connecting (WireGuard
+from a network namespace, OpenVPN on the same host). E2E cases in `scripts/e2e/checks.py`, with a new
+`download` check.
+
 ### 4. Keep a vCenter session open in the API — not needed (checked 2026-10-27)
 
 This was planned because signing in to vCenter took 14 to 20 seconds, which made opening a console
@@ -379,6 +406,14 @@ during sign-in), and Windows machines.
   its open questions wait on Jake.
 - **Mail:** Mailpit (a mail catcher for apps) and GoPhish (phishing exercises), both small Docker
   extras; Mailcow for a realistic organisation mail server.
+- **From the services review (2026-11-10)**, in rough order:
+  - VPN and remote access: strongSwan IPsec site-to-site (two machines, each picking the other),
+    FreeRADIUS (for OpenVPN and the firewalls), later Headscale;
+  - network services: a DNS server (being planned next), Samba file shares, Squid, HAProxy, OpenLDAP,
+    Keycloak. Not a DHCP server until per-user networks: on the flat LAN it would fight the lab's own;
+  - blue team: Suricata and Zeek into ELK or Graylog, Velociraptor (server and client), OpenVAS only
+    where there's internet for its feeds;
+  - practice targets (small Docker extras): WebGoat, crAPI, DVGA, Mutillidae II, bWAPP.
 - **More Docker services:** Jake to pick the ones that matter most to learners.
 - **Wazuh and Zabbix agents on Windows;** Wazuh's vulnerability detection as an option where there's
   internet and disk.

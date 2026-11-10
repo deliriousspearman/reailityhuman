@@ -285,6 +285,21 @@ class Option:
 
 
 @dataclass(frozen=True)
+class Download:
+    """A file an extra makes on the machine that people download from the machine page, e.g. a VPN
+    client's config. The panel reads it once the extra is ready (actions._collect_downloads) and keeps
+    a copy, so it can be downloaded while the machine is off."""
+
+    # Relative to the machine's user's home folder (Linux), e.g. "wireguard/client.conf".
+    path: str
+    # What the browser saves it as; {hostname} is filled in, e.g. "{hostname}.ovpn". (WireGuard's is
+    # just "{hostname}.conf": wg-quick names the interface after the file, at most 15 characters.)
+    filename: str
+    # The button's text, e.g. "WireGuard config".
+    label: str
+
+
+@dataclass(frozen=True)
 class Extra:
     id: str
     name: str
@@ -329,6 +344,8 @@ class Extra:
     # An ISO of files it installs from, not container images (lab-media-<id>-<version>.iso, made by
     # fetch-images.sh too), attached like the image CDs; its script copies them with lab_media.
     media_iso: str = ""
+    # A file it makes for people to download from the machine page (Linux only), or None.
+    download: Download | None = None
     # family -> (packages, script)
     families: dict[str, tuple[tuple[str, ...], str]] = field(default_factory=dict)
 
@@ -378,6 +395,15 @@ def extras() -> dict[str, Extra]:
             if key in e:
                 raise ValueError(f"extras.yaml: {e['id']}: '{key}' is no longer used: clashes come from ports alone")
         images = tuple(e.get("dockerImages") or ([e["dockerImage"]] if e.get("dockerImage") else []))
+        download = None
+        if d := e.get("download"):
+            download = Download(path=d["path"], filename=d["filename"], label=d["label"])
+            if not _DOWNLOAD_PATH.fullmatch(download.path) or ".." in download.path.split("/"):
+                raise ValueError(f"extras.yaml: {e['id']}: download path '{download.path}' must be a plain path inside the user's home")
+            if not _DOWNLOAD_NAME.fullmatch(download.filename.replace("{hostname}", "x")):
+                raise ValueError(f"extras.yaml: {e['id']}: download filename '{download.filename}' must be a plain file name")
+            if "windows" in e:
+                raise ValueError(f"extras.yaml: {e['id']}: downloads are for Linux extras only")
         out[e["id"]] = Extra(
             id=e["id"],
             name=e["name"],
@@ -398,6 +424,7 @@ def extras() -> dict[str, Extra]:
             images=images,
             more_images=tuple(e.get("moreImages", [])),
             media_iso=e.get("mediaIso", ""),
+            download=download,
             families={f: (tuple(e[f].get("packages", [])), e[f]["script"]) for f in FAMILIES if f in e},
         )
     for x in out.values():
@@ -406,6 +433,15 @@ def extras() -> dict[str, Extra]:
         if bad := [i for i in x.more_images if i not in out or not out[i].image]:
             raise ValueError(f"extras.yaml: {x.id}: moreImages names {', '.join(bad)}, which isn't an extra with a dockerImage")
     return {i: replace(x, conflicts=tuple(y.id for y in out.values() if clashes(x, y))) for i, x in out.items()}
+
+
+_DOWNLOAD_PATH = re.compile(r"[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*")
+_DOWNLOAD_NAME = re.compile(r"[A-Za-z0-9._-]+")
+
+
+def download_filename(x: Extra, hostname: str) -> str:
+    """What the browser saves an extra's download as, for this machine."""
+    return x.download.filename.replace("{hostname}", hostname) if x.download else ""
 
 
 def _conditional(entry) -> tuple[str, dict[str, tuple[str, ...]]]:

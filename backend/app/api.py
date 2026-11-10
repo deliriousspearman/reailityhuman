@@ -9,7 +9,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, FastAPI, HTTPException, Query
+from fastapi import APIRouter, FastAPI, HTTPException, Query, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select, text
 from sqlalchemy.exc import IntegrityError
@@ -73,6 +73,12 @@ def machine_out(m: Machine, log: bool = True, machines: list[Machine] | None = N
                 "options": c["options"],
                 "docker": bool(x and x.image),
                 **extras.details(c, m.ip or "", m.username, m.name),
+                # A file it made to download (GET /machines/{id}/downloads/{extra}); not its content.
+                **(
+                    {"download": {"label": d["label"], "filename": d["filename"]}}
+                    if (d := (m.downloads or {}).get(c["id"]))
+                    else {}
+                ),
             }
             for c in m.extras or []
         ],
@@ -339,6 +345,21 @@ def list_machines(db: Db) -> list[dict]:
 def read_machine(machine_id: str, db: Db, after: int | None = None) -> dict:
     """`after`: only the log lines after that line's id (`logAfter` in the answer says so)."""
     return machine_out(get_machine(db, machine_id), after=after)
+
+
+@router.get("/machines/{machine_id}/downloads/{extra_id}")
+def download_file(machine_id: str, extra_id: str, db: Db) -> Response:
+    """A file the machine's extra made for people to download, e.g. a VPN client's config, as the
+    panel read it once the extra was ready (so it's there while the machine is off)."""
+    m = get_machine(db, machine_id)
+    d = (m.downloads or {}).get(extra_id)
+    if d is None:
+        raise HTTPException(404, "This machine has no such file to download: it may still be setting up, or have been reset.")
+    return Response(
+        d["content"],
+        media_type="text/plain; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{d["filename"]}"', "Cache-Control": "no-store"},
+    )
 
 
 @router.get("/state")

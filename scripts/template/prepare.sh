@@ -103,6 +103,9 @@ declare -A EXTRA_PACKAGES_DEBIAN=(
 	[join-domain-linux]="realmd sssd sssd-tools libnss-sss libpam-sss adcli samba-common-bin krb5-user packagekit"
 	# The Meridian Pro Lab's web portal: Apache and PHP (already baked for the web extras), so it needs no rebuild.
 	[meridian-web]="apache2 libapache2-mod-php"
+	# VPN servers (switched off until the extra sets them up); their tools are clients too.
+	[wireguard]="wireguard-tools nftables"
+	[openvpn]="openvpn easy-rsa nftables"
 )
 # shellcheck disable=SC2034 # used through EXTRA_PACKAGES, a reference to the family's list
 declare -A EXTRA_PACKAGES_RHEL=(

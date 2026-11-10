@@ -48,6 +48,10 @@ class Machine(Base):
     # The image ISOs it was deployed with (extras.media), one CD each at first boot: a reset attaches
     # these same ones again, as its first-boot scripts expect those images. None before image CDs.
     media: Mapped[list | None] = mapped_column(JSON)
+    # Files its extras made for people to download (extras.yaml `download`), read from the machine once
+    # they're ready: {extra id: {"filename", "label", "content"}}. A VPN's client config holds its
+    # private key, so like the password, anyone who can reach the panel can read these for now.
+    downloads: Mapped[dict | None] = mapped_column(JSON)
     # Pro Labs: the instance it belongs to ("i-xxxx"), its lab's slug and its role name in the lab
     # (labs.yaml); None for a machine deployed on its own.
     instance_id: Mapped[str | None] = mapped_column(String(16), index=True)
