@@ -179,6 +179,7 @@ The settings you're most likely to change:
 | `EXTRAS_TIMEOUT_SECONDS` | 600 | Linux deploys with heavy extras time out |
 | `WINDOWS_SETUP_TIMEOUT_SECONDS` | 1200 | Windows deploys with several extras time out |
 | `MACHINE_DOMAIN` | empty | Machines should get names like `web01.lab.example` in certificates and defaults |
+| `BLOCKED_TEMPLATES` | empty | A template's build turns out broken: `ubuntu/26.04` (comma-separated) refuses its deploys and builds, with a message, until it's fixed and the line removed |
 | `VCENTER_*` | — | vCenter moved, or its password changed (see [section 8](#8-vcenter-setup-and-privileges)) |
 | `BUILD_HTTP_IP` | empty | Template builds' VMs can't reach the server: set it to the server's LAN address |
 | `BUILD_MEDIA_DIR` | empty | Offline: the media folder `fetch-media.sh` made, for the Windows builds |

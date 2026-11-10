@@ -53,6 +53,9 @@ class Settings(BaseSettings):
     # Domain for default names, e.g. a certificate's: "lab.example" makes it "ubuntu01.lab.example".
     # Empty: just the machine's name.
     machine_domain: str = ""
+    # Templates withdrawn for now, e.g. "ubuntu/26.04,debian/13": not deployed or built, whatever
+    # templates.yaml says (a build found broken, until it's fixed and rebuilt). Empty: none.
+    blocked_templates: str = ""
     password_length: int = 16
 
     # Templates on demand (docs/plan.md, section 11). The templates folder, and the datastore's ISO
@@ -91,6 +94,9 @@ class Settings(BaseSettings):
     @property
     def sqlalchemy_url(self) -> str:
         return self.database_url.replace("postgresql://", "postgresql+psycopg://", 1)
+
+    def template_blocked(self, template: str, version: str) -> bool:
+        return f"{template}/{version}" in {t.strip() for t in self.blocked_templates.split(",") if t.strip()}
 
     @property
     def capture_configured(self) -> bool:

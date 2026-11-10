@@ -376,12 +376,18 @@ def panel_state(db: Db, with_jobs: bool = Query(False, alias="jobs")) -> dict:
     return out
 
 
+# A template an admin has withdrawn (BLOCKED_TEMPLATES).
+BLOCKED = "{tpl.template} {tpl.version} is withdrawn for now while a problem with its build is fixed: choose another version."
+
+
 @router.post("/machines", status_code=201)
 def deploy_machine(req: DeployRequest, db: Db) -> dict:
     cfg = settings()
     tpl = catalogue.find(req.template, req.version)
     if tpl is None:
         raise HTTPException(422, f"{req.template} {req.version} can't be deployed yet.")
+    if cfg.template_blocked(tpl.template, tpl.version):
+        raise HTTPException(409, BLOCKED.format(tpl=tpl))
     if not NAME_RULE.match(req.name):
         raise HTTPException(422, NAME_PROBLEM)
     owner = req.owner.strip().lower()
@@ -1038,6 +1044,8 @@ def delete_template(template: str, version: str, db: Db, who: Actor) -> dict:
 def build_template(template: str, version: str, db: Db, who: Actor) -> dict:
     """Builds a deleted (or failed) template now, rather than at its next deploy."""
     tpl = find_template(template, version)
+    if settings().template_blocked(template, version):
+        raise HTTPException(409, BLOCKED.format(tpl=tpl))
     if tpl.build is None:
         raise HTTPException(409, f"{template} {version} has no build recipe in templates.yaml.")
     if builds.is_built(db, tpl):

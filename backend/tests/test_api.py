@@ -566,3 +566,15 @@ def test_polls_leave_out_passwords_and_send_only_new_log_lines(queued):
     assert state["instances"] == client.get("/api/instances").json()
     assert "jobs" not in state
     assert client.get("/api/state?jobs=1").json()["jobs"] == client.get("/api/jobs").json()
+
+
+def test_blocked_templates_are_neither_deployed_nor_built(queued, monkeypatch):
+    from app.config import settings
+
+    monkeypatch.setattr(settings(), "blocked_templates", "debian/13, ubuntu/26.04")
+    r = client.post("/api/machines", json={"template": "ubuntu", "version": "26.04", "owner": "jo", "name": "blocked01", "hours": 2})
+    assert r.status_code == 409 and "withdrawn for now" in r.json()["detail"]
+    assert client.post("/api/templates/ubuntu/26.04/build").status_code == 409
+    assert queued == []
+    monkeypatch.setattr(settings(), "blocked_templates", "")
+    assert deploy(queued, name="ok01")["state"] == "running"
