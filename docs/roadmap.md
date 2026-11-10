@@ -93,7 +93,6 @@ the next step (an xrdp debug log while resizing) is agreed.
 | Item | What's needed | Then |
 |---|---|---|
 | Disk space for the next templates | None now: 89 GB free on 2026-10-29 after Jake deleted unused templates. ISOs stay; unused templates are deleted instead (templates on demand), and every ISO a recipe needs is back on the datastore | Windows 10 (~23 GB), Metasploitable 3 Windows (~14 GB), Parrot 6 (~19 GB, plus its import base while building) |
-| CI runner `lms-docker` | Runner is back online, but pipelines now fail at `git clone`: GitLab moved behind a reverse proxy, so its clone URL is `https://gitlab.hedgylabs.org` (→ 192.168.0.6), which the runner's job containers can't resolve. Fix is on the runner host (.149, Jake's): `extra_hosts = ["gitlab.hedgylabs.org:192.168.0.6"]` under `[runners.docker]`. Deploying by hand meanwhile (`deploy/deploy.sh`, after the tests pass locally) | CI deploys again; a retried pipeline redeploys the same commit, harmless |
 | Windows 7, Server 2008 R2, ESXi | Their ISOs (not downloadable without a licence or a Broadcom login) | A legacy Windows build; nested ESXi |
 | vuln-ad fixes | A yes to push the fixes to `workstation/vuln-workstation.ps1`, committed locally in the vuln-ad repo | Push to `jake/vuln-ad` |
 | Firefox black screen | Testing on the one affected Firefox: without extensions, then with `privacy.resistFingerprinting` off. Canvas blockers stop the screen drawing | A fix if it isn't the browser's settings |
@@ -287,14 +286,27 @@ the machine is off; a reset or redeploy clears it and reads the new one (new key
 read is a warning, with the path to copy over SSH. The configs hold private keys, so like passwords
 they're open to anyone who reaches the panel until there's sign-in.
 
-**Templates:** offered on Ubuntu 26.04, rebuilt for them on 2026-11-10 (its end-to-end run is below
-once done). In `plannedExtras` (shown as Soon) on Ubuntu 24.04, 22.04, Debian 13, 12, Kali and Parrot
-until each is next rebuilt. Enterprise Linux not yet (OpenVPN needs EPEL there).
+**Templates:** offered on Ubuntu 26.04 (rebuilt for them on 2026-11-10). In `plannedExtras` (shown as
+Soon) on Ubuntu 24.04, 22.04, Debian 13, 12, Kali and Parrot until each is next rebuilt. Enterprise
+Linux not yet (OpenVPN needs EPEL there).
 
 **Tested:** the backend's tests (9 new: the field's checks, keeping, serving and replacing the file, a
 failed read); both scripts run in Ubuntu 26.04 containers with a real client connecting (WireGuard
-from a network namespace, OpenVPN on the same host). E2E cases in `scripts/e2e/checks.py`, with a new
-`download` check.
+from a network namespace, OpenVPN on the same host). End to end on Ubuntu 26.04 (2026-11-10): the
+lifecycle and all four cases pass (WireGuard with and without the gateway, OpenVPN on UDP, and on TCP
+with the gateway), each with a real client from the downloaded config. E2E cases in
+`scripts/e2e/checks.py`, with a new `download` check.
+
+**Found on the way (2026-11-10):**
+- **The rebuilt Ubuntu 26.04 gave machines a user with no password.** cloud-init blanks the password
+  (`passwd -d`) when `passwd -u` prints anything on stderr, and SSSD's `sss_cache` (from the Join a
+  domain (Linux) packages) complains on every user change while SSSD isn't set up. The panel now sets
+  the password again with `usermod -p` first thing in `runcmd`, on every Linux machine. Ubuntu 26.04
+  was withdrawn meanwhile with a new setting, `BLOCKED_TEMPLATES`, and is back.
+- **Ubuntu 26.04's AppArmor profile for wg-quick** lets the `nft` it runs read no files, so the
+  gateway's NAT is `nft` commands in `PostUp`; and wg-quick reads configs only from `/etc/wireguard`,
+  which the machine page's note now says.
+- **CI works again** (the runner can clone); its backend tests needed `openssh-client`.
 
 ### 4. Keep a vCenter session open in the API — not needed (checked 2026-10-27)
 

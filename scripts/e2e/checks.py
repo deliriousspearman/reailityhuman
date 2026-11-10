@@ -24,12 +24,14 @@ def as_root(script: str) -> str:
 
 # A WireGuard client on the server itself, from the config the panel offers: its interface goes into
 # a network namespace, while its UDP socket stays outside, so the tunnel runs over the LAN address.
+# (From /etc/wireguard: Ubuntu 26.04's AppArmor profiles for wg and wg-quick read configs only there.)
 WG_CLIENT = """
 ip netns del e2e 2>/dev/null || true
-trap 'ip netns del e2e 2>/dev/null' EXIT
+trap 'ip netns del e2e 2>/dev/null; rm -f /etc/wireguard/e2e.conf' EXIT
+grep -v -E '^(Address|DNS|MTU|Table|PreUp|PostUp|PreDown|PostDown|SaveConfig) *=' /home/$SUDO_USER/wireguard/client.conf >/etc/wireguard/e2e.conf
 ip netns add e2e
 ip link add wge2e type wireguard
-wg setconf wge2e <(wg-quick strip /home/$SUDO_USER/wireguard/client.conf)
+wg setconf wge2e /etc/wireguard/e2e.conf
 ip link set wge2e netns e2e
 ip -n e2e addr add 10.66.0.2/32 dev wge2e
 ip -n e2e link set lo up
