@@ -103,8 +103,10 @@ the next step (an xrdp debug log while resizing) is agreed.
   bundle and the install uploads them; Windows Server 2016 and 2012 R2, TrueNAS SCALE 25.04 and CORE
   13.0 and Ubuntu Desktop got entries; Alpine, FreeBSD and the packet capture appliance install from
   the media folder; the install sets up and builds the capture appliance. Each was built through the
-  installer in the lab. Still open: rebuilding templates from the Admin page offline, the PHP versions
-  offered without a PHP mirror, CachyOS (internet only), and a full rehearsal without internet.
+  installer in the lab. Also on 2026-11-16: the panel's own builds work offline (the install hands the
+  builder each template's command for this network, and the media folder), and PHP's versions aren't
+  offered when there was no PHP mirror to build them from. Still open: CachyOS (internet only), and a
+  full rehearsal without internet (Jake's, on the offline network).
 - The [project review of 2026-10-23](review-2026-10-23.md): its five top priorities (a datastore
   reserve, machines that depend on each other, cancelling a stuck job, expired machines out of the
   quota, capacity on the deploy form). The rest is kept for later.

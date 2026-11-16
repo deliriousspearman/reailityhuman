@@ -107,11 +107,11 @@ def test_capture_is_built_with_all_or_when_named():
 
 
 def test_update_env_replaces_or_adds(tmp_path):
-    from .capture import update_env
+    from .envfile import update
 
     env = tmp_path / "lab-deploy.env"
     env.write_text("# CAPTURE_VM=\nVCENTER_HOST=v\nCAPTURE_VM=old\n")
-    update_env(env, {"CAPTURE_VM": "Labs/Capture/lab-capture", "BUILD_HTTP_IP": "192.0.2.10"})
+    update(env, {"CAPTURE_VM": "Labs/Capture/lab-capture", "BUILD_HTTP_IP": "192.0.2.10"})
     assert env.read_text() == "# CAPTURE_VM=\nVCENTER_HOST=v\nCAPTURE_VM=Labs/Capture/lab-capture\nBUILD_HTTP_IP=192.0.2.10\n"
 
 
@@ -146,3 +146,63 @@ def test_zabbix_extras_need_their_mirror_offline():
     assert missing("zabbix-agent") == "no zabbix mirror in the config"
     assert missing("zabbix-agent", {"zabbix": "http://mirror.lab.example/zabbix"}) == ""
     assert missing("zabbix", internet=True) == ""
+
+
+def test_php_versions_are_offered_only_with_their_mirror(tmp_path):
+    """Ubuntu 22.04 and 24.04 take PHP 5.6-8.5 from Ondřej Surý's PPA: without its mirror their builds
+    leave them out, so the panel's catalogue mustn't offer them. 26.04's PHP is Ubuntu's own."""
+    from . import catalogue
+
+    m = Manifest(SRC)
+    assert m.choices_mirrors == {"php": "php"}
+    with_ppa = [t.id for t in m.templates.values() if "{mirror.php}" in " ".join(t.vars)]
+    assert set(with_ppa) == {"ubuntu-22.04", "ubuntu-24.04"}
+    state = {"templates": {
+        "ubuntu-24.04": {"status": "built", "name": "tpl-ubuntu-24.04-x", "extras": ["apache"], "choices_left_out": ["php"]},
+        "ubuntu-22.04": {"status": "built", "name": "tpl-ubuntu-22.04-x", "extras": ["apache"], "choices_left_out": []},
+    }}
+    catalogue.write(m, state, "Labs/Templates", tmp_path)
+    written = {f"{e['template']} {e['version']}": e for e in yaml.safe_load((tmp_path / "templates.yaml").read_text())}
+    assert "php" not in (written["ubuntu 24.04"].get("choices") or {})
+    assert written["ubuntu 22.04"]["choices"]["php"]  # built with the mirror: kept
+
+
+def test_the_panels_builder_gets_the_install_commands(tmp_path):
+    """After an offline install, the panel's own builds (Admin → Templates) run the install's command:
+    this network's mirrors and media, the extras it built, and no online prepare scripts."""
+    import json
+    from types import SimpleNamespace
+
+    from . import catalogue
+
+    m = Manifest(SRC)
+    media = tmp_path / "media"
+    (media / "images").mkdir(parents=True)
+    (media / "images" / "big.ova").write_text("x")
+    (media / "windows" / "legacy").mkdir(parents=True)
+    (media / "windows" / "legacy" / "OpenSSH.msi").write_text("x")
+    cfg = SimpleNamespace(get=lambda t, k: {("media", "port"): 8690}[(t, k)],
+                          mirrors=lambda: {"ubuntu": "http://mirror.lab.example/ubuntu", "internet": False})
+    ctx = SimpleNamespace(manifest=m, cfg=cfg, media_dir=media, http_ip="192.0.2.10")
+    state = {"templates": {
+        "ubuntu-24.04": {"status": "built", "name": "x", "extra_vars": {"extras": "nginx,docker"}},
+        "windows-server-2016": {"status": "built", "name": "y", "extra_vars": {}},
+        "mikrotik": {"status": "built", "name": "z", "extra_vars": {}},  # imported: never rebuilt by the panel
+        "ubuntu-22.04": {"status": "failed"},
+    }}
+    root = tmp_path / "root"
+    root.mkdir()
+    (root / "lab-deploy.env").write_text("VCENTER_HOST=v\n")
+    catalogue.prepare_builder(ctx, state, root)
+    builds = json.loads((root / "offline-builds.json").read_text())
+    assert set(builds) == {"ubuntu/24.04", "windows-server/2016"}
+    ubuntu = builds["ubuntu/24.04"]
+    assert ubuntu["argv"][:3] == ["bash", "packer/build.sh", "ubuntu"] and ubuntu["media"] is True
+    assert "apt_mirror=http://mirror.lab.example/ubuntu" in ubuntu["argv"] and "media_url=http://192.0.2.10:8690" in ubuntu["argv"]
+    assert "extras=nginx,docker" in ubuntu["argv"]
+    assert "media_dir=/media" in builds["windows-server/2016"]["argv"] and not builds["windows-server/2016"]["media"]
+    assert (root / "build" / "packer" / "build.sh").is_file() and (root / "build" / "scripts").is_dir()
+    assert (root / "media" / "windows" / "legacy" / "OpenSSH.msi").is_file() and not (root / "media" / "images").exists()
+    env = (root / "lab-deploy.env").read_text()
+    assert "BUILD_OFFLINE=/app/offline-builds.json" in env and "BUILD_MEDIA_DIR=/media" in env and "BUILD_HTTP_IP=192.0.2.10" in env
+    assert "./offline-builds.json:/app/offline-builds.json:ro" in catalogue.OVERRIDE and "./media:/media:ro" in catalogue.OVERRIDE

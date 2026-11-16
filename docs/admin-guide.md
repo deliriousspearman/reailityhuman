@@ -191,7 +191,9 @@ The settings you're most likely to change:
 | `BLOCKED_TEMPLATES` | empty | A template's build turns out broken: `ubuntu/26.04` (comma-separated) refuses its deploys and builds, with a message, until it's fixed and the line removed |
 | `VCENTER_*` | — | vCenter moved, or its password changed (see [section 8](#8-vcenter-setup-and-privileges)) |
 | `BUILD_HTTP_IP` | empty | Template builds' VMs can't reach the server: set it to the server's LAN address |
-| `BUILD_MEDIA_DIR` | empty | Offline: the media folder `fetch-media.sh` made, for the Windows builds |
+| `BUILD_MEDIA_DIR` | empty | Offline: the media folder `fetch-media.sh` made, as the builder sees it (the offline install sets it) |
+| `BUILD_OFFLINE` | empty | Offline: how each template is built on this network, written by the offline install. With it, the panel's own builds (Delete then deploy, or **Build**) use this network's mirrors and media folder, not the internet |
+| `BUILD_MEDIA_PORT` | 8690 | The port the builder serves the media folder on during an offline build |
 | `BUILD_TIMEOUT_MINUTES` | 180 | A build that takes longer is stopped |
 | `CAPTURE_VM` | empty | The capture appliance is set up: its VM, e.g. `Labs/Capture/lab-capture` ([section 13](#13-packet-capture)) |
 | `CAPTURE_MAX_SECONDS`, `CAPTURE_MAX_MB` | 600, 50 | Captures should be allowed to run longer or grow larger |

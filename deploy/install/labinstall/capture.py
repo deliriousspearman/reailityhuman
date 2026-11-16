@@ -10,7 +10,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from . import builds
+from . import builds, envfile
 from .checks import OK, WARN, Context
 from .out import out
 
@@ -98,7 +98,7 @@ def install(ctx: Context, state: dict, root: Path, logs: Path, verbose: bool) ->
                  log=log, tail=builds.tail(log))
         return
 
-    update_env(root / "lab-deploy.env", {"CAPTURE_VM": PATH})
+    envfile.update(root / "lab-deploy.env", {"CAPTURE_VM": PATH})
     subprocess.run(["docker", "compose", "--project-directory", str(root), "up", "-d", "--no-build", "--force-recreate", "api"],
                    check=False)
     vm = ctx.vc.vm_at(ctx.inv, PATH)
@@ -117,16 +117,3 @@ def panel_key(root: Path) -> str:
                         "from app.capture import public_key; print(public_key() or '')"],
                        capture_output=True, text=True, check=False)
     return r.stdout.strip() if r.returncode == 0 else ""
-
-
-def update_env(path: Path, values: dict[str, str]) -> None:
-    """Sets these lines in an env file (lab-deploy.env), replacing any already there."""
-    lines = path.read_text().splitlines() if path.exists() else []
-    seen = set()
-    for n, line in enumerate(lines):
-        key = line.split("=", 1)[0]
-        if key in values and not line.startswith("#"):
-            lines[n] = f"{key}={values[key]}"
-            seen.add(key)
-    lines += [f"{k}={v}" for k, v in values.items() if k not in seen]
-    path.write_text("\n".join(lines) + "\n")

@@ -116,7 +116,10 @@ def build_all(ctx: Context, state: dict, state_path: Path, logs: Path, verbose: 
                 if t.base:
                     name = next((x for x in ctx.vc.vm_names(ctx.inv.template_folder) if x.startswith(f"{t.id}-")), "")
                 records[t.id] = {"status": "built", "name": name, "extras": item.extras,
-                                 "left_out": item.left_out, "minutes": round(minutes, 1),
+                                 "left_out": item.left_out, "choices_left_out": item.choices_left_out,
+                                 # What it was built with here, so the panel's builder can build it the
+                                 # same way again (catalogue.offline_builds).
+                                 "extra_vars": item.extra_vars, "minutes": round(minutes, 1),
                                  "date": f"{date.today():%Y-%m-%d}", "log": str(log)}
                 taken.add(name)
                 out.ok(f"{t.id}: built in {minutes:.0f} min ({name})")

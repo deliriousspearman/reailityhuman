@@ -371,3 +371,39 @@ def test_a_running_build_stops_when_cancelled(throwaway, builds_queued, monkeypa
     run_builds(builds_queued)
     t = {(t["template"], t["version"]): t for t in client.get("/api/templates").json()}[("ubuntu", "22.04")]
     assert t["state"] == "failed" and t["detail"] == "Stopped: cancelled by sam."
+
+
+def test_offline_builds_use_the_install_command(tmp_path, monkeypatch):
+    """BUILD_OFFLINE (written by the offline install): a template it lists builds with the install's
+    command (this network's mirrors and media), the rest with templates.yaml's recipe."""
+    import json
+
+    offline = tmp_path / "offline-builds.json"
+    offline.write_text(json.dumps({"ubuntu/24.04": {"argv": ["bash", "packer/build.sh", "ubuntu", "-var", "apt_mirror=http://mirror.lab.example/ubuntu"],
+                                                    "env": {}, "media": True}}))
+    monkeypatch.setenv("BUILD_OFFLINE", str(offline))
+    settings.cache_clear()
+    try:
+        cmd = builds.command(catalogue.find("ubuntu", "24.04"), 9)
+        assert cmd[:5] == ["bash", "packer/build.sh", "ubuntu", "-var", "apt_mirror=http://mirror.lab.example/ubuntu"]
+        assert re.fullmatch(r"vm_name=tpl-ubuntu-24.04-\d{8}-j9", cmd[-1])
+        assert builds.command(catalogue.find("ubuntu", "22.04"), 9)[3:5] == ["-var", "version=22.04"]  # not listed: its recipe
+        assert builds.offline_build(settings(), catalogue.find("ubuntu", "24.04"))["media"] is True
+    finally:
+        settings.cache_clear()
+
+
+def test_the_media_server_serves_the_folder(tmp_path):
+    import socket
+    import urllib.request
+
+    (tmp_path / "linux").mkdir()
+    (tmp_path / "linux" / "file.txt").write_text("media")
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        port = s.getsockname()[1]
+    server = builds.MediaServer(tmp_path, port)
+    try:
+        assert urllib.request.urlopen(f"http://127.0.0.1:{port}/linux/file.txt", timeout=5).read() == b"media"
+    finally:
+        server.close()

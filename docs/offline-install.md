@@ -168,7 +168,11 @@ sudo lab-bundle/install.sh
 5. **Builds the templates** one at a time, each logged in `/srv/lab-deploy/install/logs/`. A failed
    build doesn't stop the rest.
 6. **Writes the panel's catalogue** from what was built (`/srv/lab-deploy/templates.yaml`). Templates
-   not built show as "coming soon".
+   not built show as "coming soon". It also **sets the panel's builder up to build here**: its copy
+   of `packer/` and `scripts/`, the media folder (less the imported images) in `/srv/lab-deploy/media`,
+   and each template's build command for this network (`offline-builds.json`, `BUILD_OFFLINE`). So
+   a template deleted from the Admin page builds again from the mirrors and media, on its next deploy
+   or with **Build**, as the install built it.
 7. **Builds the packet capture appliance**, as the [admin guide](admin-guide.md#13-packet-capture) has
    people do by hand: the capture port group and `Labs/Capture` (`scripts/setup_capture.py`), the
    appliance with the panel's key, `CAPTURE_VM` in `lab-deploy.env`, and the appliance powered on. A

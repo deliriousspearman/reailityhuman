@@ -565,8 +565,11 @@ own (Zabbix's).
 template's verdict), `manifest.py`, `builds.py` (the builds and the media server), `images.py` (the
 extras' image ISOs: which each needs, from `fetch-images.sh --list`, and uploading the bundle's),
 `capture.py` (the packet capture appliance's setup and build), `catalogue.py` (the panel's catalogue
-from what was built), `tests.py` (the end-to-end tests), `isos.py`, `report.py`, `out.py` and
-`vcenter.py`.
+from what was built, and the builder's offline setup: `offline-builds.json`, its copy of `packer/`,
+`scripts/` and the media folder), `tests.py` (the end-to-end tests), `isos.py`, `report.py`, `out.py` and
+`vcenter.py` and `envfile.py`. The manifest's `[choices_mirrors]` names per-template choices that need
+a mirror (PHP's versions, from Ondřej Surý's PPA): a build without it leaves them out, and the
+catalogue doesn't offer them.
 
 ## 14. Configuration reference
 
@@ -600,7 +603,9 @@ All settings come from the environment (`lab-deploy.env` on the server; an examp
 | `BUILD_DIR` | `/build` | The builder's copy of `packer/` and `scripts/` (deploy.sh copies them to `build-next/`; `deploy/update-builder.sh` moves them here between builds) |
 | `BUILD_LOGS_DIR` | `/build-logs` | Each build's whole output |
 | `BUILD_HTTP_IP` | — | The address build VMs fetch answer files from (Packer's web server) |
-| `BUILD_MEDIA_DIR` | — | Offline: `fetch-media.sh`'s media folder, for the Windows builds |
+| `BUILD_MEDIA_DIR` | — | Offline: `fetch-media.sh`'s media folder, as the builder sees it |
+| `BUILD_OFFLINE` | — | Offline: a JSON file the offline install writes (`catalogue.offline_builds`): for each template it built, `{"argv", "env", "media"}`. The builder runs that command instead of the recipe and its prepare scripts, and serves `BUILD_MEDIA_DIR` on `BUILD_MEDIA_PORT` while a `media` build runs |
+| `BUILD_MEDIA_PORT` | `8690` | Where the builder serves the media folder during an offline build |
 | `BUILD_TIMEOUT_MINUTES` | `180` | A longer build is stopped |
 | `BLOCKED_TEMPLATES` | — | Template versions withdrawn for now, e.g. `ubuntu/26.04,debian/13`: not deployed or built, whatever `templates.yaml` says |
 | `CAPTURE_VM`, `CAPTURE_HOST` | — | The capture appliance, by its VM in vCenter (address from VMware Tools) or its address. Both empty: captures are off |

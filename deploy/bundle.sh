@@ -3,7 +3,7 @@
 # network without internet, in one folder to carry across. Run it from the repo, on a Linux machine
 # with internet, Docker and about 15 GB free (35 GB with --images); Node.js too, or its image is used:
 #
-#   deploy/bundle.sh <folder> [--images] [--no-media] [--no-image-isos]
+#   deploy/bundle.sh <folder> [--images] [--no-media] [--no-image-isos] [--office <folder>]
 #
 #   <folder>/install.sh, lab-install.toml.example   the install, and its config to fill in
 #   <folder>/repo/       the project at this commit, with the panel's website built
@@ -15,21 +15,29 @@
 #   <folder>/SHA256SUMS  every file's checksum, which install.sh checks first
 #
 # Not in it: the ISOs (scripts/isos/fetch.sh <name> --no-upload, then into the datastore's ISO
-# folder), Office's files (media/windows/office/README.txt) and Parrot's OVA (media/images). Re-running
-# it into the same folder keeps the media already downloaded.
+# folder) and Parrot's OVA (media/images). Office's files (for the Outlook extra) only with --office:
+# the folder Office's download made (setup.exe, download.xml and Office\Data; docs/setup-vsphere.md,
+# "Office's files, for Outlook"), copied into media/windows/office. Re-running it into the same folder
+# keeps the media already downloaded.
 set -euo pipefail
 
-out=${1:?"usage: deploy/bundle.sh <folder> [--images] [--no-media] [--no-image-isos]"}
+out=${1:?"usage: deploy/bundle.sh <folder> [--images] [--no-media] [--no-image-isos] [--office <folder>]"}
 shift
-images=() media=1 image_isos=1
-for a in "$@"; do
-	case $a in
+images=() media=1 image_isos=1 office=""
+while (($#)); do
+	case $1 in
 		--images) images=(--images) ;;
 		--no-media) media=0 ;;
 		--no-image-isos) image_isos=0 ;;
-		*) echo "bundle.sh: unknown option $a" >&2; exit 1 ;;
+		--office) office=${2:?"--office needs the folder Office's download made"}; shift ;;
+		*) echo "bundle.sh: unknown option $1" >&2; exit 1 ;;
 	esac
+	shift
 done
+if [[ -n $office ]] && ! [[ -f $office/setup.exe && -f $office/download.xml && -d $office/Office/Data ]]; then
+	echo "bundle.sh: $office isn't Office's download: it needs setup.exe, download.xml and Office/Data" >&2
+	exit 1
+fi
 repo=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 mkdir -p "$out"/{images,debs}
 out=$(cd "$out" && pwd)
@@ -100,6 +108,12 @@ done
 if ((media)); then
 	step "The media folder"
 	"$repo/scripts/isos/fetch-media.sh" "$out/media" "${images[@]}"
+fi
+if [[ -n $office ]]; then
+	step "Office's files, for the Outlook extra"
+	mkdir -p "$out/media/windows/office"
+	cp -a "$office/." "$out/media/windows/office/"
+	echo "  $(du -sh "$out/media/windows/office" | cut -f1)"
 fi
 
 if ((image_isos)); then

@@ -68,6 +68,7 @@ class Manifest:
         self.extras_media: dict[str, list[str]] = data.get("extras", {})
         self.extras_online_only: dict[str, str] = data.get("extras_online_only", {})
         self.extras_mirrors: dict[str, str] = data.get("extras_mirrors", {})
+        self.choices_mirrors: dict[str, str] = data.get("choices_mirrors", {})
         # The ISOs each extra needs attached at deploy (images.py): the Docker extras' and k3s's.
         self.image_isos: dict[str, list[str]] = images.needed(src)
         catalogue = yaml.safe_load((src / "backend/templates.yaml").read_text())

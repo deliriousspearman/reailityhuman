@@ -73,6 +73,13 @@ class Settings(BaseSettings):
     build_media_dir: str = ""
     # A build that takes longer is stopped (the slowest take about 70 minutes).
     build_timeout_minutes: int = 180
+    # Offline (written by the offline install, deploy/install): how each template is built here, with
+    # this network's mirrors and media folder, by "<template>/<version>": {"argv": [...], "env": {...},
+    # "media": true when its build fetches from the media folder over HTTP}. A template listed builds
+    # with that instead of templates.yaml's recipe and its prepare scripts (which download); the media
+    # folder (BUILD_MEDIA_DIR) is served on BUILD_MEDIA_PORT while it builds. Empty: online builds.
+    build_offline: Path | None = None
+    build_media_port: int = 8690
 
     # Packet captures (app/capture.py): the capture appliance (packer/capture), by its VM in vCenter
     # (its address is read from VMware Tools, so DHCP can give it any), or by its address. Both empty:

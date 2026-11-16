@@ -8,6 +8,8 @@ built, a machine on its own is queued, and a Pro Lab's go back to waiting their 
 Builds run on the builder (deploy/compose.yaml), one at a time.
 """
 
+import functools
+import http.server
 import json
 import logging
 import os
@@ -16,6 +18,7 @@ import shutil
 import signal
 import subprocess
 import tempfile
+import threading
 import time
 from collections.abc import Callable
 from pathlib import Path
@@ -207,12 +210,45 @@ def vm_name(tpl: catalogue.LiveTemplate, job_id: int) -> str:
     return f"tpl-{slug}-{utcnow():%Y%m%d}-j{job_id}"
 
 
+def offline_build(cfg: Settings, tpl: catalogue.LiveTemplate) -> dict | None:
+    """How the offline install says to build this template on this network (BUILD_OFFLINE), or None."""
+    if not cfg.build_offline:
+        return None
+    try:
+        builds = json.loads(cfg.build_offline.read_text())
+    except (OSError, ValueError) as e:
+        raise BuildError(f"Can't read BUILD_OFFLINE ({cfg.build_offline}): {e}") from e
+    return builds.get(key(tpl.template, tpl.version))
+
+
 def command(tpl: catalogue.LiveTemplate, job_id: int) -> list[str]:
-    """packer/build.sh <dir> -var …, run from the work folder."""
-    cmd = ["bash", "packer/build.sh", tpl.build.packer]
-    for k, v in tpl.build.vars.items():
-        cmd += ["-var", f"{k}={v}"]
+    """packer/build.sh <dir> -var …, run from the work folder: the offline install's command for it
+    (BUILD_OFFLINE), or templates.yaml's recipe."""
+    if offline := offline_build(settings(), tpl):
+        cmd = list(offline["argv"])
+    else:
+        cmd = ["bash", "packer/build.sh", tpl.build.packer]
+        for k, v in tpl.build.vars.items():
+            cmd += ["-var", f"{k}={v}"]
     return cmd + ["-var", f"vm_name={vm_name(tpl, job_id)}"]
+
+
+class MediaServer:
+    """Serves the media folder to an offline build's VM (its media_url), as the offline install does."""
+
+    def __init__(self, folder: Path, port: int):
+        handler = functools.partial(_Quiet, directory=str(folder))
+        self.httpd = http.server.ThreadingHTTPServer(("0.0.0.0", port), handler)
+        threading.Thread(target=self.httpd.serve_forever, daemon=True).start()
+
+    def close(self) -> None:
+        self.httpd.shutdown()
+        self.httpd.server_close()
+
+
+class _Quiet(http.server.SimpleHTTPRequestHandler):
+    def log_message(self, *args):
+        pass
 
 
 def clean_cut_off_builds(vc: VCenter, job_id: int) -> list[str]:
@@ -286,6 +322,7 @@ def build(job_id: int, tpl: catalogue.LiveTemplate, log_path: Path) -> str:
     if not (src / "packer" / "build.sh").is_file():
         raise BuildError(f"The builder has no copy of packer/ in {src}: deploy the panel again (deploy/deploy.sh copies it).")
     work = Path(tempfile.mkdtemp(prefix="build-"))
+    media = None  # the media folder's server, for an offline build that fetches from it
     try:
         for part in ("packer", "scripts"):
             shutil.copytree(src / part, work / part, symlinks=True, ignore=shutil.ignore_patterns("output", "lab.pkrvars.hcl"))
@@ -300,9 +337,20 @@ def build(job_id: int, tpl: catalogue.LiveTemplate, log_path: Path) -> str:
             "CHECKPOINT_DISABLE": "1",
             **{k: v for k, v in os.environ.items() if k.startswith("PACKER_PLUGIN_PATH")},
         }
+        offline = offline_build(cfg, tpl)
+        if offline:
+            env.update(offline.get("env") or {})
         deadline = time.monotonic() + cfg.build_timeout_minutes * 60
+        if offline and offline.get("media"):
+            if not cfg.build_media_dir:
+                raise BuildError("This build fetches from the media folder, but BUILD_MEDIA_DIR isn't set.")
+            try:
+                media = MediaServer(Path(cfg.build_media_dir), cfg.build_media_port)
+            except OSError as e:
+                raise BuildError(f"Couldn't serve the media folder on port {cfg.build_media_port} (is the offline install running?): {e}") from e
         with open(log_path, "ab") as out:
-            for script in tpl.build.prepare:
+            # Offline, the install's command needs none: the prepare scripts download what it brings.
+            for script in ([] if offline else tpl.build.prepare):
                 out.write(f"==> {script}\n".encode())
                 out.flush()
                 if _run_process(["bash", script], work, env, out, job_id, deadline) != 0:
@@ -311,6 +359,9 @@ def build(job_id: int, tpl: catalogue.LiveTemplate, log_path: Path) -> str:
             out.flush()
             if (code := _run_process(command(tpl, job_id), work, env, out, job_id, deadline)) != 0:
                 raise BuildError(f"Packer failed (exit code {code}).", _tail(log_path))
+        if media:
+            media.close()
+            media = None
         manifests = sorted((work / "packer" / "output").glob("*.json"), key=lambda p: p.stat().st_mtime)
         if not manifests:
             raise BuildError("Packer finished but wrote no manifest (packer/output).", _tail(log_path))
@@ -320,6 +371,8 @@ def build(job_id: int, tpl: catalogue.LiveTemplate, log_path: Path) -> str:
             raise BuildError("Packer's manifest doesn't name the template it made.", _tail(log_path))
         return f"{cfg.vcenter_template_folder.strip('/')}/{name}"
     finally:
+        if media:
+            media.close()
         shutil.rmtree(work, ignore_errors=True)
 
 

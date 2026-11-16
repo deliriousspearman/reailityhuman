@@ -553,6 +553,12 @@ mssql = ["iso:sql-server-2025", "windows/chinook/Chinook_SqlServer.sql"]
 zabbix = "zabbix"
 zabbix-agent = "zabbix"
 
+# Per-template choices (templates.yaml `choices`) that come from a repository of their own: offline,
+# without its mirror, a build passing that mirror ({mirror.<name>} in its vars) leaves them out, so
+# the panel's catalogue doesn't offer them (PHP 5.6 to 8.5 come from Ondřej Surý's PPA).
+[choices_mirrors]
+php = "php"
+
 # Extras that can't be built without internet at all.
 [extras_online_only]
 nextcloud-snap = "it installs from the Snap Store"

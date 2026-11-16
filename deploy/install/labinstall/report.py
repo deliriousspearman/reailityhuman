@@ -28,9 +28,11 @@ def print_summary(ctx: Context) -> None:
         if i.status == "built":
             out.ok(f"{i.t.id}: built already ({i.existing})")
         elif i.status == "ready":
-            if i.left_out:
-                out.warn(f"{i.t.id}: ready, but without {', '.join(f'{e} ({why})' for e, why in i.left_out.items())}",
-                         fix="add what each left-out extra needs (the ISO or media above) and rebuild, or leave it out")
+            missing = [f"{e} ({why})" for e, why in i.left_out.items()]
+            missing += [f"its {c} choices (no {ctx.manifest.choices_mirrors[c]} mirror in the config)" for c in i.choices_left_out]
+            if missing:
+                out.warn(f"{i.t.id}: ready, but without {', '.join(missing)}",
+                         fix="add what each left-out extra needs (the ISO, media or mirror above) and rebuild, or leave it out")
             else:
                 out.ok(f"{i.t.id}: ready to build")
         else:

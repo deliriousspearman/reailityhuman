@@ -34,6 +34,8 @@ class Item:
     reasons: list[str] = field(default_factory=list)
     extras: list[str] = field(default_factory=list)
     left_out: dict[str, str] = field(default_factory=dict)
+    # Per-template choices the build can't offer (no mirror for them), e.g. "php": the catalogue drops them.
+    choices_left_out: list[str] = field(default_factory=list)
     extra_vars: dict[str, str] = field(default_factory=dict)
     existing: str = ""
 
@@ -259,6 +261,10 @@ def assess(ctx: Context, t: Template, state: dict, built_names: set[str], mirror
                 item.left_out[e] = why
             else:
                 item.extras.append(e)
+        for choice, mirror in m.choices_mirrors.items():
+            if (choice in (t.entry.get("choices") or {}) and f"{{mirror.{mirror}}}" in " ".join(t.vars)
+                    and not cfg.internet and not cfg.mirror(mirror)):
+                item.choices_left_out.append(choice)
         # "none" is the server build's word for no extras; Ubuntu Desktop's takes an empty list.
         item.extra_vars[t.extras_var] = ",".join(item.extras) or ("none" if t.extras_var == "extras" else "")
     elif t.extras == "windows":
