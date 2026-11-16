@@ -135,7 +135,7 @@ export type Access = 'ssh' | 'rdp' | 'web' | 'console';
  * `vtpm`: needs a virtual TPM, which needs a key provider in vCenter;
  * `domain`: needs Active Directory, so it's deployed with a domain controller.
  */
-export type TemplateFlag = 'nested' | 'licence' | 'vtpm' | 'domain' | 'hourly';
+export type TemplateFlag = 'nested' | 'licence' | 'vtpm' | 'domain';
 
 export type TemplateCategory =
 	| 'Firewalls and routers'

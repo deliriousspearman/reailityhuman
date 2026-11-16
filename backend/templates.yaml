@@ -1096,21 +1096,3 @@
   family: image
   access: [ssh, web, console]
   webUrl: http://{ip}/
-
-# Metasploitable 3's Windows variant: a deliberately vulnerable Windows Server 2008 R2
-# (packer/metasploitable/import-ms3-win.sh: Rapid7's VMware image as it is). Built from a 2008 R2
-# evaluation that expired long ago, so Windows shuts it down every hour (the catalogue says so). Its own
-# sign-in, vagrant / vagrant, is on every machine: keep these on the lab network only.
-- template: metasploitable-windows
-  version: "3"
-  # Retired 2026-10-27 to free datastore space for the Brookfield Pro Lab; re-import with
-  # packer/metasploitable/import-ms3-win.sh when it's needed.
-  planned: true
-  # vsphere: Labs/Templates/tpl-metasploitable-3-win-20261020
-  cpu: 2
-  memoryGB: 4
-  diskGB: 60
-  username: vagrant
-  password: vagrant
-  family: image
-  access: [rdp, ssh, console]

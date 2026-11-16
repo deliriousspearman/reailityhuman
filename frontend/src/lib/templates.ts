@@ -191,18 +191,6 @@ export const templates: MachineTemplate[] = [
 		credentials: 'root / set on first deploy',
 		flags: ['nested'],
 	},
-	{
-		id: 'esxi',
-		name: 'VMware ESXi',
-		category: 'Hypervisors',
-		os: 'Other',
-		description: "VMware's hypervisor, running nested. Evaluation licence: 60 days from first boot.",
-		versions: [{ version: '8.0 U3' }, { version: '7.0 U3', eol: true }, { version: '6.7', eol: true }, { version: '6.5', eol: true }],
-		resources: { cpu: 4, memoryGB: 8, diskGB: 64 },
-		access: ['web', 'ssh', 'console'],
-		credentials: 'root / set on first deploy',
-		flags: ['nested', 'licence'],
-	},
 
 	// Mail
 	{
@@ -370,19 +358,6 @@ export const templates: MachineTemplate[] = [
 		credentials: 'msfadmin / msfadmin (2), vagrant / vagrant (3)',
 		sshUser: 'msfadmin',
 	},
-	{
-		id: 'metasploitable-windows',
-		name: 'Metasploitable 3 (Windows)',
-		category: 'Practice targets',
-		os: 'Windows',
-		description: 'Deliberately vulnerable Windows Server 2008 R2 with outdated services and weak settings.',
-		versions: [{ version: '3', eol: true }],
-		resources: { cpu: 2, memoryGB: 4, diskGB: 60 },
-		access: ['rdp', 'ssh', 'console'],
-		credentials: 'vagrant / vagrant',
-		// Rapid7's image, built from a 2008 R2 evaluation that has long expired.
-		flags: ['hourly'],
-	},
 ];
 
 export function findTemplate(id: string): MachineTemplate | undefined {
@@ -430,8 +405,4 @@ export const flagNotes: Record<NonNullable<MachineTemplate['flags']>[number], { 
 	licence: { label: 'Licence', note: 'Uses an evaluation or volume licence that an admin manages.' },
 	vtpm: { label: 'vTPM', note: 'Needs a virtual TPM, which the admin must enable in vCenter.' },
 	domain: { label: 'Needs a domain', note: 'Deploy Windows Server with the Domain controller extra first, then choose it here.' },
-	hourly: {
-		label: 'Shuts down hourly',
-		note: "Its Windows evaluation expired long ago, so Windows shuts it down every hour. Start it again from the machine's page.",
-	},
 };

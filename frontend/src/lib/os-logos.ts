@@ -51,7 +51,6 @@ export const osLogos: Record<string, OsLogo> = {
 	alpine: { title: 'Alpine Linux', color: '#0D597F', path: path['alpinelinux'] },
 	freebsd: { title: 'FreeBSD', color: '#AB2B28', path: path['freebsd'] },
 	proxmox: { title: 'Proxmox', color: '#E57000', path: path['proxmox'] },
-	esxi: { title: 'VMware', color: '#607078', path: path['vmware'] },
 	'truenas-scale': {
 		title: 'TrueNAS',
 		color: '#0095D5',
@@ -70,11 +69,6 @@ export const osLogos: Record<string, OsLogo> = {
 		path: path['parrotsecurity'],
 	},
 	metasploitable: {
-		title: 'Metasploit',
-		color: '#2596CD',
-		path: path['metasploit'],
-	},
-	'metasploitable-windows': {
 		title: 'Metasploit',
 		color: '#2596CD',
 		path: path['metasploit'],
