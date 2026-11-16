@@ -320,7 +320,12 @@ def test_runner_records_each_extra_then_deletes_the_scripts(tmp_path):
     import subprocess
 
     root, cloud = tmp_path / "lab", tmp_path / "cloud"
-    runner = extras.RUNNER.replace(extras.LOG_DIR, str(root / "log")).replace(extras.DIR, str(root)).replace("/var/lib/cloud", str(cloud))
+    runner = (
+        extras.RUNNER.replace(extras.LOG_DIR, str(root / "log"))
+        .replace(extras.DIR, str(root))
+        .replace("/var/lib/cloud", str(cloud))
+        .replace("/run/cloud-init", str(cloud / "run"))
+    )
     (root / "extras").mkdir(parents=True)
     (root / "extras" / "run.sh").write_text(runner)
     (root / "extras" / "good.sh").write_text("echo password=secret\n")
@@ -329,7 +334,10 @@ def test_runner_records_each_extra_then_deletes_the_scripts(tmp_path):
     instance.mkdir(parents=True)
     for name in ("user-data.txt", "user-data.txt.i", "cloud-config.txt", "obj.pkl", "datasource"):
         (instance / name).write_text("secret")
+    (cloud / "run").mkdir()
+    (cloud / "run" / "combined-cloud-config.json").write_text("secret")
     subprocess.run(["bash", str(root / "extras" / "run.sh"), "good", "bad"], check=True)
+    assert list((cloud / "run").iterdir()) == []
     assert (root / "extras.status").read_text() == "ok good\nfailed bad it broke\n"
     assert list((root / "extras").iterdir()) == []
     assert [p.name for p in instance.iterdir()] == ["datasource"]

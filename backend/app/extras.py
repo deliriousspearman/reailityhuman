@@ -68,7 +68,7 @@ mv "$status" {STATUS_FILE}
 # The scripts can hold passwords (the machine's, or another machine's, e.g. a domain controller's
 # administrator), and so can cloud-init's copies of the first-boot data: gone now they've run, so
 # nobody who later gets root on the machine finds them. (A reset goes back to before first boot.)
-rm -f /var/lib/cloud/instances/*/{{user-data.txt,user-data.txt.i,cloud-config.txt,obj.pkl}}
+rm -f /var/lib/cloud/instances/*/{{user-data.txt,user-data.txt.i,cloud-config.txt,obj.pkl}} /run/cloud-init/combined-cloud-config.json
 rm -f {DIR}/extras/*.sh
 """
 
