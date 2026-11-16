@@ -132,22 +132,22 @@
 	them or keep them.
 </p>
 
-<div class="section-heading">
-	<h2>Machines</h2>
+<!-- The page's own heading names the list: just whose, and how full the panel is. -->
+<div class="list-bar">
+	{#if store.user}
+		<div class="chips" role="group" aria-label="Whose machines">
+			<button type="button" class="chip" aria-pressed={whose === 'mine'} onclick={() => (whose = 'mine')}>
+				Mine ({store.myMachines.length})
+			</button>
+			<button type="button" class="chip" aria-pressed={whose === 'all'} onclick={() => (whose = 'all')}>
+				Everyone ({store.machines.length})
+			</button>
+		</div>
+	{/if}
 	{#if store.config}
-		<p>{store.machineCount} of {store.machineQuota}, {store.permanentCount} of {store.permanentQuota} kept permanently</p>
+		<p class="quota">{store.machineCount} of {store.machineQuota} machines, {store.permanentCount} of {store.permanentQuota} kept permanently</p>
 	{/if}
 </div>
-{#if store.user}
-	<div class="chips whose" role="group" aria-label="Whose machines">
-		<button type="button" class="chip" aria-pressed={whose === 'mine'} onclick={() => (whose = 'mine')}>
-			Mine ({store.myMachines.length})
-		</button>
-		<button type="button" class="chip" aria-pressed={whose === 'all'} onclick={() => (whose = 'all')}>
-			Everyone ({store.machines.length})
-		</button>
-	</div>
-{/if}
 <MachineTable
 	machines={listed}
 	owners
@@ -258,8 +258,18 @@
 		flex: 1 1 16rem;
 		max-width: 24rem;
 	}
-	.whose {
-		margin-bottom: 0.75rem;
+	.list-bar {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.5rem 1rem;
+		margin: 1.5rem 0 0.75rem;
+	}
+	.quota {
+		margin: 0 0 0 auto;
+		font-size: 0.875rem;
+		color: var(--lms-gray-3);
 	}
 	.chips {
 		display: flex;

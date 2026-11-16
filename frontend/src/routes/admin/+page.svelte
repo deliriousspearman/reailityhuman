@@ -221,11 +221,6 @@
 {/if}
 
 <div class="section-heading">
-	<h2>Lab instances <span class="soon-tag">Soon</span></h2>
-	<p>Coming with <a href="/labs">Pro Labs</a></p>
-</div>
-
-<div class="section-heading">
 	<h2 id="machines">Machines</h2>
 	<p>{store.machines.filter((m) => m.expiresAt === null).length} kept permanently</p>
 </div>
@@ -547,8 +542,5 @@
 		text-decoration: underline dotted;
 		text-underline-offset: 0.2em;
 		cursor: help;
-	}
-	h2 .soon-tag {
-		vertical-align: middle;
 	}
 </style>

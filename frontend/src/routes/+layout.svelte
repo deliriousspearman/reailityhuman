@@ -34,6 +34,13 @@
 				<p class="banner banner-warn">
 					<span><strong>vCenter isn't set up yet.</strong> Machines can't be deployed until an admin configures it.</span>
 				</p>
+			{:else if store.vcenterProblem}
+				<p class="banner banner-warn" role="alert">
+					<span>
+						<strong>The panel can't reach vCenter.</strong> Deploys and actions on machines fail until it can.
+						{store.vcenterProblem}
+					</span>
+				</p>
 			{/if}
 			<ExpiryWarning />
 			{@render children()}
@@ -114,31 +121,7 @@
 		background: rgb(0 0 0 / 0.45);
 	}
 	@media (min-width: 60rem) {
-		main > .banner {
-		margin-bottom: 1.5rem;
-	}
-	/* The result of the last action, when it failed: bottom right, above everything. */
-	.notice {
-		position: fixed;
-		right: 1rem;
-		bottom: 1rem;
-		z-index: 30;
-		display: flex;
-		align-items: center;
-		gap: 0.75rem;
-		max-width: min(28rem, calc(100vw - 2rem));
-		padding: 0.75rem 0.75rem 0.75rem 1rem;
-		border: var(--lms-border-width) solid var(--lab-error);
-		border-radius: var(--lms-radius-md);
-		background: var(--lms-panel);
-		box-shadow: 0 1rem 2rem -0.5rem rgb(0 0 0 / 0.45);
-		font-size: 0.9rem;
-		color: var(--lms-white);
-	}
-	.notice[data-tone='ok'] {
-		border-color: var(--lms-lime);
-	}
-	.scrim {
+		.scrim {
 			display: none;
 		}
 	}

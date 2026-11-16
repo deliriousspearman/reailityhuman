@@ -242,9 +242,12 @@
 			: null,
 	);
 
+	/** Why Deploy can't be pressed yet, shown next to it: the first thing to fix. */
+	const whyNot = $derived(blocker ?? nameProblem ?? ownerProblem ?? passwordProblem ?? extrasProblem);
+
 	async function deploy(event: SubmitEvent) {
 		event.preventDefault();
-		if (!template || nameProblem || ownerProblem || passwordProblem || blocker || extrasProblem || submitting) return;
+		if (!template || whyNot || submitting) return;
 		submitting = true;
 		failure = null;
 		const extras: ExtraChoice[] = chosen.map((x) => ({ id: x.id, options: { ...picked[x.id] } }));
@@ -294,6 +297,39 @@
 					<p class="hint">No more updates from the vendor. Good for practising on old systems; don't use it for anything else.</p>
 				{/if}
 			</fieldset>
+
+			<div class="field">
+				<label for="name">Name</label>
+				<input
+					id="name"
+					class="input mono-input"
+					bind:value={name}
+					autocomplete="off"
+					spellcheck="false"
+					aria-invalid={!!nameProblem}
+					aria-describedby="name-hint"
+				/>
+				<p id="name-hint" class="hint" class:problem={nameProblem}>
+					{nameProblem ?? 'Also its hostname.'}
+				</p>
+			</div>
+
+			<div class="field">
+				<label for="owner">Owner</label>
+				<input
+					id="owner"
+					class="input mono-input"
+					bind:value={owner}
+					autocomplete="username"
+					spellcheck="false"
+					placeholder="e.g. john"
+					aria-invalid={!!ownerProblem}
+					aria-describedby="owner-hint"
+				/>
+				<p id="owner-hint" class="hint" class:problem={ownerProblem}>
+					{#if ownerProblem}{ownerProblem}{:else}Your name. In vCenter it's called <code>{vmName}</code>; remembered in this browser.{/if}
+				</p>
+			</div>
 
 			{#if offered.length}
 				<fieldset>
@@ -379,39 +415,6 @@
 					<p class="hint">Set up and started on its first boot, without downloading anything. Deploying takes a little longer.</p>
 				</fieldset>
 			{/if}
-
-			<div class="field">
-				<label for="name">Name</label>
-				<input
-					id="name"
-					class="input mono-input"
-					bind:value={name}
-					autocomplete="off"
-					spellcheck="false"
-					aria-invalid={!!nameProblem}
-					aria-describedby="name-hint"
-				/>
-				<p id="name-hint" class="hint" class:problem={nameProblem}>
-					{nameProblem ?? 'Also its hostname.'}
-				</p>
-			</div>
-
-			<div class="field">
-				<label for="owner">Owner</label>
-				<input
-					id="owner"
-					class="input mono-input"
-					bind:value={owner}
-					autocomplete="username"
-					spellcheck="false"
-					placeholder="e.g. john"
-					aria-invalid={!!ownerProblem}
-					aria-describedby="owner-hint"
-				/>
-				<p id="owner-hint" class="hint" class:problem={ownerProblem}>
-					{#if ownerProblem}{ownerProblem}{:else}Your name. In vCenter it's called <code>{vmName}</code>; remembered in this browser.{/if}
-				</p>
-			</div>
 
 			<fieldset>
 				<legend>Keep it for</legend>
@@ -533,10 +536,10 @@
 					{/each}
 				</ul>
 			{/if}
-			<button class="btn btn-primary" type="submit" disabled={!!nameProblem || !!ownerProblem || !!passwordProblem || !!blocker || !!extrasProblem || submitting}>
+			<button class="btn btn-primary" type="submit" disabled={!!whyNot || submitting}>
 				<Icon name="plus" /> {submitting ? 'Deploying…' : `Deploy ${name || 'machine'}`}
 			</button>
-			{#if blocker || failure || extrasProblem}<p class="blocker" role="status"><Icon name="alert" /> {failure ?? blocker ?? extrasProblem}</p>{/if}
+			{#if failure || whyNot}<p class="blocker" role="status"><Icon name="alert" /> {failure ?? whyNot}</p>{/if}
 		</aside>
 	</form>
 {/if}

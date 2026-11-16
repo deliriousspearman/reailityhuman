@@ -17,7 +17,6 @@
 
 	const m = $derived(store.machine(page.params.id ?? ''));
 	const t = $derived(m && store.asDeployed(templateFor(m.template), m.version));
-	const canControl = $derived(m ? store.canControlMachine(m) : false);
 	const busy = $derived(m ? isBusy(m.state) : true);
 	const keepBlocker = $derived(m ? store.keepBlocker(m) : null);
 	// A lab's machine: its time, reset and destroy go with the whole lab (from the lab's page).
@@ -201,41 +200,39 @@
 			</div>
 		</div>
 
-		{#if canControl}
-			<div class="actions">
-				{#if m.state === 'stopped' || m.state === 'error'}
-					<button class="btn btn-primary" type="button" onclick={() => store.startMachine(m)}><Icon name="play" /> Start</button>
-				{/if}
-				{#if m.state === 'error'}
-					<button class="btn" type="button" onclick={redeploy}><Icon name="rebuild" /> Redeploy</button>
-				{/if}
-				{#if m.state !== 'stopped' && m.state !== 'expired'}
-					<button class="btn" type="button" disabled={busy} onclick={stop}><Icon name="stop" /> Stop</button>
-				{/if}
-				{#if busy}
-					<button class="btn" type="button" onclick={cancel}><Icon name="stop" /> Cancel job</button>
-				{/if}
-				<button class="btn" type="button" disabled={m.state !== 'running'} onclick={() => store.rebootMachine(m)}>
-					<Icon name="reboot" /> Reboot
-				</button>
-				<details class="more" bind:this={more}>
-					<summary class="btn">More</summary>
-					<div class="more-menu panel">
-						{#if !resetsWithLab}
-							<button type="button" disabled={busy || m.state === 'expired'} onclick={() => fromMenu(reset)}><Icon name="reset" /> Reset to clean</button>
-						{/if}
-						<button type="button" disabled={busy || m.state === 'expired'} onclick={() => fromMenu(redeploy)}><Icon name="rebuild" /> Redeploy</button>
-						<a href="/machines/new/{m.template}?from={m.id}"><Icon name="plus" /> Deploy another like this</a>
-						<a href="/network?machines={m.id}"><Icon name="capture" /> Capture its traffic</a>
-						{#if inLab}
-							<a href="/instances/{m.instanceId}"><Icon name="labs" /> Reset or destroy with {lab?.title ?? 'its lab'}</a>
-						{:else}
-							<button type="button" class="danger" disabled={busy} onclick={() => fromMenu(destroy)}><Icon name="trash" /> Destroy</button>
-						{/if}
-					</div>
-				</details>
-			</div>
-		{/if}
+		<div class="actions">
+			{#if m.state === 'stopped' || m.state === 'error'}
+				<button class="btn btn-primary" type="button" onclick={() => store.startMachine(m)}><Icon name="play" /> Start</button>
+			{/if}
+			{#if m.state === 'error'}
+				<button class="btn" type="button" onclick={redeploy}><Icon name="rebuild" /> Redeploy</button>
+			{/if}
+			{#if m.state !== 'stopped' && m.state !== 'expired'}
+				<button class="btn" type="button" disabled={busy} onclick={stop}><Icon name="stop" /> Stop</button>
+			{/if}
+			{#if busy}
+				<button class="btn" type="button" onclick={cancel}><Icon name="stop" /> Cancel job</button>
+			{/if}
+			<button class="btn" type="button" disabled={m.state !== 'running'} onclick={() => store.rebootMachine(m)}>
+				<Icon name="reboot" /> Reboot
+			</button>
+			<details class="more" bind:this={more}>
+				<summary class="btn">More</summary>
+				<div class="more-menu panel">
+					{#if !resetsWithLab}
+						<button type="button" disabled={busy || m.state === 'expired'} onclick={() => fromMenu(reset)}><Icon name="reset" /> Reset to clean</button>
+					{/if}
+					<button type="button" disabled={busy || m.state === 'expired'} onclick={() => fromMenu(redeploy)}><Icon name="rebuild" /> Redeploy</button>
+					<a href="/machines/new/{m.template}?from={m.id}"><Icon name="plus" /> Deploy another like this</a>
+					<a href="/network?machines={m.id}"><Icon name="capture" /> Capture its traffic</a>
+					{#if inLab}
+						<a href="/instances/{m.instanceId}"><Icon name="labs" /> Reset or destroy with {lab?.title ?? 'its lab'}</a>
+					{:else}
+						<button type="button" class="danger" disabled={busy} onclick={() => fromMenu(destroy)}><Icon name="trash" /> Destroy</button>
+					{/if}
+				</div>
+			</details>
+		</div>
 	</header>
 
 	<!-- Time left: the thing people most need to act on. -->
@@ -244,7 +241,7 @@
 			<p><strong>Kept permanently.</strong> It won't expire.</p>
 			{#if inLab}
 				<a class="btn btn-sm" href="/instances/{m.instanceId}">Change it with the lab</a>
-			{:else if canControl}
+			{:else}
 				<button class="btn btn-sm" type="button" onclick={() => store.setMachineExpiry(m, 24)}>
 					<Icon name="clock" /> Expire in 1 day instead
 				</button>
@@ -266,7 +263,7 @@
 				<div class="banner-actions">
 					<a class="btn btn-sm" href="/instances/{m.instanceId}"><Icon name="clock" /> Extend the lab</a>
 				</div>
-			{:else if canControl}
+			{:else}
 				<div class="banner-actions">
 					<button class="btn btn-sm" type="button" onclick={() => store.extendMachine(m, 2)}>
 						<Icon name="clock" /> {expired ? 'Extend 2 h and start' : '+2 h'}
@@ -278,7 +275,7 @@
 				</div>
 			{/if}
 		</div>
-		{#if canControl && keepBlocker && !inLab}<p class="keep-note">{keepBlocker}</p>{/if}
+		{#if keepBlocker && !inLab}<p class="keep-note">{keepBlocker}</p>{/if}
 	{/if}
 
 	<dl class="stats">
@@ -433,18 +430,6 @@
 	{/if}
 
 	<div class="lower">
-		<section class="vpn" aria-labelledby="vpn-title">
-			<div class="section-heading">
-				<h2 id="vpn-title">Your network <span class="soon-tag">Soon</span></h2>
-			</div>
-			<div class="vpn-panel panel">
-				<p>
-					Later, your machines will share a private network of their own, reached over a VPN. For now they sit on the LAN:
-					connect to the address above directly.
-				</p>
-				<button class="btn btn-sm" type="button" disabled><Icon name="download" /> Download VPN config</button>
-			</div>
-		</section>
 		<section aria-labelledby="activity-title">
 			<div class="section-heading">
 				<h2 id="activity-title">Activity</h2>
@@ -677,11 +662,6 @@
 	.lower .section-heading {
 		margin-top: 0;
 	}
-	@media (min-width: 64rem) {
-		.lower {
-			grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-		}
-	}
 	.loading {
 		padding-block: 3rem;
 		color: var(--lms-gray-3);
@@ -689,18 +669,6 @@
 	.waiting {
 		color: var(--lms-gray-3);
 		font-size: 0.9rem;
-	}
-	.vpn-panel {
-		display: grid;
-		gap: 0.9rem;
-		justify-items: start;
-		padding: 1rem 1.1rem;
-		border-style: dashed;
-		color: var(--lms-gray-3);
-		font-size: 0.9rem;
-	}
-	.vpn h2 .soon-tag {
-		vertical-align: middle;
 	}
 	.jobs {
 		display: grid;

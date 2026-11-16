@@ -10,6 +10,8 @@ const HOUR = 3600 * SEC;
 /** How often to poll while the tab is visible, and while it's hidden. */
 const POLL = 3 * SEC;
 const POLL_HIDDEN = 15 * SEC;
+/** How often to ask whether the panel can reach vCenter (it signs in to answer). */
+const HEALTH = 60 * SEC;
 /** Where the browser remembers who you are (no sign-in yet). */
 const USER_KEY = 'lab-deploy:user';
 
@@ -30,6 +32,8 @@ class PanelStore {
 	loaded = $state(false);
 	/** Set while the API can't be reached; cleared by the next poll that works. */
 	offline = $state<string | null>(null);
+	/** Why the panel can't reach vCenter right now (GET /health), or null while it can (or isn't set up). */
+	vcenterProblem = $state<string | null>(null);
 	/** A message about the last action, shown by the layout. */
 	notice = $state<Notice | null>(null);
 	/** Ticks every second, for countdowns and uptimes. */
@@ -38,6 +42,7 @@ class PanelStore {
 	user = $state('');
 
 	#lastPoll = 0;
+	#lastHealth = 0;
 	/** The machine whose page is open: polled in full, with its password and log, which the list
 	 * leaves out. */
 	#watched: string | null = null;
@@ -60,6 +65,7 @@ class PanelStore {
 			this.now = Date.now();
 			const every = document.visibilityState === 'visible' ? POLL : POLL_HIDDEN;
 			if (this.now - this.#lastPoll >= every) void this.refresh();
+			if (document.visibilityState === 'visible' && this.now - this.#lastHealth >= HEALTH) void this.checkHealth();
 		}, SEC);
 		document.addEventListener('visibilitychange', () => {
 			if (document.visibilityState === 'visible') void this.refresh();
@@ -103,6 +109,17 @@ class PanelStore {
 			if (!this.config) void this.loadConfig();
 		} catch (e) {
 			this.offline = e instanceof Error ? e.message : String(e);
+		}
+	}
+
+	/** Whether the panel can reach vCenter: deploys and actions fail while it can't, so say so up front. */
+	async checkHealth() {
+		this.#lastHealth = Date.now();
+		try {
+			const health = await api<{ database: string; vcenter: string }>('/health');
+			this.vcenterProblem = health.vcenter === 'ok' || health.vcenter === 'not configured' ? null : health.vcenter;
+		} catch {
+			// refresh() reports the API being unreachable.
 		}
 	}
 
@@ -208,10 +225,6 @@ class PanelStore {
 
 	machine(id: string): SingleMachine | undefined {
 		return this.machines.find((m) => m.id === id);
-	}
-
-	canControlMachine(_m: SingleMachine): boolean {
-		return true;
 	}
 
 	/** Whether this template (or this version of it) can be deployed yet. */
