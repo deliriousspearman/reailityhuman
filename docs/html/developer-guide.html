@@ -428,6 +428,11 @@ runs <code>alembic upgrade head</code> on every start.</p>
 <h2 id="5-api-reference">5. API reference<a class="headerlink" href="#5-api-reference" title="Permanent link">#</a></h2>
 <p>Everything is under <code>/api</code>. The schema is at <code>/api/openapi.json</code>; the interactive docs pages are
 switched off.</p>
+<p><strong>Requests that change something</strong> (POST, PUT, PATCH, DELETE) are refused with 403 when a browser
+sends them from another site's page: their <code>Origin</code> isn't the panel's own host (<code>Host</code>, or
+<code>X-Forwarded-Host</code>), or <code>Sec-Fetch-Site</code> says <code>cross-site</code> (<code>same_site_only</code> in <code>api.py</code>). There's no
+sign-in yet, so a plain form elsewhere could otherwise post them. Clients other than browsers send
+neither header, and pass.</p>
 <p><strong>Config and status</strong></p>
 <div class="table-wrap"><table>
 <thead>
@@ -493,7 +498,7 @@ switched off.</p>
 <tr>
 <td>POST</td>
 <td><code>/machines/{id}/cancel</code></td>
-<td>Cancel its queued or running jobs</td>
+<td>Cancel its queued or running jobs; a cancelled deploy, redeploy or reset powers its VM off</td>
 </tr>
 <tr>
 <td>POST</td>
@@ -516,6 +521,11 @@ switched off.</p>
 <td>Destroy</td>
 </tr>
 <tr>
+<td>GET</td>
+<td><code>/machines/{id}/downloads/{extra}</code></td>
+<td>A file the extra made for people to download (a VPN's client config)</td>
+</tr>
+<tr>
 <td>POST</td>
 <td><code>/machines/{id}/console</code></td>
 <td>A one-off console path (see <a href="#10-console-relay">Console relay</a>)</td>
@@ -528,6 +538,10 @@ switched off.</p>
 </tbody>
 </table></div>
 <p><code>hours</code> is 1–720 (<code>MAX_HOURS</code>). Names must match <code>^[a-z](?:[a-z0-9-]{0,13}[a-z0-9])?$</code>.</p>
+<p>A Pro Lab's machine refuses <code>extend</code>, <code>keep</code>, <code>expiry</code>, destroy, and (in a lab that resets together)
+<code>reset</code> on its own, with 409 (<code>require_on_its_own</code>): those go with the whole instance. Deploys, and
+keeping a machine, take a PostgreSQL advisory lock while they count machines and free capacity
+(<code>lock_deploys</code>), so two at once can't both take the last place.</p>
 <p><strong>Pro Lab instances</strong></p>
 <div class="table-wrap"><table>
 <thead>
@@ -583,7 +597,27 @@ switched off.</p>
 <tr>
 <td>GET</td>
 <td><code>/jobs?limit=&amp;machine=</code></td>
-<td>Jobs, newest first (<code>limit</code> 1–500)</td>
+<td>Jobs, newest first (<code>limit</code> 1–500); <code>cancelledBy</code> while one is stopping</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/templates</code></td>
+<td>Every template version: built or not, size, machines using it, whether it can be deleted</td>
+</tr>
+<tr>
+<td>DELETE</td>
+<td><code>/templates/{template}/{version}</code></td>
+<td>Delete it, keeping its ISOs (the next deploy builds it again)</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/templates/{template}/{version}/build</code></td>
+<td>Build it now (202)</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/templates/{template}/{version}/cancel</code></td>
+<td>Cancel its queued or running build</td>
 </tr>
 </tbody>
 </table></div>
@@ -692,7 +726,9 @@ captured)</p>
 <h3 id="cancellation">Cancellation<a class="headerlink" href="#cancellation" title="Permanent link">#</a></h3>
 <p><code>POST …/cancel</code> sets <code>jobs.cancelled_by</code>. Long waits call <code>vsphere.check_cancelled()</code>, which polls
 that column at most every 2 s and raises <code>Cancelled</code>. A job cancelled while still queued marks its
-machine <code>error</code>.</p>
+machine <code>error</code>. A deploy, redeploy or reset cancelled while running also powers its VM off
+(<code>_power_off_after_cancel</code>), so a half-set-up machine stops using memory. A template build's loop
+checks the same column every 10 s and stops Packer with an interrupt, which deletes its VM.</p>
 <h3 id="the-sweep">The sweep<a class="headerlink" href="#the-sweep" title="Permanent link">#</a></h3>
 <p><code>sweep</code> runs every minute (<code>cron="* * * * *"</code>, <code>queueing_lock="sweep"</code> so runs never stack), on
 the quick queue:</p>
@@ -700,10 +736,13 @@ the quick queue:</p>
 <li><code>recover_lost_jobs</code>: fail jobs whose worker's heartbeat is older than 60 s (a worker that was
     killed mid-deploy), and panel jobs the queue no longer holds.</li>
 <li><code>advance_instances</code>: move Pro Lab instances on to their next boot-order tier.</li>
-<li><code>expiry_sweep</code>: expire machines whose time is up; destroy those past the grace period.</li>
+<li><code>ensure_builds</code>: queue a template build for every template machines are waiting for, if none is
+    queued or running.</li>
+<li><code>expiry_sweep</code>: expire machines whose time is up; destroy those past the grace period. A machine
+    whose power-off at expiry failed (vCenter down) is tried again every 15 minutes, not every minute.</li>
 <li><code>reconcile</code>: one bulk vCenter read to sync power states and addresses.</li>
 <li>Once an hour, <code>prune_history</code>: finished <code>jobs</code> older than 90 days, finished Procrastinate jobs
-    older than 7 days.</li>
+    older than 7 days, and each machine's activity beyond its latest 1000 lines.</li>
 </ol>
 <h2 id="7-templates-families-and-first-boot">7. Templates, families and first boot<a class="headerlink" href="#7-templates-families-and-first-boot" title="Permanent link">#</a></h2>
 <p>A <strong>template</strong> is a vSphere template VM with a snapshot named exactly <code>clean</code>. Every machine is a
@@ -799,6 +838,11 @@ validated, quoted shell or PowerShell variable; scripts never see raw input.</p>
 records each extra's result in the status file. Helpers from <code>extras.py</code>'s <code>LIB</code> are loaded:
 <code>lab_ip</code>, <code>lab_cert</code>, <code>lab_php</code>, <code>lab_apache</code>, <code>lab_apache_site</code>, <code>lab_sql_string</code>, <code>lab_docker</code>,
 <code>lab_wait_http</code> and <code>lab_open</code>.</p>
+<p><strong>Both runners delete the extras' scripts</strong> once the status file is written (on Linux, cloud-init's
+copies of the first-boot data too: <code>user-data.txt</code>, <code>cloud-config.txt</code>, <code>obj.pkl</code>, and
+<code>/run/cloud-init/combined-cloud-config.json</code>). The scripts can hold the machine's password or another
+machine's (a domain controller's administrator), which in a Pro Lab would be a shortcut nobody meant.
+A reset goes back to the snapshot from before first boot, so they're written again.</p>
 <p><strong>Windows scripts</strong> run as SYSTEM under a PowerShell runner (<code>extras.windows_setup()</code>). Exit codes
 manage restarts:</p>
 <ul>
@@ -831,10 +875,14 @@ call from both.</p>
 <p><strong>Flags</strong> are planted by <code>actions.plant_flags</code> once a machine is set up, through VMware Tools guest
 operations:</p>
 <ul>
-<li><code>file:</code> writes the value to that path.</li>
+<li><code>file:</code> writes the value to that path (Linux: as root, by a script in <code>/tmp</code> that only the user may
+    read and that deletes itself as it starts).</li>
 <li><code>run:</code> runs the program with the value as its last argument. Brookfield's mail flag is planted
     this way, by a script its seeding extra left on the mail server.</li>
 </ul>
+<p>A flag counts as planted (<code>planted_at</code>) only once that's confirmed: the write went through, or the
+program exited with 0 (<code>VCenter.wait_guest_program</code>, up to 2 minutes for a file and 20 for a <code>run</code>).
+Otherwise its machine's log has a warning and the checklist shows it missing.</p>
 <p><strong>Reset</strong> reverts every machine to its own <code>clean</code> snapshot, in boot order, and plants new flag
 values.</p>
 <h2 id="10-console-relay">10. Console relay<a class="headerlink" href="#10-console-relay" title="Permanent link">#</a></h2>
@@ -984,14 +1032,16 @@ RDP, stop, start, reboot, reset, redeploy, destroy), then one deploy per extra w
 deploys to it.</p>
 </blockquote>
 <h2 id="13-ci-and-deployment">13. CI and deployment<a class="headerlink" href="#13-ci-and-deployment" title="Permanent link">#</a></h2>
-<p><code>.gitlab-ci.yml</code> runs on every push. The <strong>build</strong> stage has four jobs:</p>
+<p><code>.gitlab-ci.yml</code> runs on every push. The <strong>build</strong> stage has five jobs:</p>
 <ul>
 <li><code>build</code>: <code>npm run check</code> and <code>npm run build</code>.</li>
 <li><code>scripts-check</code>: shellcheck v0.10.0.</li>
 <li><code>scripts-check-windows</code>: parses the <code>.ps1</code> files with PowerShell's parser.</li>
 <li><code>backend-test</code>: pytest with Postgres and vcsim services.</li>
+<li><code>install-test</code>: the offline install's tests (<code>deploy/install/labinstall/test_*.py</code>), above all that
+    every template the panel can deploy has an offline build in <code>manifest.toml</code>.</li>
 </ul>
-<p>On the default branch, the <strong>deploy</strong> stage then runs <code>deploy/deploy.sh</code> with the frontend that
+<p>On the default branch, the <strong>deploy</strong> stage (which waits for all but <code>scripts-check-windows</code>) then runs <code>deploy/deploy.sh</code> with the frontend that
 <code>build</code> already built. It needs the CI/CD variables <code>DEPLOY_HOST</code>, <code>SITE_ADDRESS</code>, <code>SSH_PRIVATE_KEY</code>
 and <code>SSH_KNOWN_HOSTS</code>, plus <code>DEPLOY_USER</code> if it isn't the default.</p>
 <p><strong>What <code>deploy/deploy.sh</code> does:</strong></p>
@@ -1000,15 +1050,28 @@ and <code>SSH_KNOWN_HOSTS</code>, plus <code>DEPLOY_USER</code> if it isn't the 
     <code>/srv/lab-deploy</code>.</li>
 <li>Writes <code>.env</code>. On the first deploy only, it creates <code>lab-deploy.env</code> with a generated database
     password.</li>
-<li>Builds <code>api</code> and starts everything except the worker.</li>
-<li>Restarts the worker last, letting running jobs finish for up to 15 minutes.</li>
+<li>Builds <code>api</code> and starts everything except the worker and the builder.</li>
+<li>Restarts the worker, letting running jobs finish for up to 15 minutes.</li>
+<li>Updates the builder (<code>deploy/update-builder.sh</code>) only between template builds: with one queued
+    or running, a waiter in the background updates it once they've finished
+    (<code>build-logs/update-builder.log</code>), so a deploy never cuts a build off.</li>
 <li>Reloads Caddy.</li>
 </ol>
 <p>Overlapping deploys can leave the API down, so batch your pushes.</p>
 <p><strong>Offline installs</strong> use <code>deploy/bundle.sh</code> (online side) and <code>deploy/install.sh</code> with the
 <code>labinstall</code> package (offline side). These build the panel and every template from a carried-in
 bundle; see <a href="../offline-install.md">offline-install.md</a>. Its template list is
-<code>deploy/install/manifest.toml</code>; each entry's <code>catalogue</code> must exist in <code>templates.yaml</code>.</p>
+<code>deploy/install/manifest.toml</code>: each entry's <code>catalogue</code> must exist in <code>templates.yaml</code>, and every
+deployable template needs an entry (<code>install-test</code> checks both). Besides the fields its header
+describes, an entry's <code>extras_var</code> names the Packer variable its extras go to (Ubuntu Desktop's
+<code>desktop_extras</code>), and the manifest's <code>[extras_mirrors]</code> names extras that need a mirror of their
+own (Zabbix's).</p>
+<p><code>labinstall</code>'s modules: <code>config.py</code> (the config and its questions), <code>checks.py</code> (the checks, and each
+template's verdict), <code>manifest.py</code>, <code>builds.py</code> (the builds and the media server), <code>images.py</code> (the
+extras' image ISOs: which each needs, from <code>fetch-images.sh --list</code>, and uploading the bundle's),
+<code>capture.py</code> (the packet capture appliance's setup and build), <code>catalogue.py</code> (the panel's catalogue
+from what was built), <code>tests.py</code> (the end-to-end tests), <code>isos.py</code>, <code>report.py</code>, <code>out.py</code> and
+<code>vcenter.py</code>.</p>
 <h2 id="14-configuration-reference">14. Configuration reference<a class="headerlink" href="#14-configuration-reference" title="Permanent link">#</a></h2>
 <p>All settings come from the environment (<code>lab-deploy.env</code> on the server; an example is in
 <code>deploy/lab-deploy.env.example</code>). <code>config.py</code> is the source of truth.</p>
@@ -1155,6 +1218,36 @@ bundle; see <a href="../offline-install.md">offline-install.md</a>. Its template
 <td><code>BUILD_TIMEOUT_MINUTES</code></td>
 <td><code>180</code></td>
 <td>A longer build is stopped</td>
+</tr>
+<tr>
+<td><code>BLOCKED_TEMPLATES</code></td>
+<td>—</td>
+<td>Template versions withdrawn for now, e.g. <code>ubuntu/26.04,debian/13</code>: not deployed or built, whatever <code>templates.yaml</code> says</td>
+</tr>
+<tr>
+<td><code>CAPTURE_VM</code>, <code>CAPTURE_HOST</code></td>
+<td>—</td>
+<td>The capture appliance, by its VM in vCenter (address from VMware Tools) or its address. Both empty: captures are off</td>
+</tr>
+<tr>
+<td><code>CAPTURE_DIR</code></td>
+<td><code>/capture</code></td>
+<td>The panel's SSH key for the appliance, the appliance's pinned host key, and the .pcap files</td>
+</tr>
+<tr>
+<td><code>CAPTURE_MAX_SECONDS</code>, <code>CAPTURE_MAX_MB</code></td>
+<td><code>600</code>, <code>50</code></td>
+<td>The longest and largest a capture may be</td>
+</tr>
+<tr>
+<td><code>CAPTURE_PER_OWNER</code>, <code>CAPTURE_TOTAL</code></td>
+<td><code>1</code>, <code>3</code></td>
+<td>Captures running at once, per person and in all</td>
+</tr>
+<tr>
+<td><code>CAPTURE_KEEP_DAYS</code></td>
+<td><code>1</code></td>
+<td>How long finished captures are kept</td>
 </tr>
 <tr>
 <td><code>CATALOGUE_PATH</code></td>

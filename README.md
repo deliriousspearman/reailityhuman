@@ -4,7 +4,7 @@ A web panel that deploys, resets and tears down Pro Labs (HackTheBox-style netwo
 machines) on VMware vSphere, for a LAN without internet access. The labs are advertised on the LMS;
 lab slugs match its `labs/<slug>.md` pages.
 
-It deploys **single machines** (about 50 template versions: Ubuntu, Debian, the RHEL family, Fedora,
+It deploys **single machines** (56 template versions: Ubuntu, Debian, the RHEL family, Fedora,
 CachyOS, Kali, Parrot, Windows Server and 11, firewalls and routers, hypervisors, storage appliances and
 vulnerable images) with optional extras (web servers and apps, databases, mail, Docker apps, Active
 Directory, Exchange, …), and **Pro Labs**: several machines deployed together as one instance, in boot

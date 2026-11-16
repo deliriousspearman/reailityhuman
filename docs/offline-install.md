@@ -12,6 +12,9 @@ offline network, where **`install.sh`** does the rest:
 Rehearsed on 2026-10-21: a fresh Ubuntu 24.04 server with no internet and no Docker installed the
 panel, built Ubuntu 26.04 with every extra (through a mirror, from the media folder), and its tests and
 the extras' tests passed. Every template's build was also checked against mirrors and the media folder.
+What's been added since (the extras' image ISOs; Windows Server 2016 and 2012 R2, TrueNAS SCALE 25.04
+and CORE 13.0, Ubuntu Desktop, Alpine and FreeBSD; the packet capture appliance) was built through the
+installer in the lab on 2026-11-16, one piece at a time; a whole new rehearsal hasn't been run since.
 
 ## What you need
 
@@ -74,7 +77,9 @@ It gathers:
 ### 2. What the bundle doesn't hold
 
 1. **The ISOs.** Run `scripts/isos/fetch.sh <name> --no-upload` for each template you'll build (`--list`
-   names them); they land in `/var/tmp/lab-isos`, or `STAGING=<folder>`. Two templates need ISOs made
+   names them); they land in `/var/tmp/lab-isos`, or `STAGING=<folder>`. Or copy them from a lab that
+   has them already, from its datastore's `ISO` folder, keeping their names. Every template: 43 ISOs,
+   about 86 GB. Two templates need ISOs made
    from these:
    - **Proxmox VE 8 and 9:** `packer/proxmox/prepare-iso.sh --no-upload proxmox-ve-9.2` (and `proxmox-ve-8.4`)
      makes `proxmox-ve_9.2-1-auto.iso`.

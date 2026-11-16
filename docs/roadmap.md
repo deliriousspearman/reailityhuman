@@ -1,6 +1,6 @@
 # Roadmap
 
-Where lab-deploy stands and what comes next. Last updated 2026-11-10. The original design is in
+Where lab-deploy stands and what comes next. Last updated 2026-11-16. The original design is in
 [plan.md](plan.md); building templates is in [build-templates.md](build-templates.md).
 
 ## Where things stand
@@ -28,7 +28,7 @@ deployed by CI.
 | Hypervisors | Proxmox VE 9.2, 8.4, 7.4; XCP-ng 8.3 (all nested) |
 | Mail | Exchange Server SE (its own template; joins a domain controller's domain), Zimbra 8.8.15 |
 | Storage | TrueNAS SCALE 25.10 and 25.04, TrueNAS CORE 13.3 and 13.0 |
-| Practice targets | Metasploitable 2 and 3 (Linux), as complete images; Metasploitable 3 (Windows) retired 2026-10-27 for space, to re-import |
+| Practice targets | Metasploitable 2 and 3 (Linux), as complete images. Metasploitable 3 (Windows), retired 2026-10-27 for space, left the catalogue 2026-11-16 (`import-ms3-win.sh` stays, to bring it back) |
 
 **Extras:** web servers (Apache with a choice of PHP 5.6 to 8.5 on Ubuntu 22.04 and 24.04),
 WordPress, Nextcloud, databases with sample data, mail (and iRedMail), FTP, desktop and RDP, IIS,
@@ -98,6 +98,13 @@ the next step (an xrdp debug log while resizing) is agreed.
   - Still open from that review (batches 4 and 5): letting deploys wait for long jobs, a sweep for
     stuck states, build progress, row and bulk actions, a per-person limit, flag submission, a
     lab's sign-in file, notifications, frontend tests, one folder per extra, one catalogue.
+- **The offline install, brought up to date** (2026-11-16): every template the panel can deploy now
+  has an offline build, and CI's `install-test` keeps it so. The Docker extras' image ISOs come in the
+  bundle and the install uploads them; Windows Server 2016 and 2012 R2, TrueNAS SCALE 25.04 and CORE
+  13.0 and Ubuntu Desktop got entries; Alpine, FreeBSD and the packet capture appliance install from
+  the media folder; the install sets up and builds the capture appliance. Each was built through the
+  installer in the lab. Still open: rebuilding templates from the Admin page offline, the PHP versions
+  offered without a PHP mirror, CachyOS (internet only), and a full rehearsal without internet.
 - The [project review of 2026-10-23](review-2026-10-23.md): its five top priorities (a datastore
   reserve, machines that depend on each other, cancelling a stuck job, expired machines out of the
   quota, capacity on the deploy form). The rest is kept for later.
@@ -106,7 +113,7 @@ the next step (an xrdp debug log while resizing) is agreed.
 
 | Item | What's needed | Then |
 |---|---|---|
-| Disk space for the next templates | None now: 89 GB free on 2026-10-29 after Jake deleted unused templates. ISOs stay; unused templates are deleted instead (templates on demand), and every ISO a recipe needs is back on the datastore | Windows 10 (~23 GB), Metasploitable 3 Windows (~14 GB), Parrot 6 (~19 GB, plus its import base while building) |
+| Disk space for the next templates | None now: 89 GB free on 2026-10-29 after Jake deleted unused templates. ISOs stay; unused templates are deleted instead (templates on demand), and every ISO a recipe needs is back on the datastore | Windows 10 (~23 GB), Parrot 6 (~19 GB, plus its import base while building) |
 | Windows 7, Server 2008 R2, ESXi | Their ISOs (not downloadable without a licence or a Broadcom login) | A legacy Windows build; nested ESXi |
 | vuln-ad fixes | A yes to push the fixes to `workstation/vuln-workstation.ps1`, committed locally in the vuln-ad repo | Push to `jake/vuln-ad` |
 | Firefox black screen | Testing on the one affected Firefox: without extensions, then with `privacy.resistFingerprinting` off. Canvas blockers stop the screen drawing | A fix if it isn't the browser's settings |
@@ -114,7 +121,6 @@ the next step (an xrdp debug log while resizing) is agreed.
 | `parrot-base-7.4` | Choose: convert it to a vSphere template (recommended; it stays, for Parrot rebuilds) or delete it (frees 12.7 GB; rebuilding then means re-importing the OVA) | One line in `packer/parrot/import-base.sh` so new bases are templates |
 | Off-host backups | Somewhere to copy the daily database dump: a network share or another machine | A copy job in `deploy/compose.yaml` |
 | RDP live resize | A go-ahead to set xrdp's log to DEBUG on kali01 (restarting xrdp drops the RDP window; the session stays), then a connect and resize | Read whether resize messages arrive, and fix xrdp or the desktop side |
-| Brookfield `i-9547` | Done looking at it? It was left running after the 2026-10-27 test | Destroy it (frees about 18 GB of memory) |
 | Exercises | Answers to the open questions in [plan.md](plan.md#open-questions-for-jake) and a go-ahead | Phase 1: the engine and the iptables track |
 
 ## Next, in order
@@ -201,7 +207,7 @@ and an ESC1 template. 7 flags.
 | 2 | `adcs` and `join-domain-linux` extras | Done 2026-10-31, both e2e pass. `adcs`: Enterprise Root CA + HTTP web enrolment (ESC8), needing a Netlogon-locator wait, a domain-user credential, the software KSP, and sslFlags off on Server 2025. `join-domain-linux`: realmd join via Samba (adcli hits a Server 2025 "Message stream modified" bug); Ubuntu 24.04 rebuilt with its packages; the first-boot DC branch now fixes the locator so members can find a fresh controller |
 | 3 | Meridian in `labs.yaml`, its seeding extras (`meridian-dc`, `meridian-dc2`, `meridian-member`, `meridian-web`), the frontend entry | Code done 2026-10-31 (loads, unit tests pass, frontend typechecks): 5 machines wired to `@dc1`, `planned: true`. Seeding covers Kerberoast `svc_sql`, `svc_backup` DCSync rights, a GPP cpassword in SYSVOL, a best-effort ESC1 template (ESC8 comes from `adcs`), the weak workstation/SQL, and a web portal (LFI + leaked `svc_portal` + sudo→root). Live attack-chain validation is step 5 |
 | 4 | Flags on the Linux machine, if `plant_flags` needs it | Done 2026-10-31: `plant_flags` now plants Linux flags too — it writes a small script to /tmp and runs it with `/bin/sh`, writing the flag as root via the user's sudo (the paths include /root), with a unix newline. test_instances covers it |
-| 5 | End-to-end instance test, walking the attack path | In progress. First instance deploy found a real bug: `meridian.example` can't be a domain — Windows DNS refuses a zone under the reserved `.example` TLD (WIN32 123), so dc1 had no forward zone and dc2 couldn't find the domain. Fixed by switching to `meridian.corp` (commit 157a112). Second deploy: dc1 came up and dc2 was promoting cleanly (DNS fix worked) when testing paused for the day. **Resume:** redeploy a Meridian instance (temp-flip `planned: false` in labs.yaml, redeploy panel, `POST /api/instances`), let it finish, validate dc2 replication + sql/ws/web seeding + flags + domain joins, then walk the chain from Kali; finally mark live (commit `planned: false`, update test_labs to assert deployable). Deploy by hand — CI still down. Read fresh-DC guest logs via the API container (app.vsphere guest ops); the DCs' sshd resets connections |
+| 5 | End-to-end instance test, walking the attack path | In progress. First instance deploy found a real bug: `meridian.example` can't be a domain — Windows DNS refuses a zone under the reserved `.example` TLD (WIN32 123), so dc1 had no forward zone and dc2 couldn't find the domain. Fixed by switching to `meridian.corp` (commit 157a112). Second deploy: dc1 came up and dc2 was promoting cleanly (DNS fix worked) when testing paused for the day. **Resume:** redeploy a Meridian instance (temp-flip `planned: false` in labs.yaml, redeploy panel, `POST /api/instances`), let it finish, validate dc2 replication + sql/ws/web seeding + flags + domain joins, then walk the chain from Kali; finally mark live (commit `planned: false`, update test_labs to assert deployable). (CI deploys again since 2026-11-10.) Read fresh-DC guest logs via the API container (app.vsphere guest ops); the DCs' sshd resets connections |
 
 ### 2. The install script: clear outcomes, colours and full errors — done 2026-10-26
 
@@ -454,8 +460,8 @@ during sign-in), and Windows machines.
   - accounts, owners and admins;
   - limit consoles and passwords to a machine's owner and admins;
   - replaces the name people type today.
-- **Networks:** VLANs or a network per user or lab, then a WireGuard VPN to reach them (the "Download
-  VPN config" button on machine pages is a placeholder for this). The gateway could be the small Debian
+- **Networks:** VLANs or a network per user or lab, then a WireGuard VPN to reach them (the machine
+  page's "Your network: Soon" placeholder for this was taken out on 2026-11-16). The gateway could be the small Debian
   VM in [plan.md](plan.md#2-lab-architecture-on-vsphere), or OPNsense as router and WireGuard server
   (Jake's suggestion; it already has a template). Exercises' routing and appliance tracks need this.
 - **Health tasks:** a periodic check that templates still deploy, and evaluation licences
@@ -465,8 +471,8 @@ during sign-in), and Windows machines.
 
 ## The lab today
 
-- **Datastore:** datastore1, 583.5 GB over two extents, 89 GB free on 2026-10-29, with every ISO a
-  recipe needs and the 13 image ISOs, after Jake deleted unused templates. The PC's own free disk is the real limit.
+- **Datastore:** datastore1, 583.5 GB over two extents, about 85 GB free on 2026-11-16, with every ISO a
+  recipe needs (43, 86 GB) and the 17 image ISOs (7.6 GB). The PC's own free disk is the real limit.
 - **Memory:** the panel counts 46 GB with overcommit; vCenter uses 14 GB of it.
 - **Deploys:** at most 2 or 3 test machines at once.
 - **Limits on what Claude may do in the lab:**

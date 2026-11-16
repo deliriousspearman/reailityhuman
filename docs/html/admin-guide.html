@@ -278,7 +278,8 @@ or <strong>Kept</strong> for imported templates, which can't be rebuilt from the
 <p><strong>Deploying a deleted template builds it first.</strong> The deploy page warns how much longer it takes. The
 machine waits, its log says it's waiting for the build, and it deploys once the build is done. If the
 build fails, the machine goes to error with the reason. <strong>Build</strong> builds a deleted or failed template
-straight away instead of waiting for a deploy.</p>
+straight away instead of waiting for a deploy, and <strong>Cancel</strong> stops a queued or running build: Packer
+deletes the VM it was building (a minute or two), and machines waiting for it are marked failed.</p>
 <p>Builds run on the <code>builder</code> service, one at a time, as the panel's own vCenter account. Each build's
 full output is in <code>/srv/lab-deploy/build-logs/</code>; a failed build's job shows its last lines. A deploy
 of the panel doesn't interrupt a build: it updates the builder once no build is queued or running
@@ -288,8 +289,8 @@ of the panel doesn't interrupt a build: it updates the builder once no build is 
 <li>that the datastore has room for it on top of <code>DATASTORE_RESERVE_GB</code>.</li>
 </ul>
 <blockquote class="note">
-<p><strong>Note:</strong> Redeploying the panel stops a running build. The sweep queues it again within a minute,
-and that build deletes what the first left behind.</p>
+<p><strong>Note:</strong> If the builder stops partway anyway (the server restarted), the sweep queues the build
+again within a minute, and that build deletes what the first left behind.</p>
 </blockquote>
 <h3 id="leftover-vms">Leftover VMs<a class="headerlink" href="#leftover-vms" title="Permanent link">#</a></h3>
 <p>These are VMs in vCenter's <code>Labs/Machines</code> folder that the panel has no record of. Typical causes:</p>
@@ -371,13 +372,19 @@ time starts it again. After <code>GRACE_MINUTES</code> (a day by default) an exp
     Ctrl+Alt+Del, Paste (types your clipboard, US layout), Type password, function keys, a screenshot
     and full screen.</li>
 </ul>
-<p><strong>Pro Lab instances</strong> are managed from <strong>Instances</strong> → the instance:</p>
+<p><strong>Pro Lab instances</strong> are managed from <strong>Instances</strong> → the instance. A lab's machine can be started,
+stopped, rebooted and redeployed from its own page, but its time, reset and destroy go with the
+whole lab: the machine's page links to the lab's for those.</p>
 <ul>
 <li><strong>Reset lab</strong> resets every machine in boot order, with new flags.</li>
 <li><strong>+2 h / +1 day</strong> extends every machine.</li>
 <li><strong>Destroy lab</strong> removes them all.</li>
-<li><strong>Show flags</strong> lists the instance's flag values, for checking a learner's answers.</li>
+<li><strong>Show flags</strong> lists the instance's flag values, for checking a learner's answers. A flag counts as
+  planted only once planting it succeeded; one that didn't shows as missing, with a warning in its
+  machine's activity log.</li>
 </ul>
+<p><strong>A banner at the top of every page</strong> says when the panel can't reach vCenter (it asks once a minute).
+Deploys and actions fail until it can.</p>
 <h2 id="4-settings-lab-deployenv">4. Settings (<code>lab-deploy.env</code>)<a class="headerlink" href="#4-settings-lab-deployenv" title="Permanent link">#</a></h2>
 <p>Edit <code>/srv/lab-deploy/lab-deploy.env</code> on the server, then apply and check:</p>
 <div class="term"><div class="term-bar"><i></i><i></i><i></i><span>shell</span></div><pre><code>cd /srv/lab-deploy
@@ -439,9 +446,19 @@ curl -sk https://localhost/api/health      # database and vCenter both "ok"</cod
 <td>Windows deploys with several extras time out</td>
 </tr>
 <tr>
+<td><code>PASSWORD_LENGTH</code></td>
+<td>16</td>
+<td>Generated passwords should be longer or shorter</td>
+</tr>
+<tr>
 <td><code>MACHINE_DOMAIN</code></td>
 <td>empty</td>
 <td>Machines should get names like <code>web01.lab.example</code> in certificates and defaults</td>
+</tr>
+<tr>
+<td><code>BLOCKED_TEMPLATES</code></td>
+<td>empty</td>
+<td>A template's build turns out broken: <code>ubuntu/26.04</code> (comma-separated) refuses its deploys and builds, with a message, until it's fixed and the line removed</td>
 </tr>
 <tr>
 <td><code>VCENTER_*</code></td>
@@ -726,8 +743,10 @@ image's fixed <code>password</code> (see below).</p>
 <p><strong>Step 3: optional files.</strong></p>
 <ul>
 <li><code>frontend/src/lib/os-logos.ts</code>: a logo for a new OS. Without one, it gets a lettered badge.</li>
-<li><code>deploy/install/manifest.toml</code>: a <code>[[template]]</code> entry, if the offline installer should build it.</li>
 </ul>
+<p><strong>Step 4: the offline installer's entry</strong> (required): a <code>[[template]]</code> entry in
+<code>deploy/install/manifest.toml</code>, saying how the offline install builds it. CI's <code>install-test</code> fails
+for a template the panel can deploy that has none.</p>
 <h3 id="56-test-ship-and-check">5.6 Test, ship, and check<a class="headerlink" href="#56-test-ship-and-check" title="Permanent link">#</a></h3>
 <div class="term"><div class="term-bar"><i></i><i></i><i></i><span>shell</span></div><pre><code>docker compose -f backend/compose.test.yaml run --rm --build tests
 (cd frontend &amp;&amp; npm run check)
@@ -1110,6 +1129,21 @@ docker compose ps                         # every service up and healthy?</code>
 <td>A template isn't built, or doesn't list an extra the lab uses</td>
 <td>The reason on the lab's page names it; see <a href="#71-before-you-start">7.1</a></td>
 </tr>
+<tr>
+<td>Banner "The panel can't reach vCenter"</td>
+<td>vCenter down, or its address or password changed</td>
+<td>The banner gives vCenter's error; check <code>VCENTER_*</code> and <code>/api/health</code></td>
+</tr>
+<tr>
+<td>An action says "Changes can only be made from the panel's own pages"</td>
+<td>The request came from another site's page, or through a proxy that changes the <code>Host</code> header</td>
+<td>Use the panel's own address. Behind another proxy, pass the original <code>Host</code> (or <code>X-Forwarded-Host</code>)</td>
+</tr>
+<tr>
+<td>A lab machine's Destroy, Reset or +2 h is refused</td>
+<td>Lab machines go with their lab</td>
+<td>Use the lab's page (Instances → the instance)</td>
+</tr>
 </tbody>
 </table></div>
 <h2 id="13-packet-capture">13. Packet capture<a class="headerlink" href="#13-packet-capture" title="Permanent link">#</a></h2>
@@ -1122,7 +1156,8 @@ over SSH, runs tcpdump there and streams the packets back. Design: <a href="../p
 ESXi, the panel and everyone's machines. Put nothing else on it. The panel limits every capture to the
 chosen machines' MAC addresses, and its key on the appliance may only run <code>lab-capture</code>.</p>
 </blockquote>
-<p><strong>Setting it up</strong> (once; about 15 minutes):</p>
+<p><strong>Setting it up</strong> (once; about 15 minutes). The <a href="../offline-install.md">offline install</a> does these steps
+itself (<code>[capture] build</code> in its config); by hand:</p>
 <ol>
 <li>
 <p><strong>The port group and folder.</strong> From a machine with pyVmomi (as for <code>setup_vcenter.py</code>):</p>

@@ -143,6 +143,12 @@ runs `alembic upgrade head` on every start.
 Everything is under `/api`. The schema is at `/api/openapi.json`; the interactive docs pages are
 switched off.
 
+**Requests that change something** (POST, PUT, PATCH, DELETE) are refused with 403 when a browser
+sends them from another site's page: their `Origin` isn't the panel's own host (`Host`, or
+`X-Forwarded-Host`), or `Sec-Fetch-Site` says `cross-site` (`same_site_only` in `api.py`). There's no
+sign-in yet, so a plain form elsewhere could otherwise post them. Clients other than browsers send
+neither header, and pass.
+
 **Config and status**
 
 | Method | Path | Purpose |
@@ -160,15 +166,21 @@ switched off.
 | GET | `/machines/{id}?after=` | One machine, with password and log lines (after a line id, if given) |
 | POST | `/machines` | Deploy (201). Body: `template`, `version`, `name`, `hours` (null = permanent), `owner`, optional `password`, `sshKey`, `extras` |
 | POST | `/machines/{id}/start` · `stop` · `reboot` · `reset` · `redeploy` | Power and rebuild actions |
-| POST | `/machines/{id}/cancel` | Cancel its queued or running jobs |
+| POST | `/machines/{id}/cancel` | Cancel its queued or running jobs; a cancelled deploy, redeploy or reset powers its VM off |
 | POST | `/machines/{id}/extend` | `{hours}`: add time |
 | POST | `/machines/{id}/keep` | Keep permanently (within `MAX_PERMANENT`) |
 | POST | `/machines/{id}/expiry` | `{hours}`: a new expiry, counted from now |
 | DELETE | `/machines/{id}` | Destroy |
+| GET | `/machines/{id}/downloads/{extra}` | A file the extra made for people to download (a VPN's client config) |
 | POST | `/machines/{id}/console` | A one-off console path (see [Console relay](#10-console-relay)) |
 | WS | `/console/{token}` | The console stream |
 
 `hours` is 1–720 (`MAX_HOURS`). Names must match `^[a-z](?:[a-z0-9-]{0,13}[a-z0-9])?$`.
+
+A Pro Lab's machine refuses `extend`, `keep`, `expiry`, destroy, and (in a lab that resets together)
+`reset` on its own, with 409 (`require_on_its_own`): those go with the whole instance. Deploys, and
+keeping a machine, take a PostgreSQL advisory lock while they count machines and free capacity
+(`lock_deploys`), so two at once can't both take the last place.
 
 **Pro Lab instances**
 
@@ -185,7 +197,11 @@ switched off.
 |---|---|---|
 | GET | `/leftovers` | VMs in the machines folder that no machine row owns |
 | DELETE | `/leftovers/{name}` | Delete one (re-checked first) |
-| GET | `/jobs?limit=&machine=` | Jobs, newest first (`limit` 1–500) |
+| GET | `/jobs?limit=&machine=` | Jobs, newest first (`limit` 1–500); `cancelledBy` while one is stopping |
+| GET | `/templates` | Every template version: built or not, size, machines using it, whether it can be deleted |
+| DELETE | `/templates/{template}/{version}` | Delete it, keeping its ISOs (the next deploy builds it again) |
+| POST | `/templates/{template}/{version}/build` | Build it now (202) |
+| POST | `/templates/{template}/{version}/cancel` | Cancel its queued or running build |
 
 **Packet captures** (`capture.py`; requests carry `X-Lab-User`, and only your own machines can be
 captured)
@@ -249,7 +265,9 @@ Each job opens its own vCenter session (`vsphere.connect()`).
 
 `POST …/cancel` sets `jobs.cancelled_by`. Long waits call `vsphere.check_cancelled()`, which polls
 that column at most every 2 s and raises `Cancelled`. A job cancelled while still queued marks its
-machine `error`.
+machine `error`. A deploy, redeploy or reset cancelled while running also powers its VM off
+(`_power_off_after_cancel`), so a half-set-up machine stops using memory. A template build's loop
+checks the same column every 10 s and stops Packer with an interrupt, which deletes its VM.
 
 ### The sweep
 
@@ -259,10 +277,13 @@ the quick queue:
 1. `recover_lost_jobs`: fail jobs whose worker's heartbeat is older than 60 s (a worker that was
     killed mid-deploy), and panel jobs the queue no longer holds.
 2. `advance_instances`: move Pro Lab instances on to their next boot-order tier.
-3. `expiry_sweep`: expire machines whose time is up; destroy those past the grace period.
-4. `reconcile`: one bulk vCenter read to sync power states and addresses.
-5. Once an hour, `prune_history`: finished `jobs` older than 90 days, finished Procrastinate jobs
-    older than 7 days.
+3. `ensure_builds`: queue a template build for every template machines are waiting for, if none is
+    queued or running.
+4. `expiry_sweep`: expire machines whose time is up; destroy those past the grace period. A machine
+    whose power-off at expiry failed (vCenter down) is tried again every 15 minutes, not every minute.
+5. `reconcile`: one bulk vCenter read to sync power states and addresses.
+6. Once an hour, `prune_history`: finished `jobs` older than 90 days, finished Procrastinate jobs
+    older than 7 days, and each machine's activity beyond its latest 1000 lines.
 
 ## 7. Templates, families and first boot
 
@@ -326,6 +347,12 @@ records each extra's result in the status file. Helpers from `extras.py`'s `LIB`
 `lab_ip`, `lab_cert`, `lab_php`, `lab_apache`, `lab_apache_site`, `lab_sql_string`, `lab_docker`,
 `lab_wait_http` and `lab_open`.
 
+**Both runners delete the extras' scripts** once the status file is written (on Linux, cloud-init's
+copies of the first-boot data too: `user-data.txt`, `cloud-config.txt`, `obj.pkl`, and
+`/run/cloud-init/combined-cloud-config.json`). The scripts can hold the machine's password or another
+machine's (a domain controller's administrator), which in a Pro Lab would be a shortcut nobody meant.
+A reset goes back to the snapshot from before first boot, so they're written again.
+
 **Windows scripts** run as SYSTEM under a PowerShell runner (`extras.windows_setup()`). Exit codes
 manage restarts:
 
@@ -364,9 +391,14 @@ call from both.
 **Flags** are planted by `actions.plant_flags` once a machine is set up, through VMware Tools guest
 operations:
 
-- `file:` writes the value to that path.
+- `file:` writes the value to that path (Linux: as root, by a script in `/tmp` that only the user may
+    read and that deletes itself as it starts).
 - `run:` runs the program with the value as its last argument. Brookfield's mail flag is planted
     this way, by a script its seeding extra left on the mail server.
+
+A flag counts as planted (`planted_at`) only once that's confirmed: the write went through, or the
+program exited with 0 (`VCenter.wait_guest_program`, up to 2 minutes for a file and 20 for a `run`).
+Otherwise its machine's log has a warning and the checklist shows it missing.
 
 **Reset** reverts every machine to its own `clean` snapshot, in boot order, and plants new flag
 values.
@@ -492,14 +524,16 @@ RDP, stop, start, reboot, reset, redeploy, destroy), then one deploy per extra w
 
 ## 13. CI and deployment
 
-`.gitlab-ci.yml` runs on every push. The **build** stage has four jobs:
+`.gitlab-ci.yml` runs on every push. The **build** stage has five jobs:
 
 - `build`: `npm run check` and `npm run build`.
 - `scripts-check`: shellcheck v0.10.0.
 - `scripts-check-windows`: parses the `.ps1` files with PowerShell's parser.
 - `backend-test`: pytest with Postgres and vcsim services.
+- `install-test`: the offline install's tests (`deploy/install/labinstall/test_*.py`), above all that
+    every template the panel can deploy has an offline build in `manifest.toml`.
 
-On the default branch, the **deploy** stage then runs `deploy/deploy.sh` with the frontend that
+On the default branch, the **deploy** stage (which waits for all but `scripts-check-windows`) then runs `deploy/deploy.sh` with the frontend that
 `build` already built. It needs the CI/CD variables `DEPLOY_HOST`, `SITE_ADDRESS`, `SSH_PRIVATE_KEY`
 and `SSH_KNOWN_HOSTS`, plus `DEPLOY_USER` if it isn't the default.
 
@@ -509,16 +543,30 @@ and `SSH_KNOWN_HOSTS`, plus `DEPLOY_USER` if it isn't the default.
     `/srv/lab-deploy`.
 2. Writes `.env`. On the first deploy only, it creates `lab-deploy.env` with a generated database
     password.
-3. Builds `api` and starts everything except the worker.
-4. Restarts the worker last, letting running jobs finish for up to 15 minutes.
-5. Reloads Caddy.
+3. Builds `api` and starts everything except the worker and the builder.
+4. Restarts the worker, letting running jobs finish for up to 15 minutes.
+5. Updates the builder (`deploy/update-builder.sh`) only between template builds: with one queued
+    or running, a waiter in the background updates it once they've finished
+    (`build-logs/update-builder.log`), so a deploy never cuts a build off.
+6. Reloads Caddy.
 
 Overlapping deploys can leave the API down, so batch your pushes.
 
 **Offline installs** use `deploy/bundle.sh` (online side) and `deploy/install.sh` with the
 `labinstall` package (offline side). These build the panel and every template from a carried-in
 bundle; see [offline-install.md](offline-install.md). Its template list is
-`deploy/install/manifest.toml`; each entry's `catalogue` must exist in `templates.yaml`.
+`deploy/install/manifest.toml`: each entry's `catalogue` must exist in `templates.yaml`, and every
+deployable template needs an entry (`install-test` checks both). Besides the fields its header
+describes, an entry's `extras_var` names the Packer variable its extras go to (Ubuntu Desktop's
+`desktop_extras`), and the manifest's `[extras_mirrors]` names extras that need a mirror of their
+own (Zabbix's).
+
+`labinstall`'s modules: `config.py` (the config and its questions), `checks.py` (the checks, and each
+template's verdict), `manifest.py`, `builds.py` (the builds and the media server), `images.py` (the
+extras' image ISOs: which each needs, from `fetch-images.sh --list`, and uploading the bundle's),
+`capture.py` (the packet capture appliance's setup and build), `catalogue.py` (the panel's catalogue
+from what was built), `tests.py` (the end-to-end tests), `isos.py`, `report.py`, `out.py` and
+`vcenter.py`.
 
 ## 14. Configuration reference
 
@@ -554,6 +602,12 @@ All settings come from the environment (`lab-deploy.env` on the server; an examp
 | `BUILD_HTTP_IP` | — | The address build VMs fetch answer files from (Packer's web server) |
 | `BUILD_MEDIA_DIR` | — | Offline: `fetch-media.sh`'s media folder, for the Windows builds |
 | `BUILD_TIMEOUT_MINUTES` | `180` | A longer build is stopped |
+| `BLOCKED_TEMPLATES` | — | Template versions withdrawn for now, e.g. `ubuntu/26.04,debian/13`: not deployed or built, whatever `templates.yaml` says |
+| `CAPTURE_VM`, `CAPTURE_HOST` | — | The capture appliance, by its VM in vCenter (address from VMware Tools) or its address. Both empty: captures are off |
+| `CAPTURE_DIR` | `/capture` | The panel's SSH key for the appliance, the appliance's pinned host key, and the .pcap files |
+| `CAPTURE_MAX_SECONDS`, `CAPTURE_MAX_MB` | `600`, `50` | The longest and largest a capture may be |
+| `CAPTURE_PER_OWNER`, `CAPTURE_TOTAL` | `1`, `3` | Captures running at once, per person and in all |
+| `CAPTURE_KEEP_DAYS` | `1` | How long finished captures are kept |
 | `CATALOGUE_PATH` | `backend/templates.yaml` | The catalogue. `extras.yaml` and `labs.yaml` are read from the same folder |
 
 ## 15. Conventions and gotchas

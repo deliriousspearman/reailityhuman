@@ -4,7 +4,8 @@ Everything the lab downloads from outside, apart from:
 - **the installer ISOs:** listed, with their links and checksums, in
   [`scripts/isos/isos.txt`](../scripts/isos/isos.txt);
 - **packages from each OS's own repositories** (Ubuntu, Debian, Kali, Parrot, Rocky, AlmaLinux, CentOS
-  Stream, Fedora, CachyOS), which the builds install with apt, dnf or pacman.
+  Stream, Fedora, CachyOS, Alpine, FreeBSD), which the builds install with apt, dnf, pacman, apk or
+  pkg. Offline, Alpine's and FreeBSD's come from the media folder rather than a mirror (below).
 
 Use it to see what needs internet, to mirror things for an
 [offline install](offline-install.md), or to check for new versions. Each section names the file
@@ -93,7 +94,7 @@ Templates made from a vendor's image rather than an installer ISO.
 | Parrot Security 7.4 | Security OVA | `packer/parrot/import-base.sh` | <https://deb.parrot.sh/parrot/iso/> (checked against `signed-hashes.txt`) |
 | Metasploitable 2 | VM image | `packer/metasploitable/import-ms2.sh` | <https://sourceforge.net/projects/metasploitable/files/Metasploitable2/> |
 | Metasploitable 2's VMware Tools | Tools for its old glibc | `import-ms2.sh` | <https://packages.vmware.com/tools/frozen/linux/linuxPreGlibc25.iso> |
-| Metasploitable 3 (Linux and Windows) | Rapid7's Vagrant boxes | `import-ms3.sh`, `import-ms3-win.sh` | <https://portal.cloud.hashicorp.com/vagrant/discover/rapid7> |
+| Metasploitable 3 (Linux) | Rapid7's Vagrant box | `import-ms3.sh` | <https://portal.cloud.hashicorp.com/vagrant/discover/rapid7> |
 | MikroTik CHR 7.24.5 and 6.49.23 | VMDK | `packer/mikrotik/import-chr.sh` | <https://download.mikrotik.com/routeros/> (with its `.sha256`) |
 | VyOS (rolling) | Built into an ISO | `packer/vyos/build-iso.sh` | <https://github.com/vyos/vyos-build> and its build image `vyos/vyos-build:rolling` (Docker Hub) |
 
@@ -108,6 +109,9 @@ Repositories outside the OS's defaults, or archives of old releases' repositorie
 | EPEL 6 archive | CentOS 6 | <http://archives.fedoraproject.org/pub/archive/epel/6/> |
 | OPNsense 26.7 packages | Offline OPNsense builds (`fetch-media.sh`) | <https://pkg.opnsense.org/FreeBSD:15:amd64/26.7/latest> |
 | pfSense CE 2.7.2 packages | Offline pfSense builds (`fetch-media.sh`) | <https://pkg00-atx.netgate.com/pfSense_v2_7_2_amd64-pfSense_v2_7_2> |
+| FreeBSD 15.1's base and kernel sets | The FreeBSD template (bsdinstall; offline, `fetch-media.sh`, checked against the release's `MANIFEST`) | <https://download.freebsd.org/releases/amd64/15.1-RELEASE/> |
+| FreeBSD packages (quarterly) | The FreeBSD template: pkg, VMware Tools, sudo, bash, curl (offline, `fetch-media.sh` via `fetch-pkgs.py`) | <https://pkg.freebsd.org/FreeBSD:15:amd64/quarterly> |
+| Alpine 3.24's main and community repositories | The Alpine template and the capture appliance (offline, `fetch-media.sh` makes a signed repository of what they install) | <https://dl-cdn.alpinelinux.org/alpine/v3.24/> |
 | Docker CE | The panel's server (`deploy/setup-server.sh`, `deploy/bundle.sh`) | <https://download.docker.com/linux/ubuntu> |
 
 ## The panel and its tooling

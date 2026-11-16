@@ -89,7 +89,8 @@ or **Kept** for imported templates, which can't be rebuilt from the panel.
 **Deploying a deleted template builds it first.** The deploy page warns how much longer it takes. The
 machine waits, its log says it's waiting for the build, and it deploys once the build is done. If the
 build fails, the machine goes to error with the reason. **Build** builds a deleted or failed template
-straight away instead of waiting for a deploy.
+straight away instead of waiting for a deploy, and **Cancel** stops a queued or running build: Packer
+deletes the VM it was building (a minute or two), and machines waiting for it are marked failed.
 
 Builds run on the `builder` service, one at a time, as the panel's own vCenter account. Each build's
 full output is in `/srv/lab-deploy/build-logs/`; a failed build's job shows its last lines. A deploy
@@ -99,8 +100,8 @@ of the panel doesn't interrupt a build: it updates the builder once no build is 
 - that its ISOs are there;
 - that the datastore has room for it on top of `DATASTORE_RESERVE_GB`.
 
-> **Note:** Redeploying the panel stops a running build. The sweep queues it again within a minute,
-> and that build deletes what the first left behind.
+> **Note:** If the builder stops partway anyway (the server restarted), the sweep queues the build
+> again within a minute, and that build deletes what the first left behind.
 
 ### Leftover VMs
 
@@ -148,12 +149,19 @@ time starts it again. After `GRACE_MINUTES` (a day by default) an expired machin
     Ctrl+Alt+Del, Paste (types your clipboard, US layout), Type password, function keys, a screenshot
     and full screen.
 
-**Pro Lab instances** are managed from **Instances** → the instance:
+**Pro Lab instances** are managed from **Instances** → the instance. A lab's machine can be started,
+stopped, rebooted and redeployed from its own page, but its time, reset and destroy go with the
+whole lab: the machine's page links to the lab's for those.
 
 - **Reset lab** resets every machine in boot order, with new flags.
 - **+2 h / +1 day** extends every machine.
 - **Destroy lab** removes them all.
-- **Show flags** lists the instance's flag values, for checking a learner's answers.
+- **Show flags** lists the instance's flag values, for checking a learner's answers. A flag counts as
+  planted only once planting it succeeded; one that didn't shows as missing, with a warning in its
+  machine's activity log.
+
+**A banner at the top of every page** says when the panel can't reach vCenter (it asks once a minute).
+Deploys and actions fail until it can.
 
 ## 4. Settings (`lab-deploy.env`)
 
@@ -178,6 +186,7 @@ The settings you're most likely to change:
 | `IP_TIMEOUT_SECONDS` | 300 | DHCP is slow |
 | `EXTRAS_TIMEOUT_SECONDS` | 600 | Linux deploys with heavy extras time out |
 | `WINDOWS_SETUP_TIMEOUT_SECONDS` | 1200 | Windows deploys with several extras time out |
+| `PASSWORD_LENGTH` | 16 | Generated passwords should be longer or shorter |
 | `MACHINE_DOMAIN` | empty | Machines should get names like `web01.lab.example` in certificates and defaults |
 | `BLOCKED_TEMPLATES` | empty | A template's build turns out broken: `ubuntu/26.04` (comma-separated) refuses its deploys and builds, with a message, until it's fixed and the line removed |
 | `VCENTER_*` | — | vCenter moved, or its password changed (see [section 8](#8-vcenter-setup-and-privileges)) |
@@ -372,7 +381,10 @@ image's fixed `password` (see below).
 **Step 3: optional files.**
 
 - `frontend/src/lib/os-logos.ts`: a logo for a new OS. Without one, it gets a lettered badge.
-- `deploy/install/manifest.toml`: a `[[template]]` entry, if the offline installer should build it.
+
+**Step 4: the offline installer's entry** (required): a `[[template]]` entry in
+`deploy/install/manifest.toml`, saying how the offline install builds it. CI's `install-test` fails
+for a template the panel can deploy that has none.
 
 ### 5.6 Test, ship, and check
 
@@ -728,6 +740,9 @@ docker compose ps                         # every service up and healthy?
 | Console won't open | Machine stopped, or console privilege missing | Start it; re-run `setup_vcenter.py` |
 | Console opens black | A guest display quirk (seen on Ubuntu Desktop) | Reconnect; use RDP meanwhile |
 | A lab shows "Soon" | A template isn't built, or doesn't list an extra the lab uses | The reason on the lab's page names it; see [7.1](#71-before-you-start) |
+| Banner "The panel can't reach vCenter" | vCenter down, or its address or password changed | The banner gives vCenter's error; check `VCENTER_*` and `/api/health` |
+| An action says "Changes can only be made from the panel's own pages" | The request came from another site's page, or through a proxy that changes the `Host` header | Use the panel's own address. Behind another proxy, pass the original `Host` (or `X-Forwarded-Host`) |
+| A lab machine's Destroy, Reset or +2 h is refused | Lab machines go with their lab | Use the lab's page (Instances → the instance) |
 
 ## 13. Packet capture
 

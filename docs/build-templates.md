@@ -38,7 +38,6 @@ as building by hand ([setup-vsphere.md](setup-vsphere.md), parts 2, 5 and 6), wh
 | VyOS 1.5 rolling | `packer/vyos/build-iso.sh` once, then `packer/build.sh vyos` | ~8 min |
 | Metasploitable 2 | `packer/metasploitable/import-ms2.sh` | ~15 min |
 | Metasploitable 3 (Ubuntu 14.04) | `packer/metasploitable/import-ms3.sh` | ~30 min |
-| Metasploitable 3 (Windows Server 2008 R2) | `packer/metasploitable/import-ms3-win.sh` | ~90 min (a 7.9 GB download) |
 | Kali Linux 2026.2 | `packer/build.sh kali` | ~31 min |
 | Parrot Security 7.4 | `packer/parrot/import-base.sh <ova>` once, then `packer/build.sh parrot` | ~11 min |
 | Rocky Linux 9 | `packer/build.sh rhel -var distro=rocky` | ~15–20 min |
@@ -49,7 +48,7 @@ as building by hand ([setup-vsphere.md](setup-vsphere.md), parts 2, 5 and 6), wh
 | Fedora Workstation 44 | `packer/build.sh fedora -var edition=workstation` | ~18 min |
 | CachyOS (rolling) | `packer/build.sh cachyos` | ~11 min |
 | Alpine Linux 3.24 | `packer/build.sh alpine` | ~3 min |
-| FreeBSD 15.1 | `packer/build.sh freebsd` (downloads the base system from FreeBSD's site while installing) | ~6 min |
+| FreeBSD 15.1 | `packer/build.sh freebsd` (downloads the base system from FreeBSD's site while installing; offline, from the media folder) | ~6 min |
 | Ubuntu 20.04 (legacy) | `packer/build.sh ubuntu -var version=20.04 -var iso=ubuntu-20.04.6-live-server-amd64.iso -var extras=…` | ~9 min |
 | Ubuntu 18.04 (legacy) | `packer/build.sh ubuntu-di -var extras=…` | ~13 min |
 | Ubuntu 16.04 (legacy) | `packer/build.sh ubuntu-di -var version=16.04 -var iso=ubuntu-16.04.7-server-amd64.iso -var legacy=true` | ~6 min |
@@ -218,10 +217,8 @@ It's deliberately vulnerable: keep it on the lab network.
 **Metasploitable 3** (its Ubuntu 14.04 variant) is imported the same way, but from the VMware image
 Rapid7 published on Vagrant Cloud (`import-ms3.sh`): its own build needs Chef, whose installers now
 need a licence. The image has VMware Tools already, so nothing in it changes. Sign-in: vagrant /
-vagrant. Its Windows Server 2008 R2 variant comes the same way (`import-ms3-win.sh`), unpacked as it
-downloads (the box is 7.9 GB), with the disk and adapter types its `.vmx` gives. Its evaluation expired
-long ago, so Windows shuts it down every hour; the catalogue flags it ("Shuts down hourly"). Sign-in:
-vagrant / vagrant.
+vagrant. Its Windows Server 2008 R2 variant left the catalogue on 2026-11-16 (it was retired for
+space on 2026-10-27); `import-ms3-win.sh` stays, to bring it back.
 
 **Container apps** (Juice Shop, DVWA, Uptime Kuma, Grafana, Prometheus, Node Exporter, Vaultwarden,
 Gitea, GitLab, Jenkins): templates have Docker but not the images. Each image is an ISO of its own in
@@ -327,18 +324,23 @@ internet, gather them first on a machine with internet, and carry them across:
    scripts/isos/fetch-media.sh /path/to/lab-media
    ```
 
-   About 2 GB: WordPress, WP-CLI, Nextcloud, Chinook, the Pythons, iRedMail, Zimbra's tarball, and
-   MinIO and `mc` built from source (`linux/`); Cloudbase-Init and Chinook for
-   SQL Server (`windows/`); Packer and its plugin (`packer/`); and `SHA256SUMS` of all of it. Check
-   the copy on arrival with `cd lab-media && sha256sum -c SHA256SUMS`.
+   About 3 GB: WordPress, WP-CLI, Nextcloud, Chinook, the Pythons, iRedMail, Wazuh, Zimbra's tarball,
+   MinIO and `mc` built from source, and a signed apk repository for Alpine and the capture appliance
+   (`linux/`); Cloudbase-Init, Chinook for SQL Server, Exchange's prerequisites and what Windows Server
+   2016 and 2012 R2 lack (`windows/`); OPNsense's and pfSense's VMware Tools, and FreeBSD's base and
+   kernel sets and packages (`freebsd/`); Packer and its plugin (`packer/`); and `SHA256SUMS` of all
+   of it. Check the copy on arrival with `cd lab-media && sha256sum -c SHA256SUMS`.
 2. **Office's files**, for the Outlook extra: on a Windows PC with internet, as in
    [setup-vsphere.md](setup-vsphere.md), "Office's files, for Outlook", steps 1–4. Put the contents of
    `C:\office` in the media folder's `windows/office/`.
 3. **The ISOs:** `STAGING=/path/to/isos scripts/isos/fetch.sh <name> --no-upload` for each, and
    Parrot's OVA. On the offline side, upload the ISOs in the vSphere Client (Storage → datastore →
    Files → `ISO` → Upload Files), keeping their names.
-4. **Package mirrors** on the LAN: Ubuntu's archive, Kali's (`http.kali.org/kali`) and Parrot's
-   (`deb.parrot.sh/parrot`). Not included here.
+4. **The extras' image ISOs** (the Docker extras, k3s, Winlogbeat):
+   `STAGING=/path/to/image-isos scripts/isos/fetch-images.sh --all --no-upload`, then upload them to
+   the ISO folder like the others. The panel attaches them at deploy.
+5. **Package mirrors** on the LAN, for the Linux templates: the
+   [offline install's table](offline-install.md#mirrors) lists which. Not included here.
 
 Then, offline:
 - **Serve the media folder** on a LAN web server (any: nginx, `python3 -m http.server`), so
@@ -352,7 +354,12 @@ Then, offline:
   base VM's `/etc/apt/sources.list.d/parrot.list` before building.
   Leave out the Nextcloud snap (it needs the Snap Store): e.g. `-var extras=nginx,apache,apache-https,wordpress,nextcloud,postgresql,mariadb,mysql,sqlite,mail,ftp,desktop`,
   and list the same in `templates.yaml`.
-- **Windows build:** add `-var media_dir=/path/to/lab-media`: its `windows/` part goes on the build's CD.
+- **Alpine and the capture appliance:** add `-var media_dir=/path/to/lab-media`: its `linux/alpine`
+  repository goes on the build's CD, and they install from it alone.
+- **FreeBSD, OPNsense and pfSense:** `-var media_url=http://<server>/lab-media`: their packages (and
+  FreeBSD's base and kernel sets) come from there.
+- **Windows build:** add `-var media_dir=/path/to/lab-media`: its `windows/` part goes on the build's CD
+  (2016 and 2012 R2 take what they lack from its `windows/legacy`).
 
 ## 4. Building
 
