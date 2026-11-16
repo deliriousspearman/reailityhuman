@@ -185,10 +185,19 @@
 		padding: 0.3rem 2rem 0.3rem 2.1rem;
 		border: 1px solid transparent;
 		border-radius: var(--lms-radius-sm);
-		background: transparent;
+		/* The header's own colour, not transparent: browsers draw the open list in the select's
+		   background, which would otherwise be their plain light or dark grey whatever the theme. */
+		background: var(--lms-bg-nav);
 		color: inherit;
 		font: 600 0.875rem var(--lms-font);
 		cursor: pointer;
+	}
+	/* The open list in the theme's colours (as on the course site). Set on the options themselves, as
+	   the closed select's text colour (dimmed, or transparent on small screens) would carry over. */
+	.theme-select option,
+	.theme-select optgroup {
+		background: var(--lms-panel);
+		color: var(--lms-white);
 	}
 	.theme-select select:hover {
 		border-color: var(--lms-gray-5);
