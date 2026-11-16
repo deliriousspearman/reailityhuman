@@ -38,8 +38,8 @@ def test_the_manifest_has_them_and_no_image_files_in_the_media_folder():
 def ctx(iso_files=None, bundled=None, need=None):
     return SimpleNamespace(
         manifest=SimpleNamespace(image_isos=need or {"grafana": ["g.iso"], "prometheus": ["p.iso", "n.iso"]}, extras_media={},
-                                 extras_online_only={}),
-        cfg=SimpleNamespace(internet=False, get=lambda *a: "ISO"),
+                                 extras_online_only={}, extras_mirrors={}),
+        cfg=SimpleNamespace(internet=False, get=lambda *a: "ISO", mirror=lambda name: ""),
         media_dir=Path("/nonexistent"),
         iso_files=dict(iso_files or {}),
         bundled_images=dict(bundled or {}),

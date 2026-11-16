@@ -66,6 +66,8 @@ It gathers:
   3 GB free);
 - Cloudbase-Init and Exchange's prerequisites;
 - VMware Tools for OPNsense and pfSense;
+- for FreeBSD 15.1, its release's base and kernel sets and the packages it installs;
+- for Alpine 3.24 and the packet capture appliance, the packages they install, as a signed repository;
 - Packer;
 - with `--images`, the images imported whole: MikroTik CHR, and Metasploitable 2 and 3 (Linux).
 
@@ -114,6 +116,8 @@ Edit `/srv/lab-deploy/lab-install.toml`. Its comments explain each setting:
   - `on_missing`: what to do when one isn't ready (ask, skip or cancel).
   - `test`: whether to test them, with `none`, `lifecycle` or `full`. `full` is hours.
   - `remove_isos`: whether to remove the ISOs afterwards.
+- **`[capture] build`:** whether to build the packet capture appliance (`true` by default). It's built
+  when `[templates] build` is `["all"]` or includes `"capture"`; `--only capture` builds it alone.
 
 Anything left out is asked for when it runs, and saved.
 
@@ -160,15 +164,19 @@ sudo lab-bundle/install.sh
    build doesn't stop the rest.
 6. **Writes the panel's catalogue** from what was built (`/srv/lab-deploy/templates.yaml`). Templates
    not built show as "coming soon".
-7. **Tests the new templates** through the panel.
-8. **Asks about the ISOs:**
+7. **Builds the packet capture appliance**, as the [admin guide](admin-guide.md#13-packet-capture) has
+   people do by hand: the capture port group and `Labs/Capture` (`scripts/setup_capture.py`), the
+   appliance with the panel's key, `CAPTURE_VM` in `lab-deploy.env`, and the appliance powered on. A
+   distributed switch needs its capture port group made by hand first, as that guide says.
+8. **Tests the new templates** through the panel.
+9. **Asks about the ISOs:**
    - keep them all;
    - remove them all;
    - keep only Windows' (the ones rebuilt when evaluations expire);
    - choose.
 
    It only removes the ISOs of templates that built and passed.
-9. **Writes the report:** `/srv/lab-deploy/install/install-report.md`.
+10. **Writes the report:** `/srv/lab-deploy/install/install-report.md`.
 
 Builds take 5 minutes (MikroTik) to over an hour (Debian 8 from a slow archive); a whole catalogue is a
 day.
@@ -219,8 +227,12 @@ What each mirror must hold, by template. The install checks each one for the fil
 | `zimbra` | repo.zimbra.com (`apt/87` and `apt/8815`, focal) | Zimbra 8.8.15 | `apt/8815/dists/focal/Release` |
 
 These need no mirror:
-- **Windows, TrueNAS and VyOS:** their ISOs hold everything.
-- **OPNsense and pfSense:** their VMware Tools come from the media folder.
+- **Windows, TrueNAS and VyOS:** their ISOs hold everything (Windows Server 2016 and 2012 R2 add
+  what they lack from the media folder).
+- **OPNsense, pfSense and FreeBSD:** their packages (and FreeBSD's release sets) come from the media
+  folder.
+- **Alpine and the packet capture appliance:** their packages come from the media folder, on the
+  build's CD.
 - **MikroTik and Metasploitable:** imported from the media folder.
 
 **One extra needs the internet** and is always left out offline: `nextcloud-snap`, from the Snap Store.

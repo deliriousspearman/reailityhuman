@@ -16,7 +16,11 @@
 #              (windows/legacy: OpenSSH, the C runtime, .NET 4.8, WMF 5.1). Pass the folder to the Windows build:
 #              -var media_dir=<folder>. Office's files go in windows/office (see its README.txt).
 #   freebsd/   VMware Tools for OPNsense 26.7 and pfSense 2.7.2, with their dependencies (fetch-pkgs.py),
-#              which their builds install from here offline (media_url).
+#              which their builds install from here offline (media_url); and for the FreeBSD template,
+#              its release's base and kernel sets and the packages it installs.
+#   linux/alpine/  the packages the Alpine template and the capture appliance install, with their
+#              dependencies, as a signed apk repository (needs Docker): their builds put it on the
+#              build CD offline (-var media_dir=<folder>).
 #   images/    with --images: what the templates imported whole start from (about 20 GB): MikroTik
 #              CHR, Metasploitable 2 and 3 (both), Parrot's OVA. The import scripts read them with
 #              MEDIA=<folder>/images.
@@ -42,6 +46,16 @@ CHINOOK_URL=https://github.com/lerocha/chinook-database/releases/download/v1.4.5
 CLOUDBASE_URL=https://github.com/cloudbase/cloudbase-init/releases/download/1.1.9/CloudbaseInitSetup_1_1_9_x64.msi
 CLOUDBASE_SHA256=ffbf80515a7311ed00800276a6af7aab23b41d7acf13e79ce3d2d56844f638f7
 CHINOOK_SQLSERVER_SHA256=5ea75c9e925ead917d3fabea6ed3cc8c1ff1d036b61e915c94631aafa2b0802b
+# Alpine (packer/alpine, packer/capture): its release, and what their builds install with apk (setup's own
+# packages too, in case the ISO lacks the version they need). Keep in step with those builds and their
+# prepare scripts (a test checks every apk add is covered).
+ALPINE_VERSION=3.24
+ALPINE_PACKAGES="openssh chrony e2fsprogs dosfstools syslinux grub-efi efibootmgr mkinitfs linux-virt \
+bash shadow sudo curl open-vm-tools open-vm-tools-guestinfo open-vm-tools-vix tcpdump ethtool"
+# FreeBSD (packer/freebsd): its release, and what its build installs with pkg (pkg itself first: a fresh
+# system only has its bootstrapper). Keep in step with installerconfig.pkrtpl and prepare-freebsd.sh.
+FREEBSD_VERSION=15.1
+FREEBSD_PACKAGES=pkg,open-vm-tools-nox11,sudo,bash,curl
 PACKER_VERSION=1.16.1
 VSPHERE_PLUGIN_VERSION=2.5.0
 
@@ -136,6 +150,48 @@ python3 "$here/fetch-pkgs.py" https://pkg.opnsense.org/FreeBSD:15:amd64/26.7/lat
 # pfSense's repository is found through DNS (SRV records of pkg.pfsense.org): one of its servers.
 python3 "$here/fetch-pkgs.py" https://pkg00-atx.netgate.com/pfSense_v2_7_2_amd64-pfSense_v2_7_2 \
 	pfSense-pkg-Open-VM-Tools "$out/freebsd/pfsense-2.7.2"
+
+step "FreeBSD $FREEBSD_VERSION: its base and kernel sets, and the packages its template installs"
+# bsdinstall fetches the sets from here offline (its install ISO doesn't carry them where it looks),
+# checked against the release's MANIFEST.
+sets=$out/freebsd/$FREEBSD_VERSION-RELEASE
+mkdir -p "$sets"
+get "https://download.freebsd.org/releases/amd64/$FREEBSD_VERSION-RELEASE/MANIFEST" "$sets/MANIFEST"
+for set in base.txz kernel.txz; do
+	get "https://download.freebsd.org/releases/amd64/$FREEBSD_VERSION-RELEASE/$set" "$sets/$set"
+	check "$sets/$set" "$(awk -v f="$set" '$1 == f { print $2 }' "$sets/MANIFEST")" sha256
+done
+python3 "$here/fetch-pkgs.py" "https://pkg.freebsd.org/FreeBSD:${FREEBSD_VERSION%%.*}:amd64/quarterly" "$FREEBSD_PACKAGES" \
+	"$out/freebsd/freebsd-$FREEBSD_VERSION"
+
+step "Alpine $ALPINE_VERSION: the packages its template and the capture appliance install, as a signed repository"
+# Fetched by Alpine's own apk, with their dependencies, then indexed and signed with a key made for this
+# folder (keys/lab-media.rsa.pub): the builds trust it while they install, and remove it after. Made
+# again on each run (a few seconds), so it has the release's current versions.
+if command -v docker >/dev/null; then
+	rm -rf "$out/linux/alpine"
+	mkdir -p "$out/linux/alpine"
+	docker run --rm -v "$out/linux/alpine:/out" -e PKGS="$ALPINE_PACKAGES" "alpine:$ALPINE_VERSION" sh -ec '
+		apk add -q abuild openssl
+		repo=/out/v'"$ALPINE_VERSION"'/x86_64
+		mkdir -p "$repo" /out/keys
+		apk fetch -q -R -o "$repo" $PKGS
+		# And each one'"'"'s -openrc package (its service'"'"'s start script, e.g. sshd'"'"'s), where it has one: apk
+		# installs those along with openrc by itself (install_if), which apk fetch -R doesn'"'"'t follow.
+		apk search -q >/tmp/all
+		for f in "$repo"/*.apk; do n=${f##*/}; n=${n%.apk}; echo "${n%-*-r*}-openrc"; done | sort -u >/tmp/want
+		apk fetch -q -R -o "$repo" $(grep -Fxf /tmp/want /tmp/all)
+		openssl genrsa -out /tmp/lab-media.rsa 2048 2>/dev/null
+		openssl rsa -in /tmp/lab-media.rsa -pubout -out /tmp/lab-media.rsa.pub 2>/dev/null
+		cd "$repo"
+		apk index -q --rewrite-arch x86_64 -o APKINDEX.tar.gz ./*.apk
+		abuild-sign -q -k /tmp/lab-media.rsa APKINDEX.tar.gz
+		cp /tmp/lab-media.rsa.pub /out/keys/
+		chown -R '"$(id -u):$(id -g)"' /out'
+	echo "  $(find "$out/linux/alpine" -name '*.apk' | wc -l) packages, $(du -sh "$out/linux/alpine" | cut -f1)"
+else
+	echo "  skipped: Docker is needed (Alpine's apk fetches them); without it, Alpine and the capture appliance can't be built offline" >&2
+fi
 
 step "Windows: Cloudbase-Init 1.1.9, Chinook for SQL Server"
 get "$CLOUDBASE_URL" "$out/windows/cloudbase-init/CloudbaseInitSetup_x64.msi"

@@ -65,8 +65,19 @@ variable "build_password" {
   sensitive = true
 }
 
+# Offline: the installer's media folder, served over HTTP (scripts/isos/fetch-media.sh): the release's
+# sets and the packages come from there, and FreeBSD's online updates are skipped.
+variable "media_url" {
+  type    = string
+  default = ""
+}
+
 locals {
-  vm_name = var.vm_name != "" ? var.vm_name : "tpl-freebsd-${var.version}-${formatdate("YYYYMMDD", timestamp())}"
+  vm_name   = var.vm_name != "" ? var.vm_name : "tpl-freebsd-${var.version}-${formatdate("YYYYMMDD", timestamp())}"
+  offline   = var.media_url != ""
+  media     = trimsuffix(var.media_url, "/")
+  dist_site = local.offline ? "${local.media}/freebsd/${var.version}-RELEASE" : "https://download.freebsd.org/releases/amd64/${var.version}-RELEASE"
+  pkg_url   = local.offline ? "${local.media}/freebsd/freebsd-${var.version}" : ""
 }
 
 source "vsphere-iso" "freebsd" {
@@ -98,7 +109,7 @@ source "vsphere-iso" "freebsd" {
   iso_paths = ["[${var.datastore}] ${var.iso_folder}/${var.iso}"]
   cd_label  = "LABBUILD"
   cd_content = {
-    "installerconfig" = templatefile("${path.root}/installerconfig.pkrtpl", { ssh_public_key = var.ssh_public_key, version = var.version })
+    "installerconfig" = templatefile("${path.root}/installerconfig.pkrtpl", { ssh_public_key = var.ssh_public_key, dist_site = local.dist_site, pkg_url = local.pkg_url })
   }
   remove_cdrom = true
 
@@ -134,8 +145,9 @@ build {
     destination = "/tmp/"
   }
   provisioner "shell" {
-    inline          = ["sh /tmp/freebsd/prepare-freebsd.sh"]
-    execute_command = "chmod +x {{ .Path }}; env {{ .Vars }} sh {{ .Path }}"
+    inline           = ["sh /tmp/freebsd/prepare-freebsd.sh"]
+    environment_vars = local.offline ? ["LAB_OFFLINE=1"] : []
+    execute_command  = "chmod +x {{ .Path }}; env {{ .Vars }} sh {{ .Path }}"
   }
 
   post-processor "manifest" {

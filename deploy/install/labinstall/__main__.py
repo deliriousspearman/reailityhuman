@@ -16,7 +16,7 @@ import urllib.request
 import ssl
 from pathlib import Path
 
-from . import builds, catalogue, checks, images, isos, report, tests
+from . import builds, capture, catalogue, checks, images, isos, report, tests
 from .out import out
 from .checks import Context
 from .config import Config, ConfigError, ask, confirm, interactive
@@ -70,6 +70,8 @@ def main() -> int:
     step("Checks")
     try:
         checks.run(ctx, state, a.verify_isos)
+        if ctx.vc and ctx.inv and not a.skip_templates:
+            capture.assess(ctx)
     except Exception as e:  # noqa: BLE001  a check itself broke
         out.unexpected("The checks", e, WORK / "install.log")
         return 1
@@ -132,6 +134,11 @@ def main() -> int:
         out.ok(f"{ready} template(s) deployable, {planned} shown as coming soon.")
         compose("up", "-d", "--no-build", "--force-recreate", "api", "worker", "sweeper")
         wait_for_panel(panel)
+
+        if ctx.capture == "ready":
+            step("The packet capture appliance")
+            capture.install(ctx, state, ROOT, WORK / "logs", a.verbose)
+            save(state_path, state)
 
         step("Tests")
         tests.run_tests(ctx, state, panel, cfg.get("templates", "test"), WORK / "logs")

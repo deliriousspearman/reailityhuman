@@ -10,10 +10,17 @@ set -eu
 here=$(cd "$(dirname "$0")" && pwd)
 
 echo "==> Updates"
-# Exit 2: nothing to install.
-env PAGER=cat freebsd-update --not-running-from-cron fetch install || [ $? -eq 2 ]
-env ASSUME_ALWAYS_YES=yes pkg upgrade -q
-pkg install -qy sudo bash curl
+if [ -n "${LAB_OFFLINE:-}" ]; then
+	# Built offline (packer -var media_url): the release as the media folder has it, and its packages
+	# came with VMware Tools at install.
+	echo "Offline: no updates; sudo, bash and curl are installed already."
+	pkg info -q sudo bash curl
+else
+	# Exit 2: nothing to install.
+	env PAGER=cat freebsd-update --not-running-from-cron fetch install || [ $? -eq 2 ]
+	env ASSUME_ALWAYS_YES=yes pkg upgrade -q
+	pkg install -qy sudo bash curl
+fi
 
 echo "==> sudo and SSH"
 echo '%wheel ALL=(ALL:ALL) ALL' >/usr/local/etc/sudoers.d/wheel

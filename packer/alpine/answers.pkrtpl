@@ -1,5 +1,7 @@
 # setup-alpine's answers (alpine.pkr.hcl): DHCP, OpenSSH and the build's key for root; the disk is
-# set up after. The community repository is on, for open-vm-tools.
+# set up after. The community repository is on, for open-vm-tools. Offline, apk_repos names the
+# repositories instead: the install ISO's own (/media/sr0/apks) and the build CD's (setup-apkrepos takes
+# them as given; "none" would be written as one).
 KEYMAPOPTS=none
 HOSTNAMEOPTS=alpine
 DEVDOPTS=mdev
@@ -11,7 +13,7 @@ iface eth0 inet dhcp
 "
 TIMEZONEOPTS=UTC
 PROXYOPTS=none
-APKREPOSOPTS="-1 -c"
+APKREPOSOPTS="${apk_repos}"
 USEROPTS=none
 SSHDOPTS=openssh
 ROOTSSHKEY="${ssh_public_key}"

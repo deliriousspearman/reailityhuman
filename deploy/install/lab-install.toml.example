@@ -42,12 +42,16 @@ php = "http://mirror.lab.example/php"                       # as ppa.launchpadco
 # internet = false
 
 [templates]
-build = ["all"]                     # or ids from deploy/install/manifest.toml, e.g. ["ubuntu-26.04", "windows-server-2025"]
+build = ["all"]                     # or ids from deploy/install/manifest.toml, e.g. ["ubuntu-26.04", "windows-server-2025"], and "capture"
 on_missing = "ask"                  # templates not ready: ask, skip (build the rest) or cancel
 rebuild = false                     # true: build again templates that exist already
 test = "lifecycle"                  # none, lifecycle (each template's deploy to destroy), or full (every extra too; hours)
 remove_isos = "ask"                 # after building: ask, none, all, or keep-windows (Windows' are needed to rebuild
                                     # when their evaluations expire)
+
+[capture]
+build = true                        # the packet capture appliance (Labs/Capture/lab-capture), built with "all" or
+                                    # "capture" in [templates] build; false leaves packet capture off
 
 [media]
 port = 8690                         # the installer serves the bundle's media folder to the builds on this port

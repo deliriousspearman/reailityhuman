@@ -740,7 +740,8 @@ over SSH, runs tcpdump there and streams the packets back. Design: [plan.md sect
 > ESXi, the panel and everyone's machines. Put nothing else on it. The panel limits every capture to the
 > chosen machines' MAC addresses, and its key on the appliance may only run `lab-capture`.
 
-**Setting it up** (once; about 15 minutes):
+**Setting it up** (once; about 15 minutes). The [offline install](offline-install.md) does these steps
+itself (`[capture] build` in its config); by hand:
 
 1. **The port group and folder.** From a machine with pyVmomi (as for `setup_vcenter.py`):
 

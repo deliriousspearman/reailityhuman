@@ -26,6 +26,9 @@ class Template:
     mirrors: list[str] = field(default_factory=list)
     media: list[str] = field(default_factory=list)
     extras: bool | str = False
+    # The Packer variable the extras built in go to (extras = true): "extras", or "desktop_extras" for
+    # Ubuntu Desktop, whose build takes its list there.
+    extras_var: str = "extras"
     needs: list[str] = field(default_factory=list)
     internet: str = ""
     eval_days: int = 0
@@ -64,6 +67,7 @@ class Manifest:
         data = tomllib.loads((src / "deploy/install/manifest.toml").read_text())
         self.extras_media: dict[str, list[str]] = data.get("extras", {})
         self.extras_online_only: dict[str, str] = data.get("extras_online_only", {})
+        self.extras_mirrors: dict[str, str] = data.get("extras_mirrors", {})
         # The ISOs each extra needs attached at deploy (images.py): the Docker extras' and k3s's.
         self.image_isos: dict[str, list[str]] = images.needed(src)
         catalogue = yaml.safe_load((src / "backend/templates.yaml").read_text())
@@ -92,7 +96,8 @@ class Manifest:
 
     def selected(self, build: list[str]) -> list[Template]:
         """The templates a [templates] build list names, with what they need, in build order."""
-        ids = list(self.templates) if "all" in build else build
+        # "capture" is the packet capture appliance (capture.py), not a template.
+        ids = list(self.templates) if "all" in build else [i for i in build if i != "capture"]
         unknown = [i for i in ids if i not in self.templates]
         if unknown:
             raise ValueError(f"unknown template {', '.join(unknown)}; known: {', '.join(self.templates)}")

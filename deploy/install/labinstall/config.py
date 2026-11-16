@@ -33,6 +33,7 @@ FIELDS = [
     ("templates", "test", "Test new templates: none, lifecycle or full", "lifecycle"),
     ("templates", "remove_isos", "After building, remove ISOs: ask, none, all or keep-windows", "ask"),
     ("media", "port", "Port the installer serves the media folder on", 8690),
+    ("capture", "build", "Build the packet capture appliance (yes/no)", True),
 ]
 MIRRORS = ["ubuntu", "debian", "debian_security", "debian_archive", "kali", "parrot", "rocky", "alma",
            "centos_stream", "fedora", "centos_vault", "epel_archive", "proxmox", "zimbra", "zabbix", "php"]
@@ -100,6 +101,7 @@ class Config:
         for flag in ("insecure",):
             self.data["vcenter"][flag] = as_bool(self.get("vcenter", flag))
         self.data["templates"]["rebuild"] = as_bool(self.get("templates", "rebuild"))
+        self.data["capture"]["build"] = as_bool(self.get("capture", "build"))
         unknown = set(self.mirrors()) - set(MIRRORS) - {"internet"}
         if unknown:
             raise ConfigError(f"[mirrors]: unknown {', '.join(sorted(unknown))} (known: {', '.join(MIRRORS)})")

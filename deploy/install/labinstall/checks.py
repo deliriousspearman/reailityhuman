@@ -51,6 +51,8 @@ class Context:
     # The extras' image ISOs in the bundle (images.py), and their sizes.
     bundled_images: dict[str, int] = field(default_factory=dict)
     checks: list[Check] = field(default_factory=list)
+    # The packet capture appliance (capture.py): off, built, ready (to build) or not ready.
+    capture: str = "off"
     items: list[Item] = field(default_factory=list)
     needs_setup: bool = False
 
@@ -257,7 +259,8 @@ def assess(ctx: Context, t: Template, state: dict, built_names: set[str], mirror
                 item.left_out[e] = why
             else:
                 item.extras.append(e)
-        item.extra_vars["extras"] = ",".join(item.extras) or "none"
+        # "none" is the server build's word for no extras; Ubuntu Desktop's takes an empty list.
+        item.extra_vars[t.extras_var] = ",".join(item.extras) or ("none" if t.extras_var == "extras" else "")
     elif t.extras == "windows":
         item.extras = list(t.entry.get("extras", []) or [])
         if "outlook" in item.extras and not office and not cfg.internet:
@@ -288,6 +291,8 @@ def extra_missing(ctx: Context, extra: str) -> str:
     m = ctx.manifest
     if extra in m.extras_online_only and not ctx.cfg.internet:
         return m.extras_online_only[extra]
+    if (mirror := m.extras_mirrors.get(extra)) and not ctx.cfg.internet and not ctx.cfg.mirror(mirror):
+        return f"no {mirror} mirror in the config"
     for need in m.extras_media.get(extra, []):
         if need.startswith("iso:"):
             file = m.iso_file(need[4:])

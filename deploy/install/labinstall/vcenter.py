@@ -170,6 +170,17 @@ class VCenter:
         finally:
             view.Destroy()
 
+    def vm_at(self, inv: Inventory, path: str) -> vim.VirtualMachine | None:
+        """The VM at this path under the datacenter's VM folder (e.g. "Labs/Capture/lab-capture"), or None."""
+        self.fresh()
+        found = self.content.searchIndex.FindByInventoryPath(f"{inv.datacenter.name}/vm/{path.strip('/')}")
+        return found if isinstance(found, vim.VirtualMachine) else None
+
+    def power_on(self, vm: vim.VirtualMachine) -> None:
+        self.fresh()
+        if vm.runtime.powerState != vim.VirtualMachinePowerState.poweredOn:
+            self.wait(vm.PowerOnVM_Task())
+
     def hosts(self, inv: Inventory) -> list[vim.HostSystem]:
         return list(inv.cluster.host)
 

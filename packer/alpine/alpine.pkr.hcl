@@ -54,6 +54,12 @@ variable "iso" {
   type    = string
   default = "alpine-virt-3.24.3-x86_64.iso"
 }
+# Offline: the media folder (scripts/isos/fetch-media.sh), whose linux/alpine apk repository goes on the
+# build CD; everything is installed from it, and the result points at Alpine's own repositories again.
+variable "media_dir" {
+  type    = string
+  default = ""
+}
 variable "vm_name" {
   type    = string
   default = ""
@@ -66,6 +72,8 @@ variable "build_password" {
 }
 
 locals {
+  offline  = var.media_dir != ""
+  apk_repo = "/media/lab/alpine/v${var.version}"
   vm_name = var.vm_name != "" ? var.vm_name : "tpl-alpine-${var.version}-${formatdate("YYYYMMDD", timestamp())}"
 }
 
@@ -98,8 +106,10 @@ source "vsphere-iso" "alpine" {
   iso_paths = ["[${var.datastore}] ${var.iso_folder}/${var.iso}"]
   cd_label  = "LABBUILD"
   cd_content = {
-    "answers" = templatefile("${path.root}/answers.pkrtpl", { ssh_public_key = var.ssh_public_key })
+    "answers" = templatefile("${path.root}/answers.pkrtpl", { ssh_public_key = var.ssh_public_key, apk_repos = local.offline ? "/media/sr0/apks ${local.apk_repo}" : "-1 -c" })
   }
+  # Offline: the media folder's apk repository, as /alpine on the CD (Packer keeps an absolute path's last folder).
+  cd_files = local.offline ? ["${var.media_dir}/linux/alpine"] : []
   remove_cdrom = true
 
   # The live system's login prompt, then setup-alpine from the build CD, with root's password empty
@@ -107,12 +117,13 @@ source "vsphere-iso" "alpine" {
   # system next, so it reports its address to Packer; setup-disk then installs it all on the disk,
   # Tools included (it takes the live system's packages and settings), without asking (ERASE_DISKS).
   boot_wait = "30s"
-  boot_command = [
+  boot_command = concat([
     "root<enter><wait3>",
     "mkdir -p /media/lab && mount -t iso9660 $(findfs LABEL=LABBUILD) /media/lab<enter><wait2>",
+    ], local.offline ? ["cp /media/lab/alpine/keys/lab-media.rsa.pub /etc/apk/keys/<enter><wait2>"] : [], [
     "setup-alpine -e -f /media/lab/answers && apk add -q open-vm-tools open-vm-tools-guestinfo && rc-update add open-vm-tools default && rc-service open-vm-tools start && ",
     "ERASE_DISKS=/dev/sda setup-disk -m sys /dev/sda && umount /media/lab && reboot<enter>",
-  ]
+  ])
 
   ip_wait_timeout      = "30m"
   communicator         = "ssh"
@@ -135,8 +146,9 @@ build {
     destination = "/tmp/"
   }
   provisioner "shell" {
-    inline          = ["mv /tmp/lab-firstboot /tmp/alpine/ && sh /tmp/alpine/prepare-alpine.sh"]
-    execute_command = "chmod +x {{ .Path }}; env {{ .Vars }} sh {{ .Path }}"
+    inline           = ["mv /tmp/lab-firstboot /tmp/alpine/ && sh /tmp/alpine/prepare-alpine.sh"]
+    environment_vars = local.offline ? ["LAB_APK_REPO=${local.apk_repo}"] : []
+    execute_command  = "chmod +x {{ .Path }}; env {{ .Vars }} sh {{ .Path }}"
   }
 
   post-processor "manifest" {

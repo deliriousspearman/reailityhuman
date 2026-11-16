@@ -19,6 +19,7 @@
 #   media      files the build reads from the media folder, offline
 #   extras     true: Linux, built with the catalogue's extras that can be built (-var extras=);
 #              "windows": Office and SQL Server's files decide outlook and mssql
+#   extras_var the Packer variable for that list, when it isn't extras (Ubuntu Desktop: desktop_extras)
 #   needs      templates built first (Parrot's base VM)
 #   internet   set when the build still downloads something no mirror or media option covers yet:
 #              offline, it's skipped and the reason is shown
@@ -51,6 +52,38 @@ vars = ["version=22.04", "iso=ubuntu-22.04.5-live-server-amd64.iso", "apt_mirror
 isos = ["ubuntu-22.04"]
 mirrors = ["ubuntu:dists/jammy/Release"]
 extras = true
+
+# Ubuntu Desktop (GNOME, over Remote Desktop): the same build with desktop=true, from the same ISOs and
+# mirror; GNOME and the rest come from Ubuntu's archive. 26.04 adds GNOME's Remote Login itself.
+[[template]]
+id = "ubuntu-desktop-26.04"
+catalogue = "ubuntu-desktop 26.04"
+build = "packer/build.sh ubuntu"
+vars = ["desktop=true", "apt_mirror={mirror.ubuntu}", "media_url={media}", "zabbix_mirror={mirror.zabbix}"]
+isos = ["ubuntu-26.04"]
+mirrors = ["ubuntu:dists/resolute/Release"]
+extras = true
+extras_var = "desktop_extras"
+
+[[template]]
+id = "ubuntu-desktop-24.04"
+catalogue = "ubuntu-desktop 24.04"
+build = "packer/build.sh ubuntu"
+vars = ["desktop=true", "version=24.04", "iso=ubuntu-24.04.5-live-server-amd64.iso", "apt_mirror={mirror.ubuntu}", "media_url={media}", "zabbix_mirror={mirror.zabbix}"]
+isos = ["ubuntu-24.04"]
+mirrors = ["ubuntu:dists/noble/Release"]
+extras = true
+extras_var = "desktop_extras"
+
+[[template]]
+id = "ubuntu-desktop-22.04"
+catalogue = "ubuntu-desktop 22.04"
+build = "packer/build.sh ubuntu"
+vars = ["desktop=true", "version=22.04", "iso=ubuntu-22.04.5-live-server-amd64.iso", "apt_mirror={mirror.ubuntu}", "media_url={media}", "zabbix_mirror={mirror.zabbix}"]
+isos = ["ubuntu-22.04"]
+mirrors = ["ubuntu:dists/jammy/Release"]
+extras = true
+extras_var = "desktop_extras"
 
 [[template]]
 id = "ubuntu-20.04"
@@ -230,6 +263,25 @@ build = "packer/build.sh cachyos"
 isos = ["cachyos-260809"]
 internet = "CachyOS's installer downloads from CachyOS's and Arch's repositories, which have no mirror option yet"
 
+# Alpine: its packages from the media folder's apk repository (fetch-media.sh), on the build CD.
+[[template]]
+id = "alpine-3.24"
+catalogue = "alpine 3.24"
+build = "packer/build.sh alpine"
+vars = ["media_dir={media_dir}"]
+isos = ["alpine-3.24"]
+media = ["linux/alpine/keys/lab-media.rsa.pub"]
+
+# FreeBSD: its release's sets and its packages from the media folder (fetch-media.sh), over HTTP.
+[[template]]
+id = "freebsd-15.1"
+catalogue = "freebsd 15.1"
+build = "packer/build.sh freebsd"
+vars = ["media_url={media}"]
+isos = ["freebsd-15.1"]
+media = ["freebsd/15.1-RELEASE/MANIFEST", "freebsd/15.1-RELEASE/base.txz", "freebsd/15.1-RELEASE/kernel.txz",
+         "freebsd/freebsd-15.1/install.sh"]
+
 # CentOS 8, 7, 6 (legacy, from the vault)
 [[template]]
 id = "centos-8"
@@ -293,6 +345,30 @@ build = "packer/build.sh windows-server"
 vars = ["version=2019", "media_dir={media_dir}"]
 isos = ["windows-server-2019"]
 media = ["windows/cloudbase-init/CloudbaseInitSetup_x64.msi"]
+extras = "windows"
+eval_days = 180
+
+# 2016 and 2012 R2: legacy.ps1 adds what they lack, from the media folder's windows/legacy (online,
+# packer/windows-server/fetch-legacy.sh downloads the same files). 2016 only lacks OpenSSH.
+[[template]]
+id = "windows-server-2016"
+catalogue = "windows-server 2016"
+build = "packer/build.sh windows-server"
+vars = ["version=2016", "media_dir={media_dir}"]
+isos = ["windows-server-2016"]
+media = ["windows/cloudbase-init/CloudbaseInitSetup_x64.msi", "windows/legacy/OpenSSH-Win64-v9.8.3.0.msi"]
+extras = "windows"
+eval_days = 180
+
+[[template]]
+id = "windows-server-2012r2"
+catalogue = "windows-server 2012 R2"
+build = "packer/build.sh windows-server"
+vars = ["version=2012r2", "media_dir={media_dir}"]
+isos = ["windows-server-2012r2"]
+media = ["windows/cloudbase-init/CloudbaseInitSetup_x64.msi", "windows/legacy/OpenSSH-Win64-v9.8.3.0.msi",
+         "windows/legacy/Windows8.1-KB2999226-x64.msu", "windows/legacy/ndp48-x86-x64-allos-enu.exe",
+         "windows/legacy/Win8.1AndW2K12R2-KB3191564-x64.msu"]
 extras = "windows"
 eval_days = 180
 
@@ -393,10 +469,24 @@ build = "packer/build.sh truenas-scale"
 isos = ["truenas-scale-25.10"]
 
 [[template]]
+id = "truenas-scale-25.04"
+catalogue = "truenas-scale 25.04"
+build = "packer/build.sh truenas-scale"
+vars = ["version=25.04", "iso=TrueNAS-SCALE-25.04.2.6.iso"]
+isos = ["truenas-scale-25.04"]
+
+[[template]]
 id = "truenas-core"
 catalogue = "truenas-core 13.3"
 build = "packer/build.sh truenas-core"
 isos = ["truenas-core-13.3"]
+
+[[template]]
+id = "truenas-core-13.0"
+catalogue = "truenas-core 13.0"
+build = "packer/build.sh truenas-core"
+vars = ["version=13.0", "iso=TrueNAS-13.0-U6.8.iso"]
+isos = ["truenas-core-13.0"]
 
 # Security
 [[template]]
@@ -456,6 +546,12 @@ wazuh = ["linux/wazuh/wazuh-offline.tar.gz", "linux/wazuh/wazuh-install.sh"]
 wazuh-agent = ["linux/wazuh/wazuh-agent_4.14.9-1_amd64.deb"]
 outlook = ["windows/office/setup.exe"]
 mssql = ["iso:sql-server-2025", "windows/chinook/Chinook_SqlServer.sql"]
+
+# Extras whose packages come from a repository of their own: offline, built in only with its mirror
+# ([mirrors] in the config); without it, left out.
+[extras_mirrors]
+zabbix = "zabbix"
+zabbix-agent = "zabbix"
 
 # Extras that can't be built without internet at all.
 [extras_online_only]

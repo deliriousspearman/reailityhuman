@@ -31,6 +31,16 @@ def pkrvars(ctx: Context) -> Path:
     return path
 
 
+def build_env(ctx: Context) -> dict[str, str]:
+    """The environment a build runs in: the administrator's sign-in for Packer (build.sh) and govc."""
+    admin = ctx.cfg.admin()
+    v = ctx.cfg.data["vcenter"]
+    return dict(os.environ, VCENTER_CREDENTIALS=str(admin.file), GOVC_URL=v["host"],
+                GOVC_USERNAME=admin.user, GOVC_PASSWORD=admin.password,
+                GOVC_INSECURE="1" if v["insecure"] else "0", GOVC_DATACENTER=v["datacenter"],
+                GOVC_DATASTORE=v["datastore"], NETWORK=v["network"], FOLDER=v["template_folder"])
+
+
 def hcl(v) -> str:
     return ("true" if v else "false") if isinstance(v, bool) else '"' + str(v).replace('"', '\\"') + '"'
 
@@ -73,12 +83,7 @@ def build_all(ctx: Context, state: dict, state_path: Path, logs: Path, verbose: 
         return
     logs.mkdir(parents=True, exist_ok=True)
     pkrvars(ctx)
-    admin = ctx.cfg.admin()
-    v = ctx.cfg.data["vcenter"]
-    base_env = dict(os.environ, VCENTER_CREDENTIALS=str(admin.file), GOVC_URL=v["host"],
-                    GOVC_USERNAME=admin.user, GOVC_PASSWORD=admin.password,
-                    GOVC_INSECURE="1" if v["insecure"] else "0", GOVC_DATACENTER=v["datacenter"],
-                    GOVC_DATASTORE=v["datastore"], NETWORK=v["network"], FOLDER=v["template_folder"])
+    base_env = build_env(ctx)
     taken = ctx.vc.vm_names(ctx.inv.template_folder)
     records = state.setdefault("templates", {})
     media = MediaServer(ctx.media_dir, int(ctx.cfg.get("media", "port"))) if ctx.media_url else None

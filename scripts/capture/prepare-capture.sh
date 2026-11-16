@@ -13,6 +13,14 @@ here=$(cd "$(dirname "$0")" && pwd)
 : "${PANEL_KEY:?set PANEL_KEY to the public key of the panel}"
 case $PANEL_KEY in ssh-*) ;; *) echo "PANEL_KEY doesn't look like a public key" >&2; exit 1 ;; esac
 
+# Offline (packer -var media_dir): the build CD carries an apk repository with everything installed here
+# (scripts/isos/fetch-media.sh): install from it alone. Cleaning up points apk back at Alpine's own.
+if [ -n "${LAB_APK_REPO:-}" ]; then
+	mkdir -p /media/lab
+	mountpoint -q /media/lab || mount -t iso9660 "$(findfs LABEL=LABBUILD)" /media/lab
+	echo "$LAB_APK_REPO" >/etc/apk/repositories
+fi
+
 echo "==> Packages"
 apk update -q
 apk upgrade -q
