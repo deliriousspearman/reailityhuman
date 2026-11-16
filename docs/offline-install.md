@@ -17,7 +17,7 @@ the extras' tests passed. Every template's build was also checked against mirror
 
 **On the internet side**, a Linux machine with:
 - Docker;
-- about 15 GB free, or 35 GB with the imported images;
+- about 25 GB free, or 45 GB with the imported images;
 - Node.js, or else bundle.sh uses Node's Docker image;
 - for Office's files, a Windows PC.
 
@@ -56,11 +56,11 @@ It gathers:
 | `images/` | Docker images: the panel's, and the tools image the builds run in (Packer, govc, …) |
 | `debs/` | Docker itself, for Ubuntu 22.04 and 24.04 servers without it |
 | `media/` | What the builds would download (below) |
+| `image-isos/` | The Docker extras' images, and k3s's and Winlogbeat's files, an ISO each (about 10 GB). The install uploads them to the ISO folder, and the panel attaches them to machines at deploy. `--no-image-isos` leaves them out, and those extras with them |
 | `SHA256SUMS` | Every file's checksum |
 
 **What `media/` holds:**
 - WordPress, Nextcloud and Chinook (the databases' sample data);
-- the container apps' images: Juice Shop, DVWA, Uptime Kuma, Grafana, Vaultwarden and Gitea;
 - Python 2.7 to 3.15, iRedMail with what its installer fetches, Wazuh's server bundle (about 1 GB)
   and agent, Zimbra 8.8.15's tarball, and MinIO and `mc` (built from source: about 12 minutes and
   3 GB free);
@@ -132,6 +132,8 @@ It changes nothing. It checks the bundle and then lists each check as ok, warnin
 - **The media folder.**
 - **Each mirror:** that it has each release.
 - **The ISOs:** each one is there at the right size.
+- **The extras' image ISOs:** each is in the ISO folder already, or in the bundle to upload. An extra
+  whose ISO is in neither is left out of the templates.
 - **Room:** on the datastore, and memory.
 
 Then it shows each template as one of:
@@ -152,7 +154,8 @@ sudo lab-bundle/install.sh
 2. Checks again, shows the summary, and asks whether to build without what isn't ready.
 3. Sets up vCenter if needed: the `Labs` folders, and the panel account's rights.
 4. **Installs the panel** and starts it. The panel is at `https://<address>`. Browsers trust it once
-   they trust `/srv/lab-deploy/lab-root.crt`, Caddy's own root certificate.
+   they trust `/srv/lab-deploy/lab-root.crt`, Caddy's own root certificate. Then it **uploads the
+   extras' image ISOs** the ISO folder doesn't have yet; one there already is kept.
 5. **Builds the templates** one at a time, each logged in `/srv/lab-deploy/install/logs/`. A failed
    build doesn't stop the rest.
 6. **Writes the panel's catalogue** from what was built (`/srv/lab-deploy/templates.yaml`). Templates

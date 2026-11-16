@@ -10,6 +10,8 @@ from urllib.parse import urlsplit
 
 import yaml
 
+from . import images
+
 PLACEHOLDER = re.compile(r"\{([a-z_]+(?:\.[a-z_]+)*)\}")
 
 
@@ -62,6 +64,8 @@ class Manifest:
         data = tomllib.loads((src / "deploy/install/manifest.toml").read_text())
         self.extras_media: dict[str, list[str]] = data.get("extras", {})
         self.extras_online_only: dict[str, str] = data.get("extras_online_only", {})
+        # The ISOs each extra needs attached at deploy (images.py): the Docker extras' and k3s's.
+        self.image_isos: dict[str, list[str]] = images.needed(src)
         catalogue = yaml.safe_load((src / "backend/templates.yaml").read_text())
         self.catalogue = {f"{e['template']} {e['version']}": e for e in catalogue}
         self.templates: dict[str, Template] = {}

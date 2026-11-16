@@ -16,7 +16,8 @@ publisher's checksum or signature.
 Not baked into templates: each goes on an ISO of its own in the datastore's ISO folder
 (`lab-image-<extra>-<tag>.iso`), made by `scripts/isos/fetch-images.sh`, and attached at deploy. The
 images are the `dockerImage:` lines in [`backend/extras.yaml`](../backend/extras.yaml);
-`fetch-images.sh --list` shows them.
+`fetch-images.sh --list` shows them. For an [offline install](offline-install.md), `deploy/bundle.sh`
+makes them all into the bundle, and the install uploads them.
 
 | Extra | Image | From |
 |---|---|---|

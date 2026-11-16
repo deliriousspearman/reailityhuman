@@ -3,13 +3,15 @@
 # network without internet, in one folder to carry across. Run it from the repo, on a Linux machine
 # with internet, Docker and about 15 GB free (35 GB with --images); Node.js too, or its image is used:
 #
-#   deploy/bundle.sh <folder> [--images] [--no-media]
+#   deploy/bundle.sh <folder> [--images] [--no-media] [--no-image-isos]
 #
 #   <folder>/install.sh, lab-install.toml.example   the install, and its config to fill in
 #   <folder>/repo/       the project at this commit, with the panel's website built
 #   <folder>/images/     Docker images: the panel's (backend, Caddy, PostgreSQL) and the tools image
 #   <folder>/debs/       Docker Engine and Compose for Ubuntu 22.04 (jammy) and 24.04 (noble)
 #   <folder>/media/      scripts/isos/fetch-media.sh's folder (--images: and the imported images)
+#   <folder>/image-isos/ the Docker extras' image ISOs, and k3s's and Winlogbeat's media ISOs
+#                        (scripts/isos/fetch-images.sh): install.sh uploads them to the ISO folder
 #   <folder>/SHA256SUMS  every file's checksum, which install.sh checks first
 #
 # Not in it: the ISOs (scripts/isos/fetch.sh <name> --no-upload, then into the datastore's ISO
@@ -17,13 +19,14 @@
 # it into the same folder keeps the media already downloaded.
 set -euo pipefail
 
-out=${1:?"usage: deploy/bundle.sh <folder> [--images] [--no-media]"}
+out=${1:?"usage: deploy/bundle.sh <folder> [--images] [--no-media] [--no-image-isos]"}
 shift
-images=() media=1
+images=() media=1 image_isos=1
 for a in "$@"; do
 	case $a in
 		--images) images=(--images) ;;
 		--no-media) media=0 ;;
+		--no-image-isos) image_isos=0 ;;
 		*) echo "bundle.sh: unknown option $a" >&2; exit 1 ;;
 	esac
 done
@@ -97,6 +100,18 @@ done
 if ((media)); then
 	step "The media folder"
 	"$repo/scripts/isos/fetch-media.sh" "$out/media" "${images[@]}"
+fi
+
+if ((image_isos)); then
+	# Made in the tools image (Docker's client, xorriso), from the bundle's own copy of the project, so
+	# their names are the ones its panel looks for. As this user, through the host's Docker. Re-running
+	# keeps those made already.
+	step "The extras' image ISOs (about 10 GB; GitLab's is the largest)"
+	mkdir -p "$out/image-isos"
+	docker run --rm --user "$(id -u):$(id -g)" --group-add "$(stat -c %g /var/run/docker.sock)" -e HOME=/tmp \
+		-v /var/run/docker.sock:/var/run/docker.sock -v "$out/repo:/repo:ro" -v "$out/image-isos:/out" -e STAGING=/out \
+		--entrypoint bash lab-deploy-tools /repo/scripts/isos/fetch-images.sh --all --no-upload
+	echo "  $(find "$out/image-isos" -name '*.iso' | wc -l) ISOs, $(du -sh "$out/image-isos" | cut -f1)"
 fi
 
 step "SHA256SUMS"

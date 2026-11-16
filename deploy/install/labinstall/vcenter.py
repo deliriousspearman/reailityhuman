@@ -1,12 +1,15 @@
 """What the install asks vCenter: sign-in, the inventory it builds into, the ISO folder, templates,
-room, and the hosts' clocks and nested virtualisation. It also deletes ISOs, when asked to."""
+room, and the hosts' clocks and nested virtualisation. It also uploads the extras' image ISOs, and
+deletes ISOs when asked to."""
 
+import http.client
 import ssl
 import time
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from pathlib import Path
 
 from pyVim.connect import Disconnect, SmartConnect
 from pyVmomi import vim, vmodl
@@ -126,6 +129,34 @@ class VCenter:
         req = urllib.request.Request(self.file_url(inv, path))
         req.add_header("Cookie", self.si._stub.cookie)
         return urllib.request.urlopen(req, context=self.context, timeout=60)
+
+    def upload_file(self, inv: Inventory, local: Path, path: str) -> None:
+        """Puts a local file on the datastore at `path`: streamed through vCenter's file service (signed
+        in with this session's cookie), as the vSphere Client uploads. Into "<path>.part" first, renamed
+        once it's all there, so a file at `path` is never one cut short."""
+        self.fresh()
+        part = f"{path}.part"
+        url = urllib.parse.urlsplit(self.file_url(inv, part))
+        conn = http.client.HTTPSConnection(url.netloc, context=self.context, timeout=600, blocksize=1 << 20)
+        try:
+            with open(local, "rb") as f:
+                conn.request("PUT", f"{url.path}?{url.query}", body=f, headers={
+                    "Cookie": self.si._stub.cookie,
+                    "Content-Type": "application/octet-stream",
+                    "Content-Length": str(local.stat().st_size),
+                })
+            r = conn.getresponse()
+            r.read()
+            if r.status not in (200, 201):
+                raise VCenterError(f"vCenter answered {r.status} {r.reason} to uploading {local.name}")
+        except OSError as e:
+            raise VCenterError(f"uploading {local.name} to vCenter was cut off: {e}") from e
+        finally:
+            conn.close()
+        ds = f"[{inv.datastore.name}] "
+        self.wait(self.content.fileManager.MoveDatastoreFile_Task(
+            sourceName=ds + part, sourceDatacenter=inv.datacenter, destinationName=ds + path,
+            destinationDatacenter=inv.datacenter, force=True))
 
     # Templates and hosts -----------------------------------------------------------------------
 

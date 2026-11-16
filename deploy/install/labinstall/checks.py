@@ -8,6 +8,7 @@ import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from . import images
 from .config import Config, ConfigError
 from .manifest import Manifest, Template, placeholder_values
 from .vcenter import Inventory, VCenter, VCenterError
@@ -47,6 +48,8 @@ class Context:
     media_url: str = ""
     http_ip: str = ""
     iso_files: dict[str, int] = field(default_factory=dict)
+    # The extras' image ISOs in the bundle (images.py), and their sizes.
+    bundled_images: dict[str, int] = field(default_factory=dict)
     checks: list[Check] = field(default_factory=list)
     items: list[Item] = field(default_factory=list)
     needs_setup: bool = False
@@ -133,6 +136,24 @@ def run(ctx: Context, state: dict, verify_isos: bool = False) -> None:
         files = {}
     ctx.iso_files = files
 
+    # The extras' image ISOs: on the datastore, or in the bundle to upload.
+    ctx.bundled_images = images.bundled()
+    wanted = sorted({iso for isos in ctx.manifest.image_isos.values() for iso in isos})
+    upload = images.to_upload(ctx)
+    lacking = [iso for iso in wanted if iso not in files and iso not in ctx.bundled_images]
+    have = len(wanted) - len(lacking) - len(upload)
+    if upload:
+        ctx.add("Image ISOs", OK, f"{have} of the extras' {len(wanted)} image ISOs are in the ISO folder; {len(upload)} "
+                f"({sum(ctx.bundled_images[i] for i in upload) / 1024**3:.1f} GB) are uploaded from the bundle")
+    elif not lacking:
+        ctx.add("Image ISOs", OK, f"the extras' {len(wanted)} image ISOs are all in the ISO folder")
+    if lacking:
+        extras = sorted(e for e, isos in ctx.manifest.image_isos.items() if set(isos) & set(lacking))
+        ctx.add("Image ISOs", WARN, f"{len(lacking)} image ISO(s) are neither in the ISO folder nor the bundle, so these extras "
+                f"are left out: {', '.join(extras)}",
+                "make the bundle again without --no-image-isos (deploy/bundle.sh), or make them with "
+                "scripts/isos/fetch-images.sh --no-upload and put them in the bundle's image-isos folder")
+
     # The media folder.
     if not ctx.media_dir.is_dir():
         ctx.add("Media", WARN, f"no media folder at {ctx.media_dir}: templates and extras that need it are left out",
@@ -169,11 +190,12 @@ def run(ctx: Context, state: dict, verify_isos: bool = False) -> None:
 
     # Room.
     ready = [i for i in ctx.items if i.status == "ready"]
-    need = sum(i.t.disk_gb for i in ready) + (BUILD_HEADROOM_GB if ready else 0)
+    images_gb = round(sum(ctx.bundled_images[i] for i in images.to_upload(ctx)) / 1024**3)
+    need = sum(i.t.disk_gb for i in ready) + (BUILD_HEADROOM_GB if ready else 0) + images_gb
     free = ctx.vc.free_gb(inv)
     ctx.add("Room", OK if free >= need else WARN,
-            f"the datastore has {free:.0f} GB free; the templates to build need at most {need} GB "
-            "(their disks are thin, so usually much less)",
+            f"the datastore has {free:.0f} GB free; the templates to build need at most {need - images_gb} GB "
+            f"(their disks are thin, so usually much less){f', and the image ISOs {images_gb} GB' if images_gb else ''}",
             "" if free >= need else "free space on the datastore, or build fewer at once (--only), if a build runs out of room")
     if ready:
         total, used = ctx.vc.memory_gb(inv)
@@ -248,6 +270,11 @@ def assess(ctx: Context, t: Template, state: dict, built_names: set[str], mirror
                 item.extras.remove("mssql")
                 item.left_out["mssql"] = why
                 item.extra_vars["sql_server"] = "false"
+        # Extras attached as an ISO at deploy (Winlogbeat): nothing to build in, but no ISO, no extra.
+        for e in [e for e in item.extras if e in m.image_isos]:
+            if why := images.missing(ctx, e):
+                item.extras.remove(e)
+                item.left_out[e] = why
     else:
         item.extras = list(t.entry.get("extras", []) or [])
 
@@ -268,7 +295,7 @@ def extra_missing(ctx: Context, extra: str) -> str:
                 return f"no {file} in the ISO folder"
         elif not ctx.cfg.internet and not (ctx.media_dir / need).exists():
             return f"no {need} in the media folder"
-    return ""
+    return images.missing(ctx, extra)
 
 
 def probe(url: str, name: str) -> str:

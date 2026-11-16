@@ -439,7 +439,8 @@ env = ["MEDIA={media_dir}/images"]
 media = ["images/ub1404.box"]
 
 # What extras need from the media folder offline (the Linux ones; the Windows ones are Office's files
-# and SQL Server's ISO). An extra not listed needs only the template's package mirror.
+# and SQL Server's ISO). An extra not listed needs only the template's package mirror. The Docker
+# extras, k3s and Winlogbeat aren't here: their image ISOs come from the bundle (labinstall/images.py).
 [extras]
 wordpress = ["linux/wordpress/latest.tar.gz", "linux/wp-cli/wp-cli.phar"]
 nextcloud = ["linux/nextcloud/latest.tar.bz2"]
@@ -447,12 +448,6 @@ postgresql = ["linux/chinook"]
 mariadb = ["linux/chinook"]
 mysql = ["linux/chinook"]
 sqlite = ["linux/chinook"]
-juice-shop = ["linux/docker/juice-shop.tar"]
-dvwa = ["linux/docker/dvwa.tar"]
-uptime-kuma = ["linux/docker/uptime-kuma.tar"]
-grafana = ["linux/docker/grafana.tar"]
-vaultwarden = ["linux/docker/vaultwarden.tar"]
-gitea = ["linux/docker/gitea.tar"]
 minio = ["linux/minio/minio", "linux/minio/mc"]
 python = ["linux/python/Python-2.7.18.tgz", "linux/python/openssl-1.1.1w.tar.gz"]
 iredmail = ["linux/iredmail/iRedMail-1.8.8.tar.gz"]

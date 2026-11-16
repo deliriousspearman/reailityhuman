@@ -185,6 +185,11 @@ for id in "${ids[@]}"; do
 		((missing)) || echo "$id: [$GOVC_DATASTORE] ISO/$iso is already there."
 		continue
 	fi
+	# Not uploading (e.g. the offline bundle, run again into the same folder): one made already stays.
+	if ! ((upload)) && [[ -s $STAGING/$iso ]]; then
+		echo "$id: $STAGING/$iso is made already."
+		continue
+	fi
 	dir=$STAGING/$id
 	rm -rf "$dir" && mkdir -p "$dir"
 	if [[ -n $media ]]; then

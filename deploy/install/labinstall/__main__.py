@@ -16,7 +16,7 @@ import urllib.request
 import ssl
 from pathlib import Path
 
-from . import builds, catalogue, checks, isos, report, tests
+from . import builds, catalogue, checks, images, isos, report, tests
 from .out import out
 from .checks import Context
 from .config import Config, ConfigError, ask, confirm, interactive
@@ -117,6 +117,12 @@ def main() -> int:
     if not a.skip_panel:
         step("The panel")
         install_panel(cfg)
+
+    # Needed when machines are deployed, not to build templates: before the builds, so a template's
+    # tests can deploy its Docker extras.
+    if images.to_upload(ctx):
+        step("The extras' image ISOs")
+        images.upload(ctx)
 
     if not a.skip_templates:
         step("Templates")

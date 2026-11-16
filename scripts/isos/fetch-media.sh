@@ -31,7 +31,7 @@ images=0
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 prepare=$here/../template/prepare.sh
 packer_dir=$here/../../packer
-mkdir -p "$out"/{linux/{wordpress,wp-cli,nextcloud,chinook,docker,python,iredmail,minio,zimbra,wazuh},windows/{cloudbase-init,chinook,office,exchange,legacy},packer}
+mkdir -p "$out"/{linux/{wordpress,wp-cli,nextcloud,chinook,python,iredmail,minio,zimbra,wazuh},windows/{cloudbase-init,chinook,office,exchange,legacy},packer}
 out=$(cd "$out" && pwd)
 
 # What prepare.sh and the Windows build use: keep in step with them.
