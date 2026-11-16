@@ -377,6 +377,9 @@ def test_runner_carries_on_after_restarts():
     assert "if ($done -contains \"ok $id\") { continue }" in runner  # extras done before a restart are skipped
     assert f"if ($code -eq 3010 -and $restarts -lt {extras.RESTARTS_MAX})" in runner
     assert "exit 1003" in runner and runner.rstrip().endswith("exit 0")  # never a stray exit code
+    # The scripts (which can hold passwords) go once the status is written, not before a restart's rerun.
+    delete = runner.index('Remove-Item -Force -Path "$dir\\extras\\*.ps1"')
+    assert runner.index("extras.status\"") < delete and runner.rindex("exit 1003") < delete
 
 
 def test_first_boot_script_passes_a_restart_on_and_is_safe_to_repeat():

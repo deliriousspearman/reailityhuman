@@ -314,6 +314,28 @@ def test_only_what_the_template_offers():
 # Applying ---------------------------------------------------------------------------------------------
 
 
+def test_runner_records_each_extra_then_deletes_the_scripts(tmp_path):
+    """The runner as the machine runs it, in a folder of its own: a status line per extra, then the
+    scripts and cloud-init's copies of the first-boot data (which can hold passwords) are gone."""
+    import subprocess
+
+    root, cloud = tmp_path / "lab", tmp_path / "cloud"
+    runner = extras.RUNNER.replace(extras.LOG_DIR, str(root / "log")).replace(extras.DIR, str(root)).replace("/var/lib/cloud", str(cloud))
+    (root / "extras").mkdir(parents=True)
+    (root / "extras" / "run.sh").write_text(runner)
+    (root / "extras" / "good.sh").write_text("echo password=secret\n")
+    (root / "extras" / "bad.sh").write_text("echo it broke\nfalse\n")
+    instance = cloud / "instances" / "i-1"
+    instance.mkdir(parents=True)
+    for name in ("user-data.txt", "user-data.txt.i", "cloud-config.txt", "obj.pkl", "datasource"):
+        (instance / name).write_text("secret")
+    subprocess.run(["bash", str(root / "extras" / "run.sh"), "good", "bad"], check=True)
+    assert (root / "extras.status").read_text() == "ok good\nfailed bad it broke\n"
+    assert list((root / "extras").iterdir()) == []
+    assert [p.name for p in instance.iterdir()] == ["datasource"]
+    assert (root / "log" / "good.log").read_text() == "password=secret\n"  # the extras' own logs stay
+
+
 def test_cloud_config_quotes_values_and_runs_each_extra():
     chosen = [{"id": "apache-https", "options": {"domain": "*.lab.example"}}]
     config = extras.cloud_config(chosen, "debian", "web01")

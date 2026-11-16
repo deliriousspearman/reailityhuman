@@ -65,6 +65,11 @@ for id in "$@"; do
 done >"$status"
 chmod 644 "$status"
 mv "$status" {STATUS_FILE}
+# The scripts can hold passwords (the machine's, or another machine's, e.g. a domain controller's
+# administrator), and so can cloud-init's copies of the first-boot data: gone now they've run, so
+# nobody who later gets root on the machine finds them. (A reset goes back to before first boot.)
+rm -f /var/lib/cloud/instances/*/{{user-data.txt,user-data.txt.i,cloud-config.txt,obj.pkl}}
+rm -f {DIR}/extras/*.sh
 """
 
 
@@ -743,6 +748,9 @@ foreach ($id in $Ids) {{
 }}
 [IO.File]::WriteAllLines("$dir\extras.status.part", [string[]]@(@($Warnings) + @($lines)))
 Move-Item -Force -Path "$dir\extras.status.part" -Destination "$dir\extras.status"
+# The scripts can hold passwords (the machine's, or a domain controller's administrator): gone now
+# they've run, so a local administrator can't find them later. (A reset goes back to before first boot.)
+Remove-Item -Force -Path "$dir\extras\*.ps1" -ErrorAction SilentlyContinue
 exit 0
 """.replace("\n", "\r\n")
 

@@ -19,7 +19,7 @@ from .db import session
 from .models import STABLE_STATES, InstanceFlag, Job, LogLine, Machine, TemplateBuild, utcnow
 from pyVmomi import vmodl
 
-from .vsphere import SetupError, VCenter, VSphereError, cancelled_by, check_cancelled, connect, describe
+from .vsphere import Cancelled, SetupError, VCenter, VSphereError, cancelled_by, check_cancelled, connect, describe
 
 log = logging.getLogger(__name__)
 
@@ -474,13 +474,20 @@ def _run(job_id: int, machine_id: str, action: str) -> None:
 POWERSHELL = r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
 
 
-def _run_linux_guest(vc: VCenter, vm, m: Machine, name: str, command: str) -> None:
-    """Runs a short shell command in a Linux guest by writing it to a script in /tmp (which the user can
+def _run_linux_guest(vc: VCenter, vm, m: Machine, name: str, command: str) -> int:
+    """Starts a short shell command in a Linux guest by writing it to a script in /tmp (which the user can
     write) and running it with /bin/sh, so the argument is a single token with no quoting to get wrong.
-    Fire-and-forget, as the Windows `run` path is."""
+    Returns its PID. The script can hold the user's password and a flag: only the user may read it, and
+    it deletes itself as it starts, so nobody else on the machine finds it later."""
     path = f"/tmp/.lab-{name}.sh"
-    vc.write_guest_file(vm, m.username, m.password, path, ("#!/bin/sh\n" + command + "\n").encode())
-    vc.run_guest_program(vm, m.username, m.password, "/bin/sh", path)
+    vc.write_guest_file(vm, m.username, m.password, path, ('#!/bin/sh\nrm -f "$0"\n' + command + "\n").encode(), mode=0o700)
+    return vc.run_guest_program(vm, m.username, m.password, "/bin/sh", path)
+
+
+# How long planting a flag may take: writing a file, or a `run` flag's script (which may wait for a
+# service, e.g. Exchange's mailbox flag for Active Directory).
+PLANT_FILE_TIMEOUT = 120
+PLANT_RUN_TIMEOUT = 20 * 60
 
 
 def new_flag() -> str:
@@ -498,9 +505,10 @@ def generate_flags(instance_id: str, lab: labs.Lab) -> None:
 
 def plant_flags(vc: VCenter, m: Machine) -> None:
     """Plants this instance's flags that belong on this machine (by its role), once it's running: a
-    file flag's value is written to its path, a run flag's script is run with the value. A flag that
-    won't plant is logged as a warning and left for the checklist to show as missing; it doesn't fail
-    the machine, which is otherwise ready."""
+    file flag's value is written to its path, a run flag's script is run with the value. A flag only
+    counts as planted once that's confirmed: the write went through, or the program exited with 0. A
+    flag that won't plant is logged as a warning and left for the checklist to show as missing; it
+    doesn't fail the machine, which is otherwise ready."""
     if not m.instance_id or not m.role:
         return
     lab = labs.find(m.lab or "")
@@ -519,6 +527,7 @@ def plant_flags(vc: VCenter, m: Machine) -> None:
         if value is None:
             continue
         try:
+            pid = None
             if f.file and windows:
                 vc.write_guest_file(vm, m.username, m.password, f.file, (value + "\r\n").encode())
             elif f.file:
@@ -526,12 +535,21 @@ def plant_flags(vc: VCenter, m: Machine) -> None:
                 # is in the sudo group, so sudo -S takes its (known) password on stdin.
                 write = f"printf '%s\\n' {shlex.quote(value)} > {shlex.quote(f.file)}"
                 command = f"echo {shlex.quote(m.password)} | sudo -S -p '' sh -c {shlex.quote(write)}"
-                _run_linux_guest(vc, vm, m, f"plant-{f.id}", command)
+                pid = _run_linux_guest(vc, vm, m, f"plant-{f.id}", command)
             elif windows:
-                vc.run_guest_program(vm, m.username, m.password, POWERSHELL,
-                                     f'-NoProfile -ExecutionPolicy Bypass -File "{f.run}" "{value}"')
+                pid = vc.run_guest_program(vm, m.username, m.password, POWERSHELL,
+                                           f'-NoProfile -ExecutionPolicy Bypass -File "{f.run}" "{value}"')
             else:
-                _run_linux_guest(vc, vm, m, f"plant-{f.id}", f"{f.run} {shlex.quote(value)}")
+                pid = _run_linux_guest(vc, vm, m, f"plant-{f.id}", f"{f.run} {shlex.quote(value)}")
+            if pid is not None:
+                timeout = PLANT_FILE_TIMEOUT if f.file else PLANT_RUN_TIMEOUT
+                code = vc.wait_guest_program(vm, m.username, m.password, pid, timeout)
+                if code is None:
+                    raise VSphereError(f"it was still being planted after {timeout // 60} minutes")
+                if code != 0:
+                    raise VSphereError(f"planting it exited with code {code}")
+        except Cancelled:
+            raise
         except VSphereError as e:
             add_log(m.id, f"Couldn't plant the '{f.id}' flag: {e}", "warn")
             continue

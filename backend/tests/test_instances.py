@@ -48,11 +48,16 @@ LAB = """
 def plantable(monkeypatch):
     """vcsim has no guests: record what would be written/run instead of talking to one."""
     from app.vsphere import VCenter
-    planted = {"files": {}, "runs": {}}
-    monkeypatch.setattr(VCenter, "write_guest_file",
-                        lambda self, vm, u, pw, path, content: planted["files"].__setitem__(path, content))
+    planted = {"files": {}, "modes": {}, "runs": {}, "exit": 0}
+
+    def write(self, vm, u, pw, path, content, mode=None):
+        planted["files"][path] = content
+        planted["modes"][path] = mode
+
+    monkeypatch.setattr(VCenter, "write_guest_file", write)
     monkeypatch.setattr(VCenter, "run_guest_program",
                         lambda self, vm, u, pw, prog, args: planted["runs"].__setitem__(prog, args) or 1234)
+    monkeypatch.setattr(VCenter, "wait_guest_program", lambda self, vm, u, pw, pid, timeout: planted["exit"])
     return planted
 
 
@@ -240,6 +245,30 @@ def test_flags_are_generated_and_planted(queued, plantable):
     mail_script = plantable["files"]["/tmp/.lab-plant-mail.sh"].decode()
     assert f["mail"]["value"] in mail_script and "plant.ps1" in mail_script
     assert plantable["runs"]["/bin/sh"].startswith("/tmp/.lab-plant-")
+    # The script holds the user's password and the flag: only the user may read it, and it deletes
+    # itself first thing.
+    assert plantable["modes"]["/tmp/.lab-plant-root.sh"] == 0o700
+    assert root_script.splitlines()[1] == 'rm -f "$0"'
+
+
+def test_a_flag_whose_planting_fails_isnt_marked_planted(queued, plantable):
+    """The script ran but didn't work (e.g. sudo refused): the checklist shows it as missing."""
+    plantable["exit"] = 1
+    i = deploy()
+    run_queued(queued)
+    i = client.get(f"/api/instances/{i['id']}").json()
+    assert i["state"] == "running"
+    assert not flags(i)["root"]["planted"] and not flags(i)["mail"]["planted"]
+    dc = next(m for m in i["machines"] if m["role"] == "dc")
+    log = client.get(f"/api/machines/{dc['id']}").json()["log"]
+    assert any("Couldn't plant the 'root' flag: planting it exited with code 1" in line["text"] for line in log)
+
+
+def test_a_flag_still_planting_at_the_timeout_isnt_marked_planted(queued, plantable):
+    plantable["exit"] = None
+    i = deploy()
+    run_queued(queued)
+    assert not flags(client.get(f"/api/instances/{i['id']}").json())["root"]["planted"]
 
 
 def test_reset_makes_new_flag_values(queued, plantable):
@@ -270,7 +299,7 @@ def test_destroy_clears_the_flags(queued, plantable):
 def test_a_planting_failure_doesnt_fail_the_machine(queued, monkeypatch):
     from app.vsphere import VCenter, VSphereError
 
-    def boom(self, vm, u, pw, path, content):
+    def boom(self, vm, u, pw, path, content, mode=None):
         raise VSphereError("guest ops off")
 
     monkeypatch.setattr(VCenter, "write_guest_file", boom)

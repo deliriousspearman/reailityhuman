@@ -650,14 +650,17 @@ class VCenter:
         except OSError as e:
             raise VSphereError(f"Couldn't fetch {path} from the ESXi host running the machine: {e}") from e
 
-    def write_guest_file(self, vm: vim.VirtualMachine, username: str, password: str, path: str, content: bytes) -> None:
+    def write_guest_file(
+        self, vm: vim.VirtualMachine, username: str, password: str, path: str, content: bytes, mode: int | None = None
+    ) -> None:
         """Writes a file inside the guest through VMware Tools, signed in as `username`, overwriting any
-        file already there (used to plant a Pro Lab's flags). The panel's account needs Guest operations
-        → Modify. As with reading, the bytes go to the ESXi host running the VM, so the panel's server
-        needs to reach that host on port 443."""
+        file already there (used to plant a Pro Lab's flags). `mode`: its permissions on Linux (e.g.
+        0o700, for a script holding a password); otherwise the guest's default. The panel's account
+        needs Guest operations → Modify. As with reading, the bytes go to the ESXi host running the VM,
+        so the panel's server needs to reach that host on port 443."""
         gom = self.content.guestOperationsManager
         auth = vim.vm.guest.NamePasswordAuthentication(username=username, password=password)
-        spec = vim.vm.guest.FileManager.FileAttributes()
+        spec = vim.vm.guest.FileManager.PosixFileAttributes(permissions=mode) if mode is not None else vim.vm.guest.FileManager.FileAttributes()
         try:
             url = gom.fileManager.InitiateFileTransferToGuest(
                 vm=vm, auth=auth, guestFilePath=path, fileAttributes=spec, fileSize=len(content), overwrite=True
@@ -696,6 +699,24 @@ class VCenter:
             ) from e
         except vmodl.MethodFault as e:
             raise VSphereError(f"Couldn't run {program} in the machine: {describe(e)}") from e
+
+    def wait_guest_program(self, vm: vim.VirtualMachine, username: str, password: str, pid: int, timeout: float) -> int | None:
+        """The exit code of a program run_guest_program started, once it ends; None if it's still running
+        after `timeout` seconds."""
+        gom = self.content.guestOperationsManager
+        auth = vim.vm.guest.NamePasswordAuthentication(username=username, password=password)
+        deadline = time.monotonic() + timeout
+        while True:
+            try:
+                found = gom.processManager.ListProcessesInGuest(vm=vm, auth=auth, pids=[pid])
+            except vmodl.MethodFault as e:
+                raise VSphereError(f"Couldn't check on process {pid} in the machine: {describe(e)}") from e
+            if found and found[0].endTime is not None:
+                return found[0].exitCode
+            if time.monotonic() >= deadline:
+                return None
+            check_cancelled()
+            time.sleep(2)
 
     def console_ticket(self, vm: vim.VirtualMachine) -> "ConsoleTicket":
         """Where to open the VM's screen: a WebMKS ticket from vCenter, for the ESXi host running the
