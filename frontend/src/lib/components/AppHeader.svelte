@@ -8,9 +8,6 @@
 
 	let { menuOpen = $bindable(false) }: { menuOpen?: boolean } = $props();
 
-	// Where the course site lives; set per deployment once the panel has config.
-	const LMS_URL = 'https://learn.example/';
-
 	const section = $derived(sectionFor(page.url.pathname));
 
 	// A count of what's running beside Machines, now the sidebar only lists the current section.
@@ -43,8 +40,6 @@
 	</nav>
 
 	<div class="right">
-		<a class="nav-link" href={LMS_URL}>Courses <Icon name="external" /></a>
-
 		<label class="theme-select">
 			<span class="visually-hidden">Theme</span>
 			<Icon name={theme.base === 'dark' ? 'moon' : 'sun'} />
@@ -162,11 +157,6 @@
 		font: 600 0.7rem/1.1rem var(--lms-mono);
 		text-align: center;
 		color: var(--lms-gray-2);
-	}
-	@media (max-width: 40rem) {
-		.right > .nav-link {
-			display: none;
-		}
 	}
 
 	.theme-select {
