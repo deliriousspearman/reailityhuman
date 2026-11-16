@@ -84,6 +84,20 @@ the next step (an xrdp debug log while resizing) is agreed.
   hour) filled every slot, and expiry, lost-job recovery and a lab's next machines waited for them.
 - **Lighter polling** (2026-10-27): each open page polls one `GET /api/state`; passwords only come
   with a single machine, and its log sends only new lines (two of the review's smaller items).
+- **The review of 2026-11-11, batches 1 to 3** (2026-11-16):
+  - **Secrets:** lab machines keep no passwords the attack path doesn't intend. The extras' scripts,
+    cloud-init's copies of the first-boot data and Linux flag-planting scripts are deleted once used
+    (checked live on Ubuntu 26.04, through a reboot, and on a Windows Server 2025 domain controller).
+    A flag counts as planted only once its planting exits with 0.
+  - **Correctness:** lab members can't be extended, kept, destroyed or reset on their own. A failed
+    power-off at expiry is retried every 15 minutes. Activity logs keep 1000 lines per machine.
+    Template builds can be cancelled. Deploys lock while they count. Changes are refused from other
+    sites' pages. A cancelled setup powers its VM off.
+  - **Polish:** the deploy form says why Deploy is disabled and asks for Name and Owner first. A
+    banner shows when vCenter can't be reached. Stale "Soon" placeholders are gone.
+  - Still open from that review (batches 4 and 5): letting deploys wait for long jobs, a sweep for
+    stuck states, build progress, row and bulk actions, a per-person limit, flag submission, a
+    lab's sign-in file, notifications, frontend tests, one folder per extra, one catalogue.
 - The [project review of 2026-10-23](review-2026-10-23.md): its five top priorities (a datastore
   reserve, machines that depend on each other, cancelling a stuck job, expired machines out of the
   quota, capacity on the deploy form). The rest is kept for later.
