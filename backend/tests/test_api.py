@@ -514,6 +514,10 @@ def test_a_running_job_stops_when_cancelled(queued, monkeypatch):
     m = client.get(f"/api/machines/{machine_id}").json()
     assert m["state"] == "error" and m["log"][-1]["text"] == "Deploy failed: cancelled by sam"
     assert client.get(f"/api/jobs?machine={machine_id}").json()[0]["detail"] == "cancelled by sam"
+    # Its VM is off, so a half-set-up machine doesn't keep using memory.
+    assert any(line["text"] == "Powered off, as its setup was cancelled" for line in m["log"])
+    with connect() as vc:
+        assert not vc.powered_on(vc.require_vm(m["vmName"]))
     # Destroying it works as for any failed deploy.
     assert client.delete(f"/api/machines/{machine_id}").status_code == 200
     run_queued(queued)
@@ -578,3 +582,58 @@ def test_blocked_templates_are_neither_deployed_nor_built(queued, monkeypatch):
     assert queued == []
     monkeypatch.setattr(settings(), "blocked_templates", "")
     assert deploy(queued, name="ok01")["state"] == "running"
+
+
+def test_a_failed_power_off_at_expiry_is_retried_every_15_minutes(queued, monkeypatch):
+    """vCenter down when a machine's time runs out: not a new expire job (and log lines) every minute."""
+    from app.vsphere import VCenter, VSphereError
+
+    m = deploy(queued, "retry01", hours=2)
+    with session() as s:
+        s.get(Machine, m["id"]).expires_at = utcnow() - timedelta(minutes=1)
+
+    def down(self, vm):
+        raise VSphereError("vCenter is down")
+
+    working = VCenter.power_off
+    monkeypatch.setattr(VCenter, "power_off", down)
+    actions.expiry_sweep(jobs.enqueue)
+    run_queued(queued)
+    assert client.get(f"/api/machines/{m['id']}").json()["state"] == "error"
+    lines = len(client.get(f"/api/machines/{m['id']}").json()["log"])
+    actions.expiry_sweep(jobs.enqueue)  # a minute later: left alone
+    assert queued == []
+    assert len(client.get(f"/api/machines/{m['id']}").json()["log"]) == lines
+    with session() as s:  # 16 minutes later: tried again
+        job = s.query(Job).filter(Job.machine_id == m["id"]).order_by(Job.id.desc()).first()
+        job.finished_at = utcnow() - timedelta(minutes=16)
+    monkeypatch.setattr(VCenter, "power_off", working)  # vCenter is back
+    actions.expiry_sweep(jobs.enqueue)
+    run_queued(queued)
+    m = client.get(f"/api/machines/{m['id']}").json()
+    assert m["state"] == "expired" and "Trying again to power it off" in m["log"][-1]["text"]
+
+
+def test_a_machines_oldest_activity_is_pruned(queued, monkeypatch):
+    m = deploy(queued, "chatty01")
+    every = [line["text"] for line in m["log"]]
+    monkeypatch.setattr(actions, "KEEP_LOG_LINES", 3)
+    actions.prune_history()
+    assert [line["text"] for line in client.get(f"/api/machines/{m['id']}").json()["log"]] == every[-3:]
+
+
+@pytest.mark.parametrize(
+    "headers, status",
+    [
+        ({"Origin": "https://evil.example"}, 403),
+        ({"Origin": "null"}, 403),
+        ({"Sec-Fetch-Site": "cross-site"}, 403),
+        ({"Origin": "http://testserver"}, 404),  # the panel's own page: through, to the API's answer
+        ({}, 404),  # a script, not a browser
+    ],
+)
+def test_changes_are_only_taken_from_the_panels_own_pages(headers, status):
+    r = client.post("/api/machines/m-0000/cancel", headers=headers)
+    assert r.status_code == status, r.text
+    # Reading is open to any page (it can't read the answer anyway).
+    assert client.get("/api/config", headers=headers).status_code == 200

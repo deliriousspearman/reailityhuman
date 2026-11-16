@@ -8,8 +8,10 @@ import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
+from urllib.parse import urlsplit
 
-from fastapi import APIRouter, FastAPI, HTTPException, Query, Response
+from fastapi import APIRouter, FastAPI, HTTPException, Query, Request, Response
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select, text
 from sqlalchemy.exc import IntegrityError
@@ -118,12 +120,32 @@ def job_out(j: Job) -> dict:
         out["finishedAt"] = ms(j.finished_at)
     if j.detail:
         out["detail"] = j.detail
+    if j.cancelled_by and j.state in ("queued", "running"):
+        out["cancelledBy"] = j.cancelled_by  # stopping
     return out
+
+
+# Deploys (and keeping a machine) count machines and free capacity, then add their own: one at a time,
+# so two close together can't both take the last place. A PostgreSQL advisory lock, held until the
+# request's transaction ends (committed, or rolled back by a refusal).
+DEPLOY_LOCK = 0x1AB_DE91
+
+
+def lock_deploys(db: Session) -> None:
+    db.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": DEPLOY_LOCK})
 
 
 def require_idle(m: Machine) -> None:
     if m.state not in STABLE_STATES:
         raise HTTPException(409, f"{m.name} is busy ({m.state}). Try again when it's finished.")
+
+
+def require_on_its_own(m: Machine, what: str) -> None:
+    """Refuses to `what` (e.g. "destroy") one machine of a lab instance: its machines expire, are kept and
+    are destroyed together, and a domain lab resets together, so tickets and trusts stay valid."""
+    if m.instance_id:
+        title = lab.title if (lab := labs.find(m.lab or "")) else (m.lab or "its lab")
+        raise HTTPException(409, f"{m.name} is part of {title} ({m.instance_id}): {what} the whole lab from its page instead.")
 
 
 def hours_label(hours: int) -> str:
@@ -419,6 +441,7 @@ def deploy_machine(req: DeployRequest, db: Db) -> dict:
             raise HTTPException(422, "This machine signs in with its domain controller's user and password, so it can't take a password of its own.")
         other = db.get(Machine, account)
         username, password = other.username, other.password
+    lock_deploys(db)
     if db.scalar(select(Machine).where(Machine.name == req.name)):
         raise HTTPException(409, f"There's already a machine called {req.name}.")
     # Expired machines don't count: they're off, and deleted once their grace period ends. Their disk
@@ -589,6 +612,9 @@ def reboot_machine(machine_id: str, db: Db, who: Actor) -> dict:
 
 @router.post("/machines/{machine_id}/reset")
 def reset_machine(machine_id: str, db: Db, who: Actor) -> dict:
+    m = get_machine(db, machine_id)
+    if m.instance_id and ((lab := labs.find(m.lab or "")) is None or lab.reset_scope == "lab"):
+        require_on_its_own(m, "reset")
     return _action(machine_id, db, who, "reset", "resetting", "Reset requested")
 
 
@@ -606,6 +632,7 @@ def redeploy_machine(machine_id: str, db: Db, who: Actor) -> dict:
 
 @router.delete("/machines/{machine_id}")
 def destroy_machine(machine_id: str, db: Db, who: Actor) -> dict:
+    require_on_its_own(get_machine(db, machine_id), "destroy")
     return _action(machine_id, db, who, "destroy", "destroying", "Destroy requested")
 
 
@@ -641,6 +668,7 @@ def _cancel(db: Session, m: Machine, who: str) -> bool:
 @router.post("/machines/{machine_id}/extend")
 def extend_machine(machine_id: str, req: Hours, db: Db, who: Actor) -> dict:
     m = get_machine(db, machine_id)
+    require_on_its_own(m, "extend")
     if m.expires_at is None:
         raise HTTPException(409, f"{m.name} is kept permanently, so there's nothing to extend.")
     require_idle(m)
@@ -653,8 +681,10 @@ def extend_machine(machine_id: str, req: Hours, db: Db, who: Actor) -> dict:
 def keep_machine(machine_id: str, db: Db, who: Actor) -> dict:
     cfg = settings()
     m = get_machine(db, machine_id)
+    require_on_its_own(m, "keep")
     require_idle(m)
     if m.expires_at is not None:
+        lock_deploys(db)
         permanent = db.scalar(select(func.count()).select_from(Machine).where(Machine.expires_at.is_(None)))
         if permanent >= cfg.max_permanent:
             raise HTTPException(409, f"{cfg.max_permanent} machines can be kept permanently. Set an expiry on another one first.")
@@ -666,6 +696,7 @@ def keep_machine(machine_id: str, db: Db, who: Actor) -> dict:
 @router.post("/machines/{machine_id}/expiry")
 def set_expiry(machine_id: str, req: Hours, db: Db, who: Actor) -> dict:
     m = get_machine(db, machine_id)
+    require_on_its_own(m, "set the expiry of")
     require_idle(m)
     m.expires_at = utcnow() + timedelta(hours=req.hours)
     text_ = f"Expiry set: powered off in {hours_label(req.hours)} unless extended"
@@ -811,6 +842,7 @@ def deploy_instance(req: InstanceRequest, db: Db) -> dict:
             planned.append((lm, tpl, resolve_extras(tpl, chosen_in, names[lm.name])))
     except extras.ExtraError as e:
         raise HTTPException(422, str(e)) from e
+    lock_deploys(db)
     expired = db.scalar(select(func.count()).select_from(Machine).where(Machine.state == "expired"))
     count = db.scalar(select(func.count()).select_from(Machine)) - expired
     if count + len(planned) > cfg.max_machines:
@@ -1055,6 +1087,19 @@ def build_template(template: str, version: str, db: Db, who: Actor) -> dict:
     return job_out(job) if job else {}
 
 
+@router.post("/templates/{template}/{version}/cancel")
+def cancel_build(template: str, version: str, db: Db, who: Actor) -> dict:
+    """Cancels the template's build: a queued one doesn't start, and a running one stops Packer, which
+    deletes its VM first (a minute or two). Machines waiting for it are marked failed."""
+    find_template(template, version)
+    job = builds.active_build(db, template, version)
+    if job is None or job.cancelled_by:
+        raise HTTPException(409, f"{template} {version} has no build waiting or running to cancel.")
+    job.cancelled_by = who
+    db.commit()
+    return job_out(job)
+
+
 # Leftover VMs -------------------------------------------------------------------------------------
 
 
@@ -1121,9 +1166,31 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
             await capture.stop_all()
 
 
+# Methods that change something. No sign-in yet, so a page on another site could otherwise send them
+# from a visitor's browser (a plain form POST needs no permission from this server).
+CHANGES = {"POST", "PUT", "PATCH", "DELETE"}
+
+
+def cross_site(request: Request) -> bool:
+    """Whether a browser sent this from another site's page: its Origin isn't this host, or it says so
+    (Sec-Fetch-Site). Clients other than browsers (scripts, curl) send neither, and pass."""
+    origin = request.headers.get("origin")
+    if origin is not None:
+        hosts = {request.headers.get("host"), request.headers.get("x-forwarded-host")} - {None}
+        return origin == "null" or urlsplit(origin).netloc not in hosts
+    return request.headers.get("sec-fetch-site") == "cross-site"
+
+
+async def same_site_only(request: Request, call_next):
+    if request.method in CHANGES and cross_site(request):
+        return JSONResponse({"detail": "Changes can only be made from the panel's own pages."}, status_code=403)
+    return await call_next(request)
+
+
 def create_app() -> FastAPI:
     # No docs pages: the CSP blocks the CDN assets they load. The schema is at /api/openapi.json.
     api = FastAPI(title="lab-deploy", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url="/api/openapi.json")
+    api.middleware("http")(same_site_only)
     api.include_router(router)
     api.include_router(console.router)
     api.include_router(capture.router)

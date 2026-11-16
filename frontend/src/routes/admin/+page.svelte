@@ -128,6 +128,27 @@
 		await loadTemplates();
 	}
 
+	function cancelBuild(t: TemplateStatus) {
+		request = {
+			title: `Cancel building ${templateName(t)}?`,
+			body:
+				(t.state === 'building'
+					? 'Packer stops and deletes the VM it was building, which takes a minute or two.'
+					: "It won't start.") +
+				(t.machines.length ? ' Machines waiting for it are marked as failed: redeploy them to build it again.' : ''),
+			label: 'Cancel build',
+			danger: true,
+			run: async () => {
+				try {
+					await api(`/templates/${encodeURIComponent(t.template)}/${encodeURIComponent(t.version)}/cancel`, { method: 'POST' });
+				} catch (e) {
+					store.say(e instanceof ApiError ? e.message : String(e));
+				}
+				await loadTemplates();
+			},
+		};
+	}
+
 	// A short label for why a built template can't be deleted; its tooltip has the full reason.
 	function cantDeleteLabel(t: TemplateStatus): string {
 		if (t.machines.length) return 'In use';
@@ -363,7 +384,11 @@
 						<td class="toggle-cell">
 							{#if t.deletable}
 								<button class="btn btn-sm" type="button" onclick={() => deleteTemplate(t)}><Icon name="trash" /> Delete</button>
-							{:else if t.rebuildable && (t.state === 'deleted' || t.state === 'failed') && !t.job}
+							{:else if t.job?.cancelledBy}
+								<span class="why hint">Cancelling…</span>
+							{:else if t.job}
+								<button class="btn btn-sm" type="button" onclick={() => cancelBuild(t)}><Icon name="stop" /> Cancel</button>
+							{:else if t.rebuildable && (t.state === 'deleted' || t.state === 'failed')}
 								<button class="btn btn-sm" type="button" onclick={() => buildTemplate(t)}><Icon name="rebuild" /> Build</button>
 							{:else if t.cantDelete && t.state === 'built'}
 								<span class="why hint" title={t.cantDelete}>{cantDeleteLabel(t)}</span>

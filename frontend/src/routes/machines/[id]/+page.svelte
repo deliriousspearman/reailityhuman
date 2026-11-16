@@ -20,6 +20,10 @@
 	const canControl = $derived(m ? store.canControlMachine(m) : false);
 	const busy = $derived(m ? isBusy(m.state) : true);
 	const keepBlocker = $derived(m ? store.keepBlocker(m) : null);
+	// A lab's machine: its time, reset and destroy go with the whole lab (from the lab's page).
+	const lab = $derived(m?.instanceId ? store.lab(m.lab ?? '') : undefined);
+	const inLab = $derived(!!m?.instanceId);
+	const resetsWithLab = $derived(inLab && (lab?.resetScope ?? 'lab') === 'lab');
 	const webUrl = $derived(m && t ? (t.webUrl ?? 'https://{ip}/').replace('{ip}', m.ip) : '');
 
 	// Its log only comes with the machine on its own, so poll that while this page is open.
@@ -217,11 +221,17 @@
 				<details class="more" bind:this={more}>
 					<summary class="btn">More</summary>
 					<div class="more-menu panel">
-						<button type="button" disabled={busy || m.state === 'expired'} onclick={() => fromMenu(reset)}><Icon name="reset" /> Reset to clean</button>
+						{#if !resetsWithLab}
+							<button type="button" disabled={busy || m.state === 'expired'} onclick={() => fromMenu(reset)}><Icon name="reset" /> Reset to clean</button>
+						{/if}
 						<button type="button" disabled={busy || m.state === 'expired'} onclick={() => fromMenu(redeploy)}><Icon name="rebuild" /> Redeploy</button>
 						<a href="/machines/new/{m.template}?from={m.id}"><Icon name="plus" /> Deploy another like this</a>
 						<a href="/network?machines={m.id}"><Icon name="capture" /> Capture its traffic</a>
-						<button type="button" class="danger" disabled={busy} onclick={() => fromMenu(destroy)}><Icon name="trash" /> Destroy</button>
+						{#if inLab}
+							<a href="/instances/{m.instanceId}"><Icon name="labs" /> Reset or destroy with {lab?.title ?? 'its lab'}</a>
+						{:else}
+							<button type="button" class="danger" disabled={busy} onclick={() => fromMenu(destroy)}><Icon name="trash" /> Destroy</button>
+						{/if}
 					</div>
 				</details>
 			</div>
@@ -232,7 +242,9 @@
 	{#if m.expiresAt === null}
 		<div class="banner">
 			<p><strong>Kept permanently.</strong> It won't expire.</p>
-			{#if canControl}
+			{#if inLab}
+				<a class="btn btn-sm" href="/instances/{m.instanceId}">Change it with the lab</a>
+			{:else if canControl}
 				<button class="btn btn-sm" type="button" onclick={() => store.setMachineExpiry(m, 24)}>
 					<Icon name="clock" /> Expire in 1 day instead
 				</button>
@@ -250,7 +262,11 @@
 					Powered off at <strong>{clock(m.expiresAt, store.now)}</strong>, in {duration(left)}, then deleted {inWords(store.grace)} later.
 				{/if}
 			</p>
-			{#if canControl}
+			{#if inLab}
+				<div class="banner-actions">
+					<a class="btn btn-sm" href="/instances/{m.instanceId}"><Icon name="clock" /> Extend the lab</a>
+				</div>
+			{:else if canControl}
 				<div class="banner-actions">
 					<button class="btn btn-sm" type="button" onclick={() => store.extendMachine(m, 2)}>
 						<Icon name="clock" /> {expired ? 'Extend 2 h and start' : '+2 h'}
@@ -262,7 +278,7 @@
 				</div>
 			{/if}
 		</div>
-		{#if canControl && keepBlocker}<p class="keep-note">{keepBlocker}</p>{/if}
+		{#if canControl && keepBlocker && !inLab}<p class="keep-note">{keepBlocker}</p>{/if}
 	{/if}
 
 	<dl class="stats">

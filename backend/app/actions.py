@@ -439,11 +439,34 @@ def _start(job_id: int, machine_id: str, action: str) -> None:
         cancelled_by.reset(token)
 
 
+# Actions that set a machine up: cancelled partway, the machine isn't what was asked for.
+SETUP_ACTIONS = {"deploy", "redeploy", "reset"}
+
+
+def _power_off_after_cancel(vc: VCenter, m: Machine) -> None:
+    """Powers off a machine whose setup was cancelled, so a half-set-up VM doesn't keep using memory
+    while it waits to be redeployed or destroyed. Best effort: the job fails as cancelled either way."""
+    token = cancelled_by.set(None)  # the power-off's own wait mustn't stop for the cancel too
+    try:
+        if (vm := vc.vm(m.vm_name)) and vc.powered_on(vm):
+            vc.power_off(vm)
+            add_log(m.id, "Powered off, as its setup was cancelled", "muted")
+    except (VSphereError, vmodl.MethodFault) as e:
+        log.warning("Couldn't power off %s after its setup was cancelled: %s", m.name, e)
+    finally:
+        cancelled_by.reset(token)
+
+
 def _run(job_id: int, machine_id: str, action: str) -> None:
     try:
         m = load(machine_id)
         with connect() as vc:
-            ACTIONS[action](vc, m)
+            try:
+                ACTIONS[action](vc, m)
+            except Cancelled:
+                if action in SETUP_ACTIONS:
+                    _power_off_after_cancel(vc, m)
+                raise
     except Exception as e:  # noqa: BLE001: any failure is reported on the job and the machine
         if isinstance(e, VSphereError):
             message = str(e)
@@ -615,6 +638,18 @@ def in_words(period: timedelta) -> str:
 # Sweeps (run every minute by the worker) --------------------------------------------------------------
 
 
+# How long the sweep waits before powering off an expired machine again when that failed.
+EXPIRE_RETRY = timedelta(minutes=15)
+
+
+def _failed_expire(s, machine_id: str) -> datetime | None:
+    """When the machine's last job, an expire, failed (e.g. vCenter was down); None if it wasn't that."""
+    last = s.scalars(select(Job).where(Job.machine_id == machine_id).order_by(Job.id.desc()).limit(1)).first()
+    if last is not None and last.kind == "expire" and last.state == "failed":
+        return last.finished_at or last.queued_at
+    return None
+
+
 def expiry_sweep(enqueue: Callable[[str, str, str], None], now: datetime | None = None) -> None:
     """Powers off machines whose time ran out, and deletes them once the grace period has passed.
 
@@ -629,8 +664,16 @@ def expiry_sweep(enqueue: Callable[[str, str, str], None], now: datetime | None 
         to_expire, to_destroy = [], []
         for m in due:
             if m.state in ("running", "stopped", "error"):
+                retry = m.state == "error" and _failed_expire(s, m.id)
+                if retry and retry > now - EXPIRE_RETRY:
+                    continue  # its power-off failed a moment ago (vCenter down?): not every minute
                 m.state = "expired"
-                s.add(LogLine(machine_id=m.id, text=f"Time ran out: powered off. Extend it within {in_words(grace)} to keep it.", tone="warn"))
+                text_ = (
+                    "Trying again to power it off, as its time ran out."
+                    if retry
+                    else f"Time ran out: powered off. Extend it within {in_words(grace)} to keep it."
+                )
+                s.add(LogLine(machine_id=m.id, text=text_, tone="warn"))
                 to_expire.append(m.id)
             elif m.state == "expired" and m.expires_at + grace <= now:
                 m.state = "destroying"
@@ -691,6 +734,16 @@ def recover_lost_jobs(now: datetime | None = None) -> None:
 # minute from the sweep alone).
 KEEP_JOBS = timedelta(days=90)
 KEEP_QUEUE_HOURS = 7 * 24
+# The most activity lines kept per machine: a long-lived one's oldest go.
+KEEP_LOG_LINES = 1000
+
+_PRUNE_LOG = text(
+    """
+    DELETE FROM log_lines WHERE id IN (
+        SELECT id FROM (SELECT id, row_number() OVER (PARTITION BY machine_id ORDER BY id DESC) AS n FROM log_lines) ranked
+         WHERE n > :keep)
+    """
+)
 
 _PRUNE_QUEUE = text(
     """
@@ -703,13 +756,14 @@ _PRUNE_QUEUE = text(
 
 
 def prune_history(now: datetime | None = None) -> None:
-    """Deletes finished jobs past their keeping time."""
+    """Deletes finished jobs past their keeping time, and each machine's oldest activity past KEEP_LOG_LINES."""
     now = now or utcnow()
     with session() as s:
         s.execute(
             Job.__table__.delete().where(Job.state.in_(("done", "failed")), Job.finished_at < now - KEEP_JOBS)
         )
         s.execute(_PRUNE_QUEUE, {"hours": KEEP_QUEUE_HOURS})
+        s.execute(_PRUNE_LOG, {"keep": KEEP_LOG_LINES})
 
 
 def _failed_setting_up(s, machine_id: str) -> bool:

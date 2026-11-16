@@ -123,6 +123,26 @@ def test_reset_and_destroy_the_whole_instance(queued):
         assert all(vc.vm(m["vmName"]) is None for m in i["machines"])
 
 
+def test_a_lab_machine_is_extended_reset_and_destroyed_with_its_lab(queued):
+    """Not on its own: the lab would be left with one machine missing, or on another expiry."""
+    i = deploy()
+    run_queued(queued)
+    ws = roles(i)["ws"]
+    for method, path, body in [
+        ("delete", "", None),
+        ("post", "/reset", None),
+        ("post", "/extend", {"hours": 2}),
+        ("post", "/keep", None),
+        ("post", "/expiry", {"hours": 2}),
+    ]:
+        r = client.request(method, f"/api/machines/{ws['id']}{path}", json=body)
+        assert r.status_code == 409 and f"part of Demo ({i['id']})" in r.json()["detail"], (path, r.text)
+    # Its own power can still be switched, and a failed one redeployed.
+    assert client.post(f"/api/machines/{ws['id']}/reboot").status_code == 200
+    run_queued(queued)
+    assert client.get(f"/api/machines/{ws['id']}").json()["state"] == "running"
+
+
 def test_a_failure_stops_the_machines_after_it(queued, monkeypatch):
     def fail(vc, m):
         raise actions.VSphereError("it broke")

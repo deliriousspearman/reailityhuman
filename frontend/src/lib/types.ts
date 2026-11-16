@@ -107,6 +107,8 @@ export interface Job {
 	startedAt: number | null;
 	finishedAt?: number;
 	detail?: string;
+	/** Who cancelled it, while it's still stopping. */
+	cancelledBy?: string;
 	/** The job that retried this one. */
 	retriedAs?: string;
 	/** A template build's template version, "<template>/<version>" (then machineId is unset). */

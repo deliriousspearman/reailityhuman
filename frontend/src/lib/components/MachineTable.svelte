@@ -57,7 +57,7 @@
 						{/if}
 					</td>
 					<td class="row-actions">
-						{#if store.canControlMachine(m) && m.expiresAt !== null && m.state !== 'destroying'}
+						{#if store.canControlMachine(m) && m.expiresAt !== null && m.state !== 'destroying' && !m.instanceId}
 							{@const busy = isBusy(m.state)}
 							<button class="btn btn-sm" type="button" disabled={busy} onclick={() => store.extendMachine(m, 2)}>
 								<Icon name="clock" />

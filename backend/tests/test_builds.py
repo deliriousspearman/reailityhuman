@@ -338,3 +338,36 @@ def test_a_build_of_a_built_template_just_lets_machines_go(queued, builds_queued
     with session() as s:
         assert s.get(Job, job_id).state == "done"
     assert [d["machine_id"] for d in queued] == ["m-wait"]
+
+
+def test_a_queued_build_can_be_cancelled(throwaway, queued, builds_queued):
+    assert client.delete("/api/templates/ubuntu/22.04").status_code == 200
+    m = deploy_2204()
+    r = client.post("/api/templates/ubuntu/22.04/cancel", headers={"X-Lab-User": "sam"})
+    assert r.status_code == 200 and r.json()["state"] == "queued"
+    assert client.post("/api/templates/ubuntu/22.04/cancel").status_code == 409  # cancelled already
+    run_builds(builds_queued)
+    job = client.get("/api/jobs").json()[0]
+    assert job["state"] == "failed" and job["detail"].startswith("Cancelled by")
+    m = client.get(f"/api/machines/{m['id']}").json()
+    assert m["state"] == "error" and "Cancelled by" in m["log"][-1]["text"]
+    assert not queued
+    # Nothing left to cancel.
+    assert client.post("/api/templates/ubuntu/22.04/cancel").status_code == 409
+
+
+def test_a_running_build_stops_when_cancelled(throwaway, builds_queued, monkeypatch):
+    """The build loop checks for a cancel while Packer runs, and stops it."""
+    assert client.delete("/api/templates/ubuntu/22.04").status_code == 200
+    assert client.post("/api/templates/ubuntu/22.04/build").status_code == 202
+
+    def packer(job_id, tpl, log_path):
+        assert client.post("/api/templates/ubuntu/22.04/cancel", headers={"X-Lab-User": "sam"}).status_code == 200
+        with session() as s:  # as _run_process finds at its next check
+            who = s.get(Job, job_id).cancelled_by
+        raise builds.BuildError(f"Stopped: cancelled by {who}.")
+
+    monkeypatch.setattr(builds, "build", packer)
+    run_builds(builds_queued)
+    t = {(t["template"], t["version"]): t for t in client.get("/api/templates").json()}[("ubuntu", "22.04")]
+    assert t["state"] == "failed" and t["detail"] == "Stopped: cancelled by sam."
