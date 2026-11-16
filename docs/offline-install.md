@@ -67,8 +67,7 @@ It gathers:
 - Cloudbase-Init and Exchange's prerequisites;
 - VMware Tools for OPNsense and pfSense;
 - Packer;
-- with `--images`, the images imported whole: MikroTik CHR, and Metasploitable 2 and 3 (Linux and
-  Windows).
+- with `--images`, the images imported whole: MikroTik CHR, and Metasploitable 2 and 3 (Linux).
 
 ### 2. What the bundle doesn't hold
 

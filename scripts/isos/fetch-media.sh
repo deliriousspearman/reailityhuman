@@ -187,12 +187,11 @@ if ((images)); then
 	get "$(pin "$ms2" IMAGE_URL)" "$out/images/metasploitable-linux-2.0.0.zip"
 	check "$out/images/metasploitable-linux-2.0.0.zip" "$(pin "$ms2" IMAGE_SHA256)" sha256
 	get "$(pin "$ms2" TOOLS_URL)" "$out/images/linuxPreGlibc25.iso"
-	step "Images: Metasploitable 3 (Ubuntu 14.04 and Windows Server 2008 R2)"
-	for v in ms3:ub1404 ms3-win:win2k8; do
-		script=$packer_dir/metasploitable/import-${v%%:*}.sh
-		get "$(pin "$script" BOX_URL)" "$out/images/${v#*:}.box"
-		check "$out/images/${v#*:}.box" "$(pin "$script" BOX_SHA256)" sha256
-	done
+	# Metasploitable 3's Windows box (import-ms3-win.sh) isn't fetched: it's out of the catalogue.
+	step "Images: Metasploitable 3 (Ubuntu 14.04)"
+	ms3=$packer_dir/metasploitable/import-ms3.sh
+	get "$(pin "$ms3" BOX_URL)" "$out/images/ub1404.box"
+	check "$out/images/ub1404.box" "$(pin "$ms3" BOX_SHA256)" sha256
 	step "Images: Parrot Security's OVA"
 	echo "  Parrot's OVA is a manual download (its signed hashes need checking): put Parrot-security-<version>_amd64.ova in $out/images (packer/parrot/import-base.sh)."
 fi
