@@ -473,7 +473,17 @@ curl -sk https://localhost/api/health      # database and vCenter both "ok"</cod
 <tr>
 <td><code>BUILD_MEDIA_DIR</code></td>
 <td>empty</td>
-<td>Offline: the media folder <code>fetch-media.sh</code> made, for the Windows builds</td>
+<td>Offline: the media folder <code>fetch-media.sh</code> made, as the builder sees it (the offline install sets it)</td>
+</tr>
+<tr>
+<td><code>BUILD_OFFLINE</code></td>
+<td>empty</td>
+<td>Offline: how each template is built on this network, written by the offline install. With it, the panel's own builds (Delete then deploy, or <strong>Build</strong>) use this network's mirrors and media folder, not the internet</td>
+</tr>
+<tr>
+<td><code>BUILD_MEDIA_PORT</code></td>
+<td>8690</td>
+<td>The port the builder serves the media folder on during an offline build</td>
 </tr>
 <tr>
 <td><code>BUILD_TIMEOUT_MINUTES</code></td>

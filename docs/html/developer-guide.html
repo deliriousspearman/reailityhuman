@@ -1070,8 +1070,11 @@ own (Zabbix's).</p>
 template's verdict), <code>manifest.py</code>, <code>builds.py</code> (the builds and the media server), <code>images.py</code> (the
 extras' image ISOs: which each needs, from <code>fetch-images.sh --list</code>, and uploading the bundle's),
 <code>capture.py</code> (the packet capture appliance's setup and build), <code>catalogue.py</code> (the panel's catalogue
-from what was built), <code>tests.py</code> (the end-to-end tests), <code>isos.py</code>, <code>report.py</code>, <code>out.py</code> and
-<code>vcenter.py</code>.</p>
+from what was built, and the builder's offline setup: <code>offline-builds.json</code>, its copy of <code>packer/</code>,
+<code>scripts/</code> and the media folder), <code>tests.py</code> (the end-to-end tests), <code>isos.py</code>, <code>report.py</code>, <code>out.py</code> and
+<code>vcenter.py</code> and <code>envfile.py</code>. The manifest's <code>[choices_mirrors]</code> names per-template choices that need
+a mirror (PHP's versions, from Ondřej Surý's PPA): a build without it leaves them out, and the
+catalogue doesn't offer them.</p>
 <h2 id="14-configuration-reference">14. Configuration reference<a class="headerlink" href="#14-configuration-reference" title="Permanent link">#</a></h2>
 <p>All settings come from the environment (<code>lab-deploy.env</code> on the server; an example is in
 <code>deploy/lab-deploy.env.example</code>). <code>config.py</code> is the source of truth.</p>
@@ -1212,7 +1215,17 @@ from what was built), <code>tests.py</code> (the end-to-end tests), <code>isos.p
 <tr>
 <td><code>BUILD_MEDIA_DIR</code></td>
 <td>—</td>
-<td>Offline: <code>fetch-media.sh</code>'s media folder, for the Windows builds</td>
+<td>Offline: <code>fetch-media.sh</code>'s media folder, as the builder sees it</td>
+</tr>
+<tr>
+<td><code>BUILD_OFFLINE</code></td>
+<td>—</td>
+<td>Offline: a JSON file the offline install writes (<code>catalogue.offline_builds</code>): for each template it built, <code>{"argv", "env", "media"}</code>. The builder runs that command instead of the recipe and its prepare scripts, and serves <code>BUILD_MEDIA_DIR</code> on <code>BUILD_MEDIA_PORT</code> while a <code>media</code> build runs</td>
+</tr>
+<tr>
+<td><code>BUILD_MEDIA_PORT</code></td>
+<td><code>8690</code></td>
+<td>Where the builder serves the media folder during an offline build</td>
 </tr>
 <tr>
 <td><code>BUILD_TIMEOUT_MINUTES</code></td>
