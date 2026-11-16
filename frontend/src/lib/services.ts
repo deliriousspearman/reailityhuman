@@ -8,24 +8,6 @@ type Planned = Pick<Service, 'id' | 'name' | 'category' | 'description'>;
 
 const planned: Planned[] = [
 	{
-		id: 'keycloak',
-		name: 'Keycloak',
-		category: 'Web apps',
-		description: 'Single sign-on and identity server (OpenID Connect and SAML) to connect your other apps to.',
-	},
-	{
-		id: 'mattermost',
-		name: 'Mattermost',
-		category: 'Web apps',
-		description: 'Team chat, similar to Slack, with PostgreSQL.',
-	},
-	{
-		id: 'pihole',
-		name: 'Pi-hole',
-		category: 'Network services',
-		description: 'DNS server that blocks ads and trackers. Handy as the DNS server for your other machines.',
-	},
-	{
 		id: 'wazuh',
 		name: 'Wazuh',
 		category: 'Security',
