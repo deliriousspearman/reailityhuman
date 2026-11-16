@@ -81,10 +81,26 @@ backend-test:
     - pip install --quiet '.[test]' && pip uninstall --quiet -y lab-deploy
     - pytest -q -p no:cacheprovider
 
+# The offline install's own tests (deploy/install/labinstall): its manifest against the panel's catalogue
+# (every template the panel can deploy must be buildable offline), the extras' image ISOs, the media
+# folder's package lists against the builds, and its helpers.
+install-test:
+  stage: build
+  image: python:3.12-slim
+  variables:
+    PIP_CACHE_DIR: $CI_PROJECT_DIR/.pip
+  cache:
+    key: install-test
+    paths: [.pip/]
+  script:
+    - pip install --quiet pyyaml==6.0.3 pyvmomi==9.1.1.0 pytest==9.1.1
+    - cd deploy/install
+    - python -m pytest -q -p no:cacheprovider labinstall/
+
 deploy:
   stage: deploy
   image: alpine:3
-  needs: [build, backend-test, scripts-check]
+  needs: [build, backend-test, scripts-check, install-test]
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
   resource_group: production
