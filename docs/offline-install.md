@@ -59,7 +59,7 @@ deploy/bundle.sh /path/to/lab-bundle --images --office /path/to/office \
 - `--iso-cache` takes ISOs from a folder that has them already (such as a copy of a lab's datastore
   `ISO` folder) instead of downloading them.
 
-**Sizes:** without `--isos`, about 12 GB, or about 17 GB with `--images` and `--office`. All 46 ISOs
+**Sizes:** without `--isos`, about 11 GB, or about 15.5 GB with `--images` and `--office`. All 46 ISOs
 add about 89 GB.
 
 **`DOWNLOAD-LATER.md`:** everything the install can use that isn't in the bundle, each with its link,
