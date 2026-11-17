@@ -1073,7 +1073,9 @@ whose ISO is missing is still built in, and <code>catalogue.write</code> offers 
 datastore),
 <code>capture.py</code> (the packet capture appliance's setup and build), <code>catalogue.py</code> (the panel's catalogue
 from what was built, and the builder's offline setup: <code>offline-builds.json</code>, its copy of <code>packer/</code>,
-<code>scripts/</code> and the media folder), <code>tests.py</code> (the end-to-end tests), <code>isos.py</code>, <code>report.py</code>, <code>out.py</code> and
+<code>scripts/</code> and the media folder), <code>tests.py</code> (the end-to-end tests), <code>isos.py</code> (the bundle's installer ISOs, uploaded; checking and removing
+them), <code>isolist.py</code> (every ISO the install can use and what needs it, for <code>bundle.sh --isos</code> and
+<code>DOWNLOAD-LATER.md</code>), <code>report.py</code>, <code>out.py</code> and
 <code>vcenter.py</code> and <code>envfile.py</code>. The manifest's <code>[choices_mirrors]</code> names per-template choices that need
 a mirror (PHP's versions, from Ondřej Surý's PPA): a build without it leaves them out, and the
 catalogue doesn't offer them.</p>

@@ -127,6 +127,7 @@ opts=()
 [[ -n ${NO_COLOR:-} ]] && opts+=(-e NO_COLOR=1)
 [[ -d $bundle/media ]] && opts+=(-v "$bundle/media:/bundle/media:ro")
 [[ -d $bundle/image-isos ]] && opts+=(-v "$bundle/image-isos:/bundle/image-isos:ro")
+[[ -d $bundle/isos ]] && opts+=(-v "$bundle/isos:/bundle/isos:ro")
 trap - ERR
 exec docker run --rm "${opts[@]}" --network host \
 	-v /var/run/docker.sock:/var/run/docker.sock -v "$root:$root" \

@@ -125,6 +125,9 @@ def main() -> int:
     if images.to_upload(ctx):
         step("The extras' image ISOs")
         images.upload(ctx)
+    if isos.to_upload(ctx):
+        step("The bundle's installer ISOs")
+        isos.upload(ctx)
 
     if not a.skip_templates:
         step("Templates")

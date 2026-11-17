@@ -225,3 +225,46 @@ def test_the_panels_builder_gets_the_install_commands(tmp_path):
     env = (root / "lab-deploy.env").read_text()
     assert "BUILD_OFFLINE=/app/offline-builds.json" in env and "BUILD_MEDIA_DIR=/media" in env and "BUILD_HTTP_IP=192.0.2.10" in env
     assert "./offline-builds.json:/app/offline-builds.json:ro" in catalogue.OVERRIDE and "./media:/media:ro" in catalogue.OVERRIDE
+
+
+def test_isolist_names_every_iso_the_install_can_use():
+    """bundle.sh --isos and DOWNLOAD-LATER.md go by isolist: every template's ISOs, the extras' and the
+    capture appliance's, each with what needs it, and no empty field (bash's read would merge them)."""
+    from . import isolist
+
+    m = Manifest(SRC)
+    rows = {r[0]: r for r in isolist.rows(m, SRC / "scripts/isos/isos.txt")}
+    for t in m.templates.values():
+        for ref in t.isos:
+            assert t.id in rows[ref][5].split(",")
+    assert "extra:mssql" in rows["sql-server-2025"][5]
+    assert "capture" in rows["alpine-3.24"][5].split(",")
+    assert rows["file:proxmox-ve_9.2-1-auto.iso"][2] == "proxmox"
+    assert all(all(field for field in r) for r in rows.values())
+
+
+def test_an_iso_in_the_bundle_counts_as_there_until_uploaded():
+    from .checks import Context
+
+    ctx = Context(cfg=None, manifest=None, iso_files={"a.iso": 1}, bundled_isos={"a.iso": 9, "b.iso": 2})
+    assert ctx.iso_size("a.iso") == 1  # the datastore's
+    assert ctx.iso_size("b.iso") == 2
+    assert ctx.iso_size("c.iso") is None
+
+
+def test_only_the_bundled_isos_this_run_builds_with_are_uploaded():
+    """Once a template is built and its ISO removed (clean-isos), running the install again mustn't
+    upload the bundle's copy again."""
+    from types import SimpleNamespace
+
+    from . import isos
+    from .checks import Context
+
+    m = Manifest(SRC)
+    kali, win = m.iso_file("kali-2026.2"), m.iso_file("windows-server-2025")
+    items = [SimpleNamespace(status="ready", t=m.templates["kali"], extras=[]),
+             SimpleNamespace(status="built already", t=m.templates["windows-server-2025"], extras=[])]
+    ctx = Context(cfg=None, manifest=m, items=items, bundled_isos={kali: 1, win: 2})
+    assert isos.to_upload(ctx) == [kali]
+    ctx.iso_files[kali] = 1
+    assert isos.to_upload(ctx) == []

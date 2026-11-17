@@ -102,10 +102,10 @@ the next step (an xrdp debug log while resizing) is agreed.
   has an offline build, and CI's `install-test` keeps it so. The Docker extras' image ISOs come in the
   bundle and the install uploads them; Windows Server 2016 and 2012 R2, TrueNAS SCALE 25.04 and CORE
   13.0 and Ubuntu Desktop got entries; Alpine, FreeBSD and the packet capture appliance install from
-  the media folder; the install sets up and builds the capture appliance. To keep it small (2026-11-17),
-  the bundle leaves out Windows Server 2016 and 2012 R2's and CachyOS's ISOs, Parrot's OVA,
-  Metasploitable 3's box and ELK's, Graylog's and GitLab's image ISOs (about 30 GB), listing them in its
-  `DOWNLOAD-LATER.md` to bring across later; extras waiting only for an image ISO are built in anyway,
+  the media folder; the install sets up and builds the capture appliance. Since 2026-11-17, `bundle.sh --isos`
+  adds the installer ISOs chosen (the install uploads them), and the bundle's `DOWNLOAD-LATER.md`
+  lists everything else it can use (the other ISOs, Parrot's OVA, Metasploitable 3's box) with its
+  link and checksum, to bring across later. Extras waiting only for an image ISO are built in anyway,
   and offered once it's there. Each was built through the
   installer in the lab. Also on 2026-11-16: the panel's own builds work offline (the install hands the
   builder each template's command for this network, and the media folder), and PHP's versions aren't

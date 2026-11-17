@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # Makes the offline install's bundle (docs/offline-install.md): everything deploy/install.sh needs on a
 # network without internet, in one folder to carry across. Run it from the repo, on a Linux machine
-# with internet, Docker and about 10 GB free (15 GB with --images and --office); Node.js too, or its
-# image is used:
+# with internet, Docker and about 12 GB free (17 GB with --images and --office, plus the ISOs chosen
+# with --isos); Node.js too, or its image is used:
 #
-#   deploy/bundle.sh <folder> [--images] [--no-media] [--no-image-isos] [--office <folder>] [--with-deferred]
+#   deploy/bundle.sh <folder> [--images] [--no-media] [--no-image-isos] [--office <folder>]
+#                    [--isos <list>] [--iso-cache <folder>] [--with-deferred]
 #
 #   <folder>/install.sh, lab-install.toml.example   the install, and its config to fill in
 #   <folder>/repo/       the project at this commit, with the panel's website built
@@ -13,27 +14,32 @@
 #   <folder>/media/      scripts/isos/fetch-media.sh's folder (--images: and the imported images)
 #   <folder>/image-isos/ the Docker extras' image ISOs, and k3s's and Winlogbeat's media ISOs
 #                        (scripts/isos/fetch-images.sh): install.sh uploads them to the ISO folder
-#   <folder>/DOWNLOAD-LATER.md  what's left out to keep the bundle small (DEFERRED below): each one's
-#                        link, checksum and where it goes, to bring across later
+#   <folder>/isos/       with --isos: installer ISOs, which install.sh uploads to the ISO folder
+#   <folder>/DOWNLOAD-LATER.md  everything the install can use that isn't in the bundle (the ISOs not
+#                        chosen, the imported images not fetched): each one's link, checksum and
+#                        where it goes, to bring across later
 #   <folder>/SHA256SUMS  every file's checksum, which install.sh checks first
 #
-# Not in it: the ISOs (scripts/isos/fetch.sh <name> --no-upload, then into the datastore's ISO
-# folder) and Parrot's OVA (media/images). Office's files (for the Outlook extra) only with --office:
-# the folder Office's download made (setup.exe, download.xml and Office\Data; docs/setup-vsphere.md,
-# "Office's files, for Outlook"), copied into media/windows/office. Re-running it into the same folder
-# keeps the media already downloaded.
+# --isos takes a comma-separated list of ISOs (isos.txt names, scripts/isos/fetch.sh --list) and
+# template ids (their ISOs), or all: e.g. --isos windows-server-2025,windows-11,exchange,kali. Proxmox
+# VE's -auto ISOs are made here (packer/proxmox/prepare-iso.sh); VyOS's is built separately
+# (packer/vyos/build-iso.sh). --iso-cache takes ISOs from a folder that has them already (e.g. copied
+# from a lab's datastore) rather than downloading them. Every ISO left out is in DOWNLOAD-LATER.md.
+#
+# --images adds what the templates imported whole start from, except Metasploitable 3's box (2.1 GB,
+# in DOWNLOAD-LATER.md; --with-deferred adds it). Parrot's OVA is never in it: it's a manual download.
+# Office's files (for the Outlook extra) only with --office: the folder Office's download made
+# (setup.exe, download.xml and Office\Data; docs/setup-vsphere.md, "Office's files, for Outlook"),
+# copied into media/windows/office. Re-running it into the same folder keeps what's downloaded already.
 set -euo pipefail
 
-# Left out by default, to keep the bundle small: each needs only its own template or extra, and can be
-# brought across later (DOWNLOAD-LATER.md). --with-deferred puts the two that are made here back in;
-# the ISOs and Parrot's OVA are never in the bundle. About 30 GB in all.
-DEFERRED_ISOS="windows-server-2016 windows-server-2012r2 cachyos-"  # isos.txt names (cachyos-: its dated one)
-DEFERRED_IMAGE_ISOS="elk,graylog,gitlab"                            # fetch-images.sh's extras
-DEFERRED_IMAGES="metasploitable-3"                                  # fetch-media.sh --images
+# Left out of --images by default, to keep the bundle small (DOWNLOAD-LATER.md lists it).
+DEFERRED_IMAGES="metasploitable-3"
 
-out=${1:?"usage: deploy/bundle.sh <folder> [--images] [--no-media] [--no-image-isos] [--office <folder>] [--with-deferred]"}
+usage="usage: deploy/bundle.sh <folder> [--images] [--no-media] [--no-image-isos] [--office <folder>] [--isos <list>] [--iso-cache <folder>] [--with-deferred]"
+out=${1:?$usage}
 shift
-images=() media=1 image_isos=1 office="" deferred=0
+images=() media=1 image_isos=1 office="" deferred=0 want_isos="" iso_cache=""
 while (($#)); do
 	case $1 in
 		--images) images=(--images) ;;
@@ -41,12 +47,18 @@ while (($#)); do
 		--no-media) media=0 ;;
 		--no-image-isos) image_isos=0 ;;
 		--office) office=${2:?"--office needs the folder Office's download made"}; shift ;;
-		*) echo "bundle.sh: unknown option $1" >&2; exit 1 ;;
+		--isos) want_isos=${2:?"--isos needs a list: ISO names, template ids, or all"}; shift ;;
+		--iso-cache) iso_cache=${2:?"--iso-cache needs a folder"}; shift ;;
+		*) echo "bundle.sh: unknown option $1 ($usage)" >&2; exit 1 ;;
 	esac
 	shift
 done
 if [[ -n $office ]] && ! [[ -f $office/setup.exe && -f $office/download.xml && -d $office/Office/Data ]]; then
 	echo "bundle.sh: $office isn't Office's download: it needs setup.exe, download.xml and Office/Data" >&2
+	exit 1
+fi
+if [[ -n $iso_cache && ! -d $iso_cache ]]; then
+	echo "bundle.sh: --iso-cache: no folder $iso_cache" >&2
 	exit 1
 fi
 repo=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
@@ -98,6 +110,53 @@ docker save -o "$out/images/panel.tar" lab-deploy-backend caddy:2 postgres:16-al
 docker save -o "$out/images/tools.tar" lab-deploy-tools
 echo "  $(du -sh "$out/images" | cut -f1)"
 
+# Every installer ISO the install can use: <ref> <file> <how> <url> <checksum> <needed by>, tab-separated
+# (deploy/install/labinstall/isolist.py), from the bundle's own copy of the project.
+iso_list=$(docker run --rm -v "$out/repo:/src:ro" -e PYTHONPATH=/src/deploy/install --entrypoint python \
+	lab-deploy-tools -m labinstall.isolist /src)
+
+# chosen <ref> <needed by>: whether --isos names this ISO, a template needing it, or all.
+chosen() {
+	local w
+	for w in ${want_isos//,/ }; do
+		[[ $w == all || $w == "$1" || $w == "${1#file:}" || ",$2," == *",$w,"* ]] && return 0
+	done
+	return 1
+}
+if [[ -n $want_isos ]]; then
+	for w in ${want_isos//,/ }; do
+		[[ $w == all ]] && continue
+		awk -F'\t' -v w="$w" '$1 == w || $1 == "file:" w || index("," $6 ",", "," w ",") { found = 1 } END { exit !found }' <<<"$iso_list" ||
+			{ echo "bundle.sh: --isos: $w is neither an ISO (scripts/isos/fetch.sh --list) nor a template id that needs one" >&2; exit 1; }
+	done
+	step "The installer ISOs chosen (--isos $want_isos)"
+	mkdir -p "$out/isos"
+	failed=()
+	while IFS=$'\t' read -r ref file how _ _ needs; do
+		chosen "$ref" "$needs" || continue
+		size=$(awk -v r="$ref" '$1 == r { print $3 }' "$out/repo/deploy/install/isos.sha256")
+		if [[ -s $out/isos/$file && ( -z $size || $(stat -c %s "$out/isos/$file") == "$size" ) ]]; then
+			echo "  $file: there already"
+			continue
+		fi
+		if [[ -n $iso_cache && -s $iso_cache/$file ]]; then
+			echo "  $file: from $iso_cache"
+			cp --reflink=auto "$iso_cache/$file" "$out/isos/$file.part" && mv "$out/isos/$file.part" "$out/isos/$file"
+			continue
+		fi
+		case $how in
+			download) STAGING=$out/isos "$repo/scripts/isos/fetch.sh" "$ref" --no-upload || failed+=("$file") ;;
+			proxmox)
+				base=$(sed -E 's/^proxmox-ve_([0-9.]+)-.*/proxmox-ve-\1/' <<<"$file")
+				STAGING=$out/isos "$repo/packer/proxmox/prepare-iso.sh" --no-upload "$base" || failed+=("$file") ;;
+			*) echo "  $file isn't downloaded but built (packer/vyos/build-iso.sh): it's in DOWNLOAD-LATER.md" ;;
+		esac
+	done <<<"$iso_list"
+	rm -f "$out/isos"/*.part
+	echo "  $(find "$out/isos" -name '*.iso' | wc -l) ISOs, $(du -sh "$out/isos" | cut -f1)"
+	((${#failed[@]} == 0)) || echo "bundle.sh: these didn't download, so they're in DOWNLOAD-LATER.md: ${failed[*]}" >&2
+fi
+
 step "Docker Engine's packages for Ubuntu 22.04 and 24.04"
 for codename in jammy noble; do
 	rm -rf "$out/debs/$codename"
@@ -135,96 +194,93 @@ if ((image_isos)); then
 	# Made in the tools image (Docker's client, xorriso), from the bundle's own copy of the project, so
 	# their names are the ones its panel looks for. As this user, through the host's Docker. Re-running
 	# keeps those made already.
-	except=()
-	((deferred)) || except=(--except "$DEFERRED_IMAGE_ISOS")
-	step "The extras' image ISOs (about 2.6 GB; 7.6 GB with --with-deferred)"
+	step "The extras' image ISOs (about 7.6 GB; GitLab's, ELK's and Graylog's are the largest)"
 	mkdir -p "$out/image-isos"
 	docker run --rm --user "$(id -u):$(id -g)" --group-add "$(stat -c %g /var/run/docker.sock)" -e HOME=/tmp \
 		-v /var/run/docker.sock:/var/run/docker.sock -v "$out/repo:/repo:ro" -v "$out/image-isos:/out" -e STAGING=/out \
-		--entrypoint bash lab-deploy-tools /repo/scripts/isos/fetch-images.sh --all "${except[@]}" --no-upload
+		--entrypoint bash lab-deploy-tools /repo/scripts/isos/fetch-images.sh --all --no-upload
 	echo "  $(find "$out/image-isos" -name '*.iso' | wc -l) ISOs, $(du -sh "$out/image-isos" | cut -f1)"
 fi
 
-step "DOWNLOAD-LATER.md: what's left out, and where to get it"
+step "DOWNLOAD-LATER.md: what isn't in the bundle, and where to get it"
 pin() { sed -n "s/^$2=\${$2:-\(.*\)}$/\1/p; s/^$2=\([^$]*\)$/\1/p" "$1" | head -1; }
+commit=$(git -C "$repo" rev-parse --short HEAD)
 {
-	commit=$(git -C "$repo" rev-parse --short HEAD)
 	cat <<-EOF
-	# Downloads left out of this bundle
+	# What isn't in this bundle
 
-	Made by \`deploy/bundle.sh\` at commit $commit. These are left out to keep the bundle small: each one
-	only matters to its own template or extra, and the install leaves that template or extra out until
-	it's there. On a machine with internet, download what you want, check it against its checksum, and
-	carry it across. Then put it where it says, and run \`sudo install.sh\` again. That's safe: it keeps
-	what's built, and builds only what's new (\`--only <template id>\` builds just that one).
+	Made by \`deploy/bundle.sh\` at commit $commit. These are left out to keep the bundle small. Each
+	only matters to the templates or extras named, and the install leaves those out until it's there.
+	On a machine with internet, download what you want, check it against its checksum, and carry it
+	across. Put it where it says, and run \`sudo install.sh\` again. That's safe: it keeps what's built
+	and builds only what's new (\`--only <template id>,…\` builds just those).
 
 	## Installer ISOs
 
-	Into the datastore's \`ISO\` folder (vSphere Client: the datastore → Files → \`ISO\` → Upload Files),
-	**with the file name given**: the install finds them by name.
+	Into the bundle's \`isos/\` folder (create it; the install uploads them), or straight into the
+	datastore's \`ISO\` folder (vSphere Client: the datastore → Files → \`ISO\` → Upload Files).
+	**Keep the file name given**: the install finds them by name.
 
-	| Template | File name | Download | SHA-256 |
+	| Needed by | File name | Download | SHA-256 |
 	|---|---|---|---|
 	EOF
-	for want in $DEFERRED_ISOS; do
-		while read -r name url sum file; do
-			[[ $name == "$want" || ($want == *- && $name == "$want"*) ]] || continue
-			file=${file:-${url##*/}}
-			[[ $sum == http* ]] && sum="published at <$sum>"
-			echo "| $name | \`$file\` | <$url> | $sum |"
-		done < <(grep -vE '^\s*(#|$)' "$repo/scripts/isos/isos.txt")
-	done
-	ova=$(grep -oE 'Parrot-security-[0-9.]+_amd64\.ova' "$repo/deploy/install/manifest.toml" | head -1)
-	parrot=$(sed -E 's/^Parrot-security-([0-9.]+)_amd64\.ova$/\1/' <<<"$ova")
-	ms3=$repo/packer/metasploitable/import-ms3.sh
+	missing_isos=0
+	while IFS=$'\t' read -r ref file how url sum needs; do
+		[[ -s $out/isos/$file ]] && continue
+		missing_isos=$((missing_isos + 1))
+		needs=${needs//,/, }
+		case $how in
+			download)
+				[[ $sum == http* ]] && sum="listed in <$sum>"
+				[[ $sum == - ]] && sum="none published"
+				echo "| $needs | \`$file\` | <$url> | $sum |" ;;
+			proxmox)
+				base=$(sed -E 's/^proxmox-ve_([0-9.]+)-.*/proxmox-ve-\1/' <<<"$file")
+				echo "| $needs | \`$file\` | made from Proxmox's ISO, with Docker: \`packer/proxmox/prepare-iso.sh --no-upload $base\` (into \`\$STAGING\`, default /var/tmp/lab-isos) | checked as it's made |" ;;
+			*)
+				echo "| $needs | \`$file\` | built: \`packer/vyos/build-iso.sh\` (Docker, about 10 GB). It's named by the date it's built: rename it to the name given, or update \`deploy/install/manifest.toml\` | printed when it's built |" ;;
+		esac
+	done <<<"$iso_list"
+	((missing_isos)) || echo "| (none: they're all in the bundle) | | | |"
+	cachy=$(awk -F'\t' '$6 ~ /cachyos/ { print $2; exit }' <<<"$iso_list")
+	if [[ -n $cachy && ! -s $out/isos/$cachy ]]; then
+		printf '\nCachyOS'"'"'s template can'"'"'t be built offline anyway: it installs from CachyOS'"'"'s own servers, which\naren'"'"'t mirrored.\n'
+	fi
 	cat <<-EOF
 
-	CachyOS's template can't be built offline anyway: it installs from CachyOS's own servers, which
-	aren't mirrored. Its ISO is listed for completeness.
+	Every ISO the install can use is also in \`repo/scripts/isos/isos.txt\`, and
+	\`repo/scripts/isos/fetch.sh <name> --no-upload\` downloads one and checks it.
 
 	## Imported images
 
-	Into the bundle's \`media/images/\` folder (create it), with the file name given.
+	Into the bundle's \`media/images/\` folder (create it), with the file name given. Then
+	\`sudo install.sh --only <template id>,…\`.
 
 	| Template | File name | Download | SHA-256 |
 	|---|---|---|---|
-	| parrot-base (then parrot) | \`$ova\` | <https://deb.parrot.sh/parrot/iso/$parrot/$ova> | check it against \`signed-hashes.txt\` in the same folder, whose signature is Parrot's |
-	| metasploitable-3 | \`ub1404.box\` | <$(pin "$ms3" BOX_URL)> | $(pin "$ms3" BOX_SHA256) |
-
-	Then \`sudo install.sh --only parrot-base,parrot,metasploitable-3\` (or the ones you brought).
-
-	## The extras' image ISOs
-
-	ELK, Graylog and GitLab run in Docker from an ISO of their images, attached when a machine is
-	deployed. Templates are built with these extras regardless: the panel offers them once their ISOs
-	are on the datastore and the install has run again, with no rebuild.
-
-	These are made, not downloaded. On a Linux machine with internet, Docker and xorriso, from this
-	commit of the project ($commit; the ISOs' names must match the bundle's):
-
-	\`\`\`sh
-	STAGING=/path/to/folder scripts/isos/fetch-images.sh ${DEFERRED_IMAGE_ISOS//,/ } --no-upload
-	\`\`\`
-
-	Or with only Docker, from a copy of this bundle (in its folder, as root or a member of the docker group):
-
-	\`\`\`sh
-	docker load -i images/tools.tar
-	docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "\$PWD/repo:/repo:ro" \\
-	  -v /path/to/folder:/out -e STAGING=/out --entrypoint bash lab-deploy-tools \\
-	  /repo/scripts/isos/fetch-images.sh ${DEFERRED_IMAGE_ISOS//,/ } --no-upload
-	\`\`\`
-
-	Then put them in the bundle's \`image-isos/\` folder (the install uploads them) or straight into the
-	datastore's \`ISO\` folder, and run \`sudo install.sh\` again.
-
-	| Extra | File name | Images in it |
-	|---|---|---|
 	EOF
-	"$repo/scripts/isos/fetch-images.sh" --list | awk -v want=",$DEFERRED_IMAGE_ISOS," '
-		index(want, "," $1 ",") { imgs = $2; for (i = 3; i < NF; i++) imgs = imgs ", " $i; printf "| %s | `%s` | %s |\n", $1, $NF, imgs }'
-	if ((deferred)); then
-		printf '\n(This bundle was made with --with-deferred: the image ISOs and Metasploitable 3 are in it already.)\n'
+	chr=$repo/packer/mikrotik/import-chr.sh ms2=$repo/packer/metasploitable/import-ms2.sh ms3=$repo/packer/metasploitable/import-ms3.sh
+	ova=$(grep -oE 'Parrot-security-[0-9.]+_amd64\.ova' "$repo/deploy/install/manifest.toml" | head -1)
+	parrot=$(sed -E 's/^Parrot-security-([0-9.]+)_amd64\.ova$/\1/' <<<"$ova")
+	row() { [[ -s $out/media/images/$2 ]] || echo "| $1 | \`$2\` | <$3> | $4 |"; }
+	for v in "mikrotik $(pin "$chr" VERSION)" "mikrotik-6 $(pin "$chr" VERSION_6)"; do
+		read -r id v <<<"$v"
+		row "$id" "chr-$v.vmdk.zip" "https://download.mikrotik.com/routeros/$v/chr-$v.vmdk.zip" "in <https://download.mikrotik.com/routeros/$v/chr-$v.vmdk.zip.sha256>"
+	done
+	row metasploitable-2 metasploitable-linux-2.0.0.zip "$(pin "$ms2" IMAGE_URL)" "$(pin "$ms2" IMAGE_SHA256)"
+	row "metasploitable-2 (its VMware Tools)" linuxPreGlibc25.iso "$(pin "$ms2" TOOLS_URL)" "in <$(pin "$ms2" TOOLS_URL).sha256>"
+	row metasploitable-3 ub1404.box "$(pin "$ms3" BOX_URL)" "$(pin "$ms3" BOX_SHA256)"
+	row "parrot-base (then parrot)" "$ova" "https://deb.parrot.sh/parrot/iso/$parrot/$ova" "in \`signed-hashes.txt\` in the same folder (check its signature, Parrot's)"
+	if ! ((image_isos)); then
+		cat <<-EOF
+
+		## The extras' image ISOs
+
+		This bundle was made with \`--no-image-isos\`, so the Docker extras, k3s and Winlogbeat are left
+		out. They're made, not downloaded: on a Linux machine with internet and Docker, from this commit
+		($commit; their names must match), \`STAGING=<folder> scripts/isos/fetch-images.sh --all --no-upload\`.
+		Put them in the bundle's \`image-isos/\` folder and run \`sudo install.sh\` again.
+		EOF
 	fi
 } >"$out/DOWNLOAD-LATER.md"
 echo "  $out/DOWNLOAD-LATER.md"

@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from . import images
+from . import isos as isos_mod
 from .config import Config, ConfigError
 from .manifest import Manifest, Template, placeholder_values
 from .vcenter import Inventory, VCenter, VCenterError
@@ -52,11 +53,17 @@ class Context:
     iso_files: dict[str, int] = field(default_factory=dict)
     # The extras' image ISOs in the bundle (images.py), and their sizes.
     bundled_images: dict[str, int] = field(default_factory=dict)
+    # The installer ISOs in the bundle (isos.py, deploy/bundle.sh --isos), uploaded before the builds.
+    bundled_isos: dict[str, int] = field(default_factory=dict)
     checks: list[Check] = field(default_factory=list)
     # The packet capture appliance (capture.py): off, built, ready (to build) or not ready.
     capture: str = "off"
     items: list[Item] = field(default_factory=list)
     needs_setup: bool = False
+
+    def iso_size(self, file: str) -> int | None:
+        """An installer ISO's size: on the datastore, or else in the bundle to upload; None if neither."""
+        return self.iso_files.get(file, self.bundled_isos.get(file))
 
     def add(self, area: str, status: str, detail: str, fix: str = "") -> None:
         self.checks.append(Check(area, status, detail, fix))
@@ -139,6 +146,7 @@ def run(ctx: Context, state: dict, verify_isos: bool = False) -> None:
                 f"make a folder '{v['iso_folder']}' on {v['datastore']} and put the templates' ISOs in it (scripts/isos)")
         files = {}
     ctx.iso_files = files
+    ctx.bundled_isos = isos_mod.bundled()
 
     # The extras' image ISOs: on the datastore, or in the bundle to upload.
     ctx.bundled_images = images.bundled()
@@ -184,6 +192,10 @@ def run(ctx: Context, state: dict, verify_isos: bool = False) -> None:
             item.status = "not ready"
             item.reasons.append(f"needs {', '.join(not_ready)}")
 
+    if upload_isos := isos_mod.to_upload(ctx):
+        ctx.add("ISOs", OK, f"{len(upload_isos)} installer ISO(s) in the bundle "
+                f"({sum(ctx.bundled_isos[i] for i in upload_isos) / 1024**3:.1f} GB) are uploaded to the ISO folder")
+
     # Mirrors, once each.
     for m, problem in sorted(mirror_results.items()):
         if problem:
@@ -194,12 +206,13 @@ def run(ctx: Context, state: dict, verify_isos: bool = False) -> None:
 
     # Room.
     ready = [i for i in ctx.items if i.status == "ready"]
-    images_gb = round(sum(ctx.bundled_images[i] for i in images.to_upload(ctx)) / 1024**3)
+    images_gb = round((sum(ctx.bundled_images[i] for i in images.to_upload(ctx))
+                       + sum(ctx.bundled_isos[i] for i in isos_mod.to_upload(ctx))) / 1024**3)
     need = sum(i.t.disk_gb for i in ready) + (BUILD_HEADROOM_GB if ready else 0) + images_gb
     free = ctx.vc.free_gb(inv)
     ctx.add("Room", OK if free >= need else WARN,
             f"the datastore has {free:.0f} GB free; the templates to build need at most {need - images_gb} GB "
-            f"(their disks are thin, so usually much less){f', and the image ISOs {images_gb} GB' if images_gb else ''}",
+            f"(their disks are thin, so usually much less){f', and the ISOs uploaded from the bundle {images_gb} GB' if images_gb else ''}",
             "" if free >= need else "free space on the datastore, or build fewer at once (--only), if a build runs out of room")
     if ready:
         total, used = ctx.vc.memory_gb(inv)
@@ -226,12 +239,12 @@ def assess(ctx: Context, t: Template, state: dict, built_names: set[str], mirror
         item.reasons.append(f"needs internet: {t.internet}")
     for ref in t.isos:
         file = m.iso_file(ref)
-        size = ctx.iso_files.get(file)
+        size = ctx.iso_size(file)
         if size is None:
-            item.reasons.append(f"no {file} in the ISO folder")
+            item.reasons.append(f"no {file} in the ISO folder or the bundle's isos folder")
         elif ref in m.isos and m.isos[ref].size and size != m.isos[ref].size:
             item.reasons.append(f"{file} is {size} bytes, not {m.isos[ref].size} (copied in part?)")
-        elif verify_isos and ref in m.isos and m.isos[ref].sha256:
+        elif verify_isos and ref in m.isos and m.isos[ref].sha256 and file in ctx.iso_files:
             from .isos import sha256_of
             if sha256_of(ctx, file) != m.isos[ref].sha256:
                 item.reasons.append(f"{file} isn't the file expected (its SHA-256 differs)")
@@ -305,8 +318,8 @@ def extra_missing(ctx: Context, extra: str, image: bool = True) -> str:
     for need in m.extras_media.get(extra, []):
         if need.startswith("iso:"):
             file = m.iso_file(need[4:])
-            if file not in ctx.iso_files:
-                return f"no {file} in the ISO folder"
+            if ctx.iso_size(file) is None:
+                return f"no {file} in the ISO folder or the bundle's isos folder"
         elif not ctx.cfg.internet and not (ctx.media_dir / need).exists():
             return f"no {need} in the media folder"
     return images.missing(ctx, extra) if image else ""

@@ -47,31 +47,29 @@ installer in the lab on 2026-11-16, one piece at a time; a whole new rehearsal h
 From the repository, at the commit to install:
 
 ```sh
-deploy/bundle.sh /path/to/lab-bundle --images --office /path/to/office
+deploy/bundle.sh /path/to/lab-bundle --images --office /path/to/office \
+    --isos windows-server-2025,windows-11,exchange,kali --iso-cache /path/to/isos
 ```
 
-`--images` adds the templates imported whole, and `--office` the folder Office's download made (for the
-Outlook extra; see step 2). With both, it's about 12 GB.
+- `--images` adds the templates imported whole.
+- `--office` adds the folder Office's download made, for the Outlook extra (see step 2).
+- `--isos` adds installer ISOs, which the install uploads to the datastore. It takes ISO names
+  (`scripts/isos/fetch.sh --list`), template ids (their ISOs), or `all`. Proxmox VE's ISOs are made
+  here (`prepare-iso.sh`); VyOS's is built separately.
+- `--iso-cache` takes ISOs from a folder that has them already (such as a copy of a lab's datastore
+  `ISO` folder) instead of downloading them.
 
-**Left out to keep it small** (about 30 GB): a few things only one template or extra needs. Each is
-listed, with its link, checksum and where it goes, in the bundle's `DOWNLOAD-LATER.md`, so it can be
-downloaded on an online machine and brought across later. The install leaves out what isn't there yet,
-and running it again picks it up:
+**Sizes:** without `--isos`, about 12 GB, or about 17 GB with `--images` and `--office`. All 46 ISOs
+add about 89 GB.
 
-| Left out | Size | Without it |
-|---|---|---|
-| Windows Server 2016 and 2012 R2's ISOs | 10.7 GB | those two templates |
-| Parrot's OVA | 9.9 GB | the Parrot template |
-| ELK's, Graylog's and GitLab's image ISOs | 5.0 GB | those three extras. Templates are built with them anyway, and the panel offers them once their ISOs are there and the install has run again, with no rebuild |
-| CachyOS's ISO | 3.0 GB | nothing offline: CachyOS's template installs from CachyOS's servers, which aren't mirrored |
-| Metasploitable 3 (Linux)'s box | 2.1 GB | that template |
+**`DOWNLOAD-LATER.md`:** everything the install can use that isn't in the bundle, each with its link,
+checksum, what needs it and where it goes:
+- every ISO not chosen with `--isos`;
+- the imported images not fetched: Parrot's OVA always (a manual download), Metasploitable 3
+  (Linux)'s box unless `--with-deferred`, and all of them without `--images`.
 
-`--with-deferred` puts the image ISOs and Metasploitable 3 back in the bundle. The ISOs and Parrot's
-OVA are never in it.
-
-```sh
-deploy/bundle.sh /path/to/lab-bundle            # the least: no imported images, no Office
-```
+Download them on an online machine whenever you want them, and bring them across. The install
+leaves out a template whose files aren't there yet, and running it again picks them up.
 
 It gathers:
 
@@ -82,8 +80,9 @@ It gathers:
 | `images/` | Docker images: the panel's, and the tools image the builds run in (Packer, govc, …) |
 | `debs/` | Docker itself, for Ubuntu 22.04 and 24.04 servers without it |
 | `media/` | What the builds would download (below) |
-| `image-isos/` | The Docker extras' images, and k3s's and Winlogbeat's files, an ISO each (about 2.6 GB, without the three left out). The install uploads them to the ISO folder, and the panel attaches them to machines at deploy. `--no-image-isos` leaves them all out, and those extras with them |
-| `DOWNLOAD-LATER.md` | What's left out, and where to get it |
+| `image-isos/` | The Docker extras' images, and k3s's and Winlogbeat's files, an ISO each (about 7.6 GB). The install uploads them to the ISO folder, and the panel attaches them to machines at deploy. `--no-image-isos` leaves them all out, and those extras with them (they're offered once their ISOs are there, with no rebuild) |
+| `isos/` | With `--isos`: the installer ISOs chosen. The install uploads them to the ISO folder |
+| `DOWNLOAD-LATER.md` | What isn't in the bundle, and where to get it |
 | `SHA256SUMS` | Every file's checksum |
 
 **What `media/` holds:**
@@ -101,27 +100,23 @@ It gathers:
 
 ### 2. What the bundle doesn't hold
 
-1. **The ISOs.** Run `scripts/isos/fetch.sh <name> --no-upload` for each template you'll build (`--list`
-   names them); they land in `/var/tmp/lab-isos`, or `STAGING=<folder>`. Or copy them from a lab that
-   has them already, from its datastore's `ISO` folder, keeping their names. Every template but the
-   three in `DOWNLOAD-LATER.md`: 43 ISOs, about 76 GB. Two templates need ISOs made
-   from these:
-   - **Proxmox VE 8 and 9:** `packer/proxmox/prepare-iso.sh --no-upload proxmox-ve-9.2` (and `proxmox-ve-8.4`)
-     makes `proxmox-ve_9.2-1-auto.iso`.
-   - **VyOS:** `packer/vyos/build-iso.sh` builds VyOS's ISO.
-2. **Office's files,** for the Outlook extra: on a Windows PC, as `media/windows/office/README.txt` says,
-   into `media/windows/office/`. Without them, Windows templates come without Outlook.
-3. **What `DOWNLOAD-LATER.md` lists,** if you want it now rather than later: Parrot's OVA and Metasploitable
-   3's box into `media/images/`, the ISOs with the rest, and the image ISOs into `image-isos/`.
+1. **The ISOs not chosen with `--isos`.** Each is in `DOWNLOAD-LATER.md`. Bring any you want
+   alongside, or later. `scripts/isos/fetch.sh <name> --no-upload` downloads one and checks it, into
+   `/var/tmp/lab-isos` or `STAGING=<folder>`.
+2. **Office's files,** for the Outlook extra, unless you used `--office`: on a Windows PC, as
+   `media/windows/office/README.txt` says, into `media/windows/office/`. Without them, Windows
+   templates come without Outlook.
+3. **The imported images in `DOWNLOAD-LATER.md`** (Parrot's OVA at least): into `media/images/`.
 
-Copy the bundle and the ISOs across.
+Copy the bundle, and anything you brought alongside, across.
 
 ## On the offline network
 
 ### 3. The ISOs into the datastore
 
-In the vSphere Client: Storage → the datastore → Files → `ISO` (create it) → Upload Files. Keep the
-files' names: the install finds them by name.
+The install uploads the bundle's `isos/` folder itself. For the others, either put them in the
+bundle's `isos/` folder too, or upload them in the vSphere Client: Storage → the datastore → Files →
+`ISO` (create it) → Upload Files. Keep the files' names: the install finds them by name.
 
 ### 4. The panel's server
 
@@ -165,7 +160,7 @@ It changes nothing. It checks the bundle and then lists each check as ok, warnin
 - **The hosts:** their clocks.
 - **The media folder.**
 - **Each mirror:** that it has each release.
-- **The ISOs:** each one is there at the right size.
+- **The ISOs:** each one is there at the right size, on the datastore or in the bundle's `isos/` to upload.
 - **The extras' image ISOs:** each is in the ISO folder already, or in the bundle to upload. An extra
   whose ISO is in neither is left out of the templates.
 - **Room:** on the datastore, and memory.

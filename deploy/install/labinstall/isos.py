@@ -1,11 +1,68 @@
-"""The ISOs on the datastore: checking one's SHA-256 (--verify-isos), and removing them once their
-templates are built (docs/offline-install.md, step 10)."""
+"""The ISOs on the datastore: the bundle's (deploy/bundle.sh --isos) uploaded to it, checking one's
+SHA-256 (--verify-isos), and removing them once their templates are built (docs/offline-install.md,
+step 10)."""
 
 import hashlib
+import os
+from pathlib import Path
 
 from .config import ask, confirm
 from .out import out
 from .vcenter import VCenterError
+
+
+BUNDLE = Path(os.environ.get("LAB_BUNDLE_ISOS", "/bundle/isos"))
+
+
+def bundled(folder: Path = BUNDLE) -> dict[str, int]:
+    """The installer ISOs in the bundle, and their sizes."""
+    if not folder.is_dir():
+        return {}
+    return {p.name: p.stat().st_size for p in folder.glob("*.iso")}
+
+
+def wanted(ctx) -> set[str]:
+    """The ISO files this run's builds use: the ready templates' and their extras', and the capture
+    appliance's if it's to be built."""
+    m = ctx.manifest
+    files = set()
+    for item in ctx.items:
+        if item.status != "ready":
+            continue
+        files |= {m.iso_file(ref) for ref in item.t.isos}
+        for e in item.extras:
+            files |= {m.iso_file(n[4:]) for n in m.extras_media.get(e, []) if n.startswith("iso:")}
+    if ctx.capture == "ready":
+        from . import capture
+        files.add(m.iso_file(capture.ISO))
+    return files
+
+
+def to_upload(ctx) -> list[str]:
+    """The bundle's installer ISOs that this run's builds need and the ISO folder doesn't have. Only
+    those: one removed after its template was built (clean) isn't uploaded again on the next run."""
+    need = wanted(ctx)
+    return sorted(f for f in ctx.bundled_isos if f not in ctx.iso_files and f in need)
+
+
+def upload(ctx) -> list[str]:
+    """Uploads to_upload() into the ISO folder, one at a time (each to a .part, renamed once whole).
+    Returns those that didn't upload."""
+    folder = ctx.cfg.get("vcenter", "iso_folder")
+    failed = []
+    for file in to_upload(ctx):
+        size = ctx.bundled_isos[file]
+        out.info(f"Uploading {file} ({size / 1024**3:.1f} GB)…")
+        try:
+            ctx.vc.upload_file(ctx.inv, BUNDLE / file, f"{folder}/{file}")
+        except VCenterError as e:
+            out.warn(f"{file} didn't upload: {e}",
+                     fix="run the install again to retry it; until then, the templates needing it can't build")
+            failed.append(file)
+            continue
+        ctx.iso_files[file] = size
+        out.ok(f"uploaded {file}")
+    return failed
 
 
 def sha256_of(ctx, file: str) -> str:

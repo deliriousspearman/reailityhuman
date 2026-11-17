@@ -40,8 +40,8 @@ def assess(ctx: Context) -> None:
         return
     reasons = []
     iso = ctx.manifest.iso_file(ISO)
-    if iso not in ctx.iso_files:
-        reasons.append(f"no {iso} in the ISO folder")
+    if ctx.iso_size(iso) is None:
+        reasons.append(f"no {iso} in the ISO folder or the bundle's isos folder")
     if not ctx.cfg.internet and not (ctx.media_dir / REPO).exists():
         reasons.append("no linux/alpine repository in the media folder (scripts/isos/fetch-media.sh makes it)")
     if reasons:
