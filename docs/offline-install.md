@@ -47,7 +47,30 @@ installer in the lab on 2026-11-16, one piece at a time; a whole new rehearsal h
 From the repository, at the commit to install:
 
 ```sh
-deploy/bundle.sh /path/to/lab-bundle            # add --images for the templates imported whole
+deploy/bundle.sh /path/to/lab-bundle --images --office /path/to/office
+```
+
+`--images` adds the templates imported whole, and `--office` the folder Office's download made (for the
+Outlook extra; see step 2). With both, it's about 12 GB.
+
+**Left out to keep it small** (about 30 GB): a few things only one template or extra needs. Each is
+listed, with its link, checksum and where it goes, in the bundle's `DOWNLOAD-LATER.md`, so it can be
+downloaded on an online machine and brought across later. The install leaves out what isn't there yet,
+and running it again picks it up:
+
+| Left out | Size | Without it |
+|---|---|---|
+| Windows Server 2016 and 2012 R2's ISOs | 10.7 GB | those two templates |
+| Parrot's OVA | 9.9 GB | the Parrot template |
+| ELK's, Graylog's and GitLab's image ISOs | 5.0 GB | those three extras. Templates are built with them anyway, and the panel offers them once their ISOs are there and the install has run again, with no rebuild |
+| CachyOS's ISO | 3.0 GB | nothing offline: CachyOS's template installs from CachyOS's servers, which aren't mirrored |
+| Metasploitable 3 (Linux)'s box | 2.1 GB | that template |
+
+`--with-deferred` puts the image ISOs and Metasploitable 3 back in the bundle. The ISOs and Parrot's
+OVA are never in it.
+
+```sh
+deploy/bundle.sh /path/to/lab-bundle            # the least: no imported images, no Office
 ```
 
 It gathers:
@@ -59,7 +82,8 @@ It gathers:
 | `images/` | Docker images: the panel's, and the tools image the builds run in (Packer, govc, …) |
 | `debs/` | Docker itself, for Ubuntu 22.04 and 24.04 servers without it |
 | `media/` | What the builds would download (below) |
-| `image-isos/` | The Docker extras' images, and k3s's and Winlogbeat's files, an ISO each (about 10 GB). The install uploads them to the ISO folder, and the panel attaches them to machines at deploy. `--no-image-isos` leaves them out, and those extras with them |
+| `image-isos/` | The Docker extras' images, and k3s's and Winlogbeat's files, an ISO each (about 2.6 GB, without the three left out). The install uploads them to the ISO folder, and the panel attaches them to machines at deploy. `--no-image-isos` leaves them all out, and those extras with them |
+| `DOWNLOAD-LATER.md` | What's left out, and where to get it |
 | `SHA256SUMS` | Every file's checksum |
 
 **What `media/` holds:**
@@ -72,22 +96,23 @@ It gathers:
 - for FreeBSD 15.1, its release's base and kernel sets and the packages it installs;
 - for Alpine 3.24 and the packet capture appliance, the packages they install, as a signed repository;
 - Packer;
-- with `--images`, the images imported whole: MikroTik CHR, and Metasploitable 2 and 3 (Linux).
+- with `--images`, the images imported whole: MikroTik CHR and Metasploitable 2 (and Metasploitable 3
+  (Linux) with `--with-deferred`).
 
 ### 2. What the bundle doesn't hold
 
 1. **The ISOs.** Run `scripts/isos/fetch.sh <name> --no-upload` for each template you'll build (`--list`
    names them); they land in `/var/tmp/lab-isos`, or `STAGING=<folder>`. Or copy them from a lab that
-   has them already, from its datastore's `ISO` folder, keeping their names. Every template: 43 ISOs,
-   about 86 GB. Two templates need ISOs made
+   has them already, from its datastore's `ISO` folder, keeping their names. Every template but the
+   three in `DOWNLOAD-LATER.md`: 43 ISOs, about 76 GB. Two templates need ISOs made
    from these:
    - **Proxmox VE 8 and 9:** `packer/proxmox/prepare-iso.sh --no-upload proxmox-ve-9.2` (and `proxmox-ve-8.4`)
      makes `proxmox-ve_9.2-1-auto.iso`.
    - **VyOS:** `packer/vyos/build-iso.sh` builds VyOS's ISO.
 2. **Office's files,** for the Outlook extra: on a Windows PC, as `media/windows/office/README.txt` says,
    into `media/windows/office/`. Without them, Windows templates come without Outlook.
-3. **Parrot's OVA**, from https://deb.parrot.sh/parrot/iso/, into `media/images/`. Check it against its
-   signed hashes.
+3. **What `DOWNLOAD-LATER.md` lists,** if you want it now rather than later: Parrot's OVA and Metasploitable
+   3's box into `media/images/`, the ISOs with the rest, and the image ISOs into `image-isos/`.
 
 Copy the bundle and the ISOs across.
 

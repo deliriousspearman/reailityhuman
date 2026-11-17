@@ -130,7 +130,8 @@ def main() -> int:
         step("Templates")
         builds.build_all(ctx, state, state_path, WORK / "logs", a.verbose)
         step("The panel's catalogue")
-        ready, planned = catalogue.write(manifest, state, cfg.get("vcenter", "template_folder"), ROOT)
+        ready, planned = catalogue.write(manifest, state, cfg.get("vcenter", "template_folder"), ROOT,
+                                         images.unavailable(ctx))
         out.ok(f"{ready} template(s) deployable, {planned} shown as coming soon.")
         catalogue.prepare_builder(ctx, state, ROOT)
         compose("up", "-d", "--no-build", "--force-recreate", "api", "worker", "sweeper", "builder")

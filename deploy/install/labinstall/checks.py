@@ -256,11 +256,14 @@ def assess(ctx: Context, t: Template, state: dict, built_names: set[str], mirror
     # Extras.
     if t.extras is True:
         for e in t.entry.get("extras", []) or []:
-            why = extra_missing(ctx, e)
-            if why:
+            if why := extra_missing(ctx, e, image=False):
                 item.left_out[e] = why
-            else:
-                item.extras.append(e)
+                continue
+            # Built in either way (a Docker extra bakes only Docker); without its image ISO the panel
+            # doesn't offer it until the ISO is there and the install runs again (catalogue.write).
+            item.extras.append(e)
+            if why := images.missing(ctx, e):
+                item.left_out[e] = f"{why}; offered once it's there, without a rebuild"
         for choice, mirror in m.choices_mirrors.items():
             if (choice in (t.entry.get("choices") or {}) and f"{{mirror.{mirror}}}" in " ".join(t.vars)
                     and not cfg.internet and not cfg.mirror(mirror)):
@@ -280,10 +283,10 @@ def assess(ctx: Context, t: Template, state: dict, built_names: set[str], mirror
                 item.left_out["mssql"] = why
                 item.extra_vars["sql_server"] = "false"
         # Extras attached as an ISO at deploy (Winlogbeat): nothing to build in, but no ISO, no extra.
+        # catalogue.write offers it once the ISO is there.
         for e in [e for e in item.extras if e in m.image_isos]:
             if why := images.missing(ctx, e):
-                item.extras.remove(e)
-                item.left_out[e] = why
+                item.left_out[e] = f"{why}; offered once it's there, without a rebuild"
     else:
         item.extras = list(t.entry.get("extras", []) or [])
 
@@ -292,8 +295,8 @@ def assess(ctx: Context, t: Template, state: dict, built_names: set[str], mirror
     return item
 
 
-def extra_missing(ctx: Context, extra: str) -> str:
-    """Why an extra can't be built in, or "" if it can."""
+def extra_missing(ctx: Context, extra: str, image: bool = True) -> str:
+    """Why an extra can't be built in, or "" if it can. image=False: not counting its image ISO."""
     m = ctx.manifest
     if extra in m.extras_online_only and not ctx.cfg.internet:
         return m.extras_online_only[extra]
@@ -306,7 +309,7 @@ def extra_missing(ctx: Context, extra: str) -> str:
                 return f"no {file} in the ISO folder"
         elif not ctx.cfg.internet and not (ctx.media_dir / need).exists():
             return f"no {need} in the media folder"
-    return images.missing(ctx, extra)
+    return images.missing(ctx, extra) if image else ""
 
 
 def probe(url: str, name: str) -> str:

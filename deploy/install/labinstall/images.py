@@ -51,6 +51,11 @@ def missing(ctx, extra: str) -> str:
     return ""
 
 
+def unavailable(ctx) -> set[str]:
+    """The extras whose image ISOs aren't all on the datastore, so the panel can't deploy them yet."""
+    return {e for e, isos in ctx.manifest.image_isos.items() if any(iso not in ctx.iso_files for iso in isos)}
+
+
 def to_upload(ctx) -> list[str]:
     """The bundle's image ISOs that some extra needs and the datastore doesn't have. One there already
     is whole (uploads are renamed into place once complete) and stays, even if its size differs: an

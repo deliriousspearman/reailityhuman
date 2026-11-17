@@ -1068,7 +1068,9 @@ describes, an entry's <code>extras_var</code> names the Packer variable its extr
 own (Zabbix's).</p>
 <p><code>labinstall</code>'s modules: <code>config.py</code> (the config and its questions), <code>checks.py</code> (the checks, and each
 template's verdict), <code>manifest.py</code>, <code>builds.py</code> (the builds and the media server), <code>images.py</code> (the
-extras' image ISOs: which each needs, from <code>fetch-images.sh --list</code>, and uploading the bundle's),
+extras' image ISOs: which each needs, from <code>fetch-images.sh --list</code>, and uploading the bundle's; an extra
+whose ISO is missing is still built in, and <code>catalogue.write</code> offers it only once the ISO is on the
+datastore),
 <code>capture.py</code> (the packet capture appliance's setup and build), <code>catalogue.py</code> (the panel's catalogue
 from what was built, and the builder's offline setup: <code>offline-builds.json</code>, its copy of <code>packer/</code>,
 <code>scripts/</code> and the media folder), <code>tests.py</code> (the end-to-end tests), <code>isos.py</code>, <code>report.py</code>, <code>out.py</code> and

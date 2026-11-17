@@ -44,8 +44,11 @@ BUILDER_MEDIA = "/media"
 BUILDER_OFFLINE = "/app/offline-builds.json"
 
 
-def write(manifest: Manifest, state: dict, template_folder: str, root: Path) -> tuple[int, int]:
-    """Writes templates.yaml and compose.override.yaml into root. Returns (deployable, planned)."""
+def write(manifest: Manifest, state: dict, template_folder: str, root: Path,
+          no_image: frozenset[str] | set[str] = frozenset()) -> tuple[int, int]:
+    """Writes templates.yaml and compose.override.yaml into root. Returns (deployable, planned).
+    no_image: extras whose image ISO isn't on the datastore (unavailable). Built-in extras among them
+    aren't offered yet; once their ISOs are uploaded, the next write offers them, with no rebuild."""
     records = state.get("templates", {})
     by_entry = {t.catalogue: t for t in manifest.templates.values() if t.catalogue}
     out, ready = [], 0
@@ -58,7 +61,7 @@ def write(manifest: Manifest, state: dict, template_folder: str, root: Path) -> 
             e.pop("planned", None)
             e.pop("plannedExtras", None)
             if r.get("extras") is not None:
-                e["extras"] = r["extras"]
+                e["extras"] = [x for x in r["extras"] if x not in no_image]
             if not e.get("extras"):
                 e.pop("extras", None)
             # Choices its build couldn't offer (no mirror for them): only the option's default then.

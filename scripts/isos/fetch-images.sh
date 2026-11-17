@@ -6,6 +6,7 @@
 #
 #   scripts/isos/fetch-images.sh <extra id>... [--credentials FILE] [--keep]
 #   scripts/isos/fetch-images.sh --all          # every extra with an image
+#   scripts/isos/fetch-images.sh --all --except elk,graylog   # every one but those
 #   scripts/isos/fetch-images.sh --missing      # those whose ISO isn't on the datastore yet
 #   scripts/isos/fetch-images.sh --list         # each extra, its image and its ISO's name
 #   scripts/isos/fetch-images.sh <id> --no-upload   # make the ISO only, into $STAGING
@@ -106,7 +107,7 @@ iso_name() {
 	printf 'lab-image-%s-%s%s.iso\n' "$id" "$(printf %s "$tag" | sed 's/[^A-Za-z0-9._-]/-/g')" "$hash"
 }
 
-ids=() credentials="" keep=0 upload=1 all=0 missing=0
+ids=() credentials="" keep=0 upload=1 all=0 missing=0 except=""
 while (($#)); do
 	case $1 in
 		--list)
@@ -114,17 +115,26 @@ while (($#)); do
 			medias | while read -r id iso; do printf '%-15s %-40s %s\n' "$id" "(files)" "$iso"; done
 			exit 0 ;;
 		--all) all=1 ;;
+		--except) except=,${2:?--except needs a list of extras},; shift ;;
 		--missing) all=1 missing=1 ;;
 		--credentials) credentials=${2:?--credentials needs a file}; shift ;;
 		--keep) keep=1 ;;
 		--no-upload) upload=0 keep=1 ;;
-		-h|--help) sed -n '2,23p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+		-h|--help) sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
 		-*) die "unknown option $1" ;;
 		*) ids+=("$1") ;;
 	esac
 	shift
 done
 ((all)) && mapfile -t ids < <({ images; medias; } | cut -d' ' -f1)
+if [[ -n $except ]]; then
+	for id in ${except//,/ }; do
+		{ images; medias; } | awk -v id="$id" '$1 == id { found = 1 } END { exit !found }' || die "--except: no extra $id with an image or media in extras.yaml"
+	done
+	kept=()
+	for id in "${ids[@]}"; do [[ $except == *",$id,"* ]] || kept+=("$id"); done
+	ids=("${kept[@]}")
+fi
 ((${#ids[@]})) || die "which extras? (--list shows them, --all makes them all)"
 for id in "${ids[@]}"; do
 	{ images; medias; } | awk -v id="$id" '$1 == id { found = 1 } END { exit !found }' || die "no extra $id with an image or media in extras.yaml"

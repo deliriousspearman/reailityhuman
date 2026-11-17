@@ -563,7 +563,9 @@ own (Zabbix's).
 
 `labinstall`'s modules: `config.py` (the config and its questions), `checks.py` (the checks, and each
 template's verdict), `manifest.py`, `builds.py` (the builds and the media server), `images.py` (the
-extras' image ISOs: which each needs, from `fetch-images.sh --list`, and uploading the bundle's),
+extras' image ISOs: which each needs, from `fetch-images.sh --list`, and uploading the bundle's; an extra
+whose ISO is missing is still built in, and `catalogue.write` offers it only once the ISO is on the
+datastore),
 `capture.py` (the packet capture appliance's setup and build), `catalogue.py` (the panel's catalogue
 from what was built, and the builder's offline setup: `offline-builds.json`, its copy of `packer/`,
 `scripts/` and the media folder), `tests.py` (the end-to-end tests), `isos.py`, `report.py`, `out.py` and

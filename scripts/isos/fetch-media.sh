@@ -2,7 +2,7 @@
 # Gathers what template builds otherwise download, for building on a network without internet
 # (docs/build-templates.md, "Offline"). Run it on any Linux machine with internet and curl:
 #
-#   scripts/isos/fetch-media.sh <folder> [--images]
+#   scripts/isos/fetch-media.sh <folder> [--images [--skip <template id>]...]
 #
 # It fills <folder> with, each checked against its published or pinned checksum:
 #   linux/     WordPress, WP-CLI, Nextcloud, Chinook, the container apps' Docker images (if this
@@ -23,15 +23,31 @@
 #              build CD offline (-var media_dir=<folder>).
 #   images/    with --images: what the templates imported whole start from (about 20 GB): MikroTik
 #              CHR, Metasploitable 2 and 3 (both), Parrot's OVA. The import scripts read them with
-#              MEDIA=<folder>/images.
+#              MEDIA=<folder>/images. --skip leaves one out: mikrotik, mikrotik-6, metasploitable-2 or
+#              metasploitable-3 (deploy/bundle.sh leaves out metasploitable-3, for DOWNLOAD-LATER.md).
 #   packer/    Packer itself and its vSphere plugin, to install on the build machine.
 #   SHA256SUMS of everything, to check the copy after carrying it across: sha256sum -c SHA256SUMS
 # Re-running it fetches only what's missing. ISOs are separate: scripts/isos/fetch.sh <name> --no-upload.
 set -euo pipefail
 
-out=${1:?"usage: fetch-media.sh <folder> [--images]"}
-images=0
-[[ ${2:-} == --images ]] && images=1
+usage="usage: fetch-media.sh <folder> [--images [--skip <template id>]...]"
+out=${1:?$usage}
+shift
+images=0 skip=" "
+while (($#)); do
+	case $1 in
+		--images) images=1 ;;
+		--skip)
+			case ${2:-} in
+				mikrotik|mikrotik-6|metasploitable-2|metasploitable-3) skip+="$2 " ;;
+				*) echo "fetch-media.sh: --skip takes mikrotik, mikrotik-6, metasploitable-2 or metasploitable-3" >&2; exit 1 ;;
+			esac
+			shift ;;
+		*) echo "fetch-media.sh: unknown option $1 ($usage)" >&2; exit 1 ;;
+	esac
+	shift
+done
+skipped() { [[ $skip == *" $1 "* ]]; }
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 prepare=$here/../template/prepare.sh
 packer_dir=$here/../../packer
@@ -232,22 +248,33 @@ if ((images)); then
 	# Each as its import script names and pins it (packer/mikrotik, packer/metasploitable, packer/parrot).
 	pin() { sed -n "s/^$2=\${$2:-\(.*\)}$/\1/p; s/^$2=\([^$]*\)$/\1/p" "$1" | head -1; }
 	mkdir -p "$out/images"
-	step "Images: MikroTik CHR"
-	for chr in "$(pin "$packer_dir/mikrotik/import-chr.sh" VERSION)" "$(pin "$packer_dir/mikrotik/import-chr.sh" VERSION_6)"; do
+	chr_script=$packer_dir/mikrotik/import-chr.sh
+	for chr in "mikrotik $(pin "$chr_script" VERSION)" "mikrotik-6 $(pin "$chr_script" VERSION_6)"; do
+		read -r id chr <<<"$chr"
+		skipped "$id" && { echo "  $id: left out (--skip)"; continue; }
+		step "Images: MikroTik CHR $chr"
 		get "https://download.mikrotik.com/routeros/$chr/chr-$chr.vmdk.zip" "$out/images/chr-$chr.vmdk.zip"
 		get "https://download.mikrotik.com/routeros/$chr/chr-$chr.vmdk.zip.sha256" "$out/images/chr-$chr.vmdk.zip.sha256"
 		check "$out/images/chr-$chr.vmdk.zip" "$(grep -oE '[0-9a-f]{64}' "$out/images/chr-$chr.vmdk.zip.sha256" | head -1)" sha256
 	done
-	step "Images: Metasploitable 2, and VMware's frozen Tools for it"
-	ms2=$packer_dir/metasploitable/import-ms2.sh
-	get "$(pin "$ms2" IMAGE_URL)" "$out/images/metasploitable-linux-2.0.0.zip"
-	check "$out/images/metasploitable-linux-2.0.0.zip" "$(pin "$ms2" IMAGE_SHA256)" sha256
-	get "$(pin "$ms2" TOOLS_URL)" "$out/images/linuxPreGlibc25.iso"
+	if skipped metasploitable-2; then
+		echo "  metasploitable-2: left out (--skip)"
+	else
+		step "Images: Metasploitable 2, and VMware's frozen Tools for it"
+		ms2=$packer_dir/metasploitable/import-ms2.sh
+		get "$(pin "$ms2" IMAGE_URL)" "$out/images/metasploitable-linux-2.0.0.zip"
+		check "$out/images/metasploitable-linux-2.0.0.zip" "$(pin "$ms2" IMAGE_SHA256)" sha256
+		get "$(pin "$ms2" TOOLS_URL)" "$out/images/linuxPreGlibc25.iso"
+	fi
 	# Metasploitable 3's Windows box (import-ms3-win.sh) isn't fetched: it's out of the catalogue.
-	step "Images: Metasploitable 3 (Ubuntu 14.04)"
-	ms3=$packer_dir/metasploitable/import-ms3.sh
-	get "$(pin "$ms3" BOX_URL)" "$out/images/ub1404.box"
-	check "$out/images/ub1404.box" "$(pin "$ms3" BOX_SHA256)" sha256
+	if skipped metasploitable-3; then
+		echo "  metasploitable-3: left out (--skip)"
+	else
+		step "Images: Metasploitable 3 (Ubuntu 14.04)"
+		ms3=$packer_dir/metasploitable/import-ms3.sh
+		get "$(pin "$ms3" BOX_URL)" "$out/images/ub1404.box"
+		check "$out/images/ub1404.box" "$(pin "$ms3" BOX_SHA256)" sha256
+	fi
 	step "Images: Parrot Security's OVA"
 	echo "  Parrot's OVA is a manual download (its signed hashes need checking): put Parrot-security-<version>_amd64.ova in $out/images (packer/parrot/import-base.sh)."
 fi

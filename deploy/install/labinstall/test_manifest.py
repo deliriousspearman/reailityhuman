@@ -167,6 +167,25 @@ def test_php_versions_are_offered_only_with_their_mirror(tmp_path):
     assert written["ubuntu 22.04"]["choices"]["php"]  # built with the mirror: kept
 
 
+def test_extras_waiting_for_their_image_iso_are_offered_once_it_is_there(tmp_path):
+    """ELK's, Graylog's and GitLab's image ISOs can come later (DOWNLOAD-LATER.md): their templates are
+    built with the extras anyway, and the catalogue offers them only while their ISOs are there."""
+    from . import catalogue
+
+    m = Manifest(SRC)
+    assert {"elk", "graylog", "gitlab"} <= set(m.image_isos)
+    state = {"templates": {"ubuntu-24.04": {"status": "built", "name": "tpl-ubuntu-24.04-x",
+                                            "extras": ["apache", "elk", "grafana"]}}}
+
+    def offered(no_image):
+        catalogue.write(m, state, "Labs/Templates", tmp_path, no_image)
+        rows = yaml.safe_load((tmp_path / "templates.yaml").read_text())
+        return next(e for e in rows if f"{e['template']} {e['version']}" == "ubuntu 24.04")["extras"]
+
+    assert offered({"elk", "graylog", "gitlab"}) == ["apache", "grafana"]
+    assert offered(set()) == ["apache", "elk", "grafana"]
+
+
 def test_the_panels_builder_gets_the_install_commands(tmp_path):
     """After an offline install, the panel's own builds (Admin → Templates) run the install's command:
     this network's mirrors and media, the extras it built, and no online prepare scripts."""
