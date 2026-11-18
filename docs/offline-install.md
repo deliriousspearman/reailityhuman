@@ -62,10 +62,47 @@ deploy/bundle.sh /path/to/lab-bundle --images --office /path/to/office \
 **Sizes:** without `--isos`, about 11 GB, or about 15.5 GB with `--images` and `--office`. All 46 ISOs
 add about 89 GB.
 
+#### Recommended for the first transfer
+
+```sh
+deploy/bundle.sh /path/to/lab-bundle --images --office /path/to/office
+```
+
+About **15.5 GB**, and no ISOs in it. It has everything that's made rather than downloaded (the media
+folder and the extras' image ISOs, which only `bundle.sh` or its scripts can make, at this commit), so
+the first trip needs nothing rebuilt later:
+
+| Part | Size |
+|---|---|
+| `image-isos/`: the Docker extras, k3s and Winlogbeat | 7.6 GB |
+| `media/windows/office/`: Office's files, for Outlook | 3.5 GB |
+| `media/`: Cloudbase-Init (every Windows template), Exchange's prerequisites, the Linux extras' files, Wazuh, Zimbra, FreeBSD's and Alpine's packages, Packer | 2.7 GB |
+| `media/images/`: Metasploitable 2 and MikroTik CHR 7 and 6 | 1.0 GB |
+| `images/`: the panel's and the tools' Docker images | 0.5 GB |
+| `debs/`: Docker for Ubuntu 22.04 and 24.04 | 0.3 GB |
+| `repo/`, the install, `DOWNLOAD-LATER.md`, checksums | 6 MB |
+
+The installer ISOs are left out because each is a single download with a published checksum, which
+anyone can fetch on an online machine and bring alongside: `DOWNLOAD-LATER.md` gives each one's link,
+checksum and the templates that need it. For the Pro Labs (Meridian, Brookfield), bring these four
+(about 24 GB), and put them in the bundle's `isos/` folder (create it) so the install uploads them:
+
+| ISO | Size | For |
+|---|---|---|
+| `windows-11-enterprise-eval-26300.9457.iso` | 7.7 GB | windows-11 |
+| `ExchangeServerSE-x64.iso` | 6.0 GB | exchange |
+| `windows-server-2025-eval-26100.1742.iso` | 5.6 GB | windows-server-2025 (and -core), exchange |
+| `kali-linux-2026.2-installer-amd64.iso` | 4.5 GB | kali |
+
+That's about 39 GB to carry in all. Add `sql-server-2025`'s ISO for the SQL Server extra, and the
+Linux templates' ISOs for whichever you have mirrors for. Leave out `--office` if the bundle will be
+shared: Microsoft doesn't allow passing Office's files on (nor Windows' and Exchange's ISOs, one
+more reason they're downloaded rather than bundled).
+
 **The smallest bundle:** `deploy/bundle.sh /path/to/lab-bundle --minimize`, about 0.75 GB. It leaves
-out everything that can be brought across later: the media folder (`--no-media`) and the extras'
-image ISOs (`--no-image-isos`). The install sets up the panel and builds only the templates that need
-neither; `DOWNLOAD-LATER.md` says how to make the rest. `--isos` and `--office` still add to it.
+out the media folder and the extras' image ISOs; the install sets up the panel and builds only the
+templates that need neither (no Windows: they all need the media folder). `--isos` and `--office`
+still add to it. Good for trying the install, not for a first transfer.
 
 **`DOWNLOAD-LATER.md`:** everything the install can use that isn't in the bundle, each with its link,
 checksum, what needs it and where it goes:
