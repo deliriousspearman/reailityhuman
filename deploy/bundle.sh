@@ -4,7 +4,7 @@
 # with internet, Docker and about 12 GB free (17 GB with --images and --office, plus the ISOs chosen
 # with --isos); Node.js too, or its image is used:
 #
-#   deploy/bundle.sh <folder> [--images] [--no-media] [--no-image-isos] [--office <folder>]
+#   deploy/bundle.sh <folder> [--minimize] [--images] [--no-media] [--no-image-isos] [--office <folder>]
 #                    [--isos <list>] [--iso-cache <folder>] [--with-deferred]
 #
 #   <folder>/install.sh, lab-install.toml.example   the install, and its config to fill in
@@ -31,12 +31,17 @@
 # Office's files (for the Outlook extra) only with --office: the folder Office's download made
 # (setup.exe, download.xml and Office\Data; docs/setup-vsphere.md, "Office's files, for Outlook"),
 # copied into media/windows/office. Re-running it into the same folder keeps what's downloaded already.
+#
+# --minimize makes the smallest bundle (about 0.75 GB): every option that leaves something out, so
+# --no-media and --no-image-isos. The install then builds only templates that need neither, and
+# DOWNLOAD-LATER.md says how to make what's left out, to bring across later. --isos and --office still
+# add to it; --images can't (it goes in the media folder).
 set -euo pipefail
 
 # Left out of --images by default, to keep the bundle small (DOWNLOAD-LATER.md lists it).
 DEFERRED_IMAGES="metasploitable-3"
 
-usage="usage: deploy/bundle.sh <folder> [--images] [--no-media] [--no-image-isos] [--office <folder>] [--isos <list>] [--iso-cache <folder>] [--with-deferred]"
+usage="usage: deploy/bundle.sh <folder> [--minimize] [--images] [--no-media] [--no-image-isos] [--office <folder>] [--isos <list>] [--iso-cache <folder>] [--with-deferred]"
 out=${1:?$usage}
 shift
 images=() media=1 image_isos=1 office="" deferred=0 want_isos="" iso_cache=""
@@ -44,6 +49,7 @@ while (($#)); do
 	case $1 in
 		--images) images=(--images) ;;
 		--with-deferred) deferred=1 ;;
+		--minimize) media=0 image_isos=0 ;;  # every option that leaves something out
 		--no-media) media=0 ;;
 		--no-image-isos) image_isos=0 ;;
 		--office) office=${2:?"--office needs the folder Office's download made"}; shift ;;
@@ -53,6 +59,10 @@ while (($#)); do
 	esac
 	shift
 done
+if ! ((media)) && { ((${#images[@]})) || ((deferred)); }; then
+	echo "bundle.sh: --images and --with-deferred go in the media folder, which --no-media and --minimize leave out" >&2
+	exit 1
+fi
 if [[ -n $office ]] && ! [[ -f $office/setup.exe && -f $office/download.xml && -d $office/Office/Data ]]; then
 	echo "bundle.sh: $office isn't Office's download: it needs setup.exe, download.xml and Office/Data" >&2
 	exit 1
@@ -271,6 +281,18 @@ commit=$(git -C "$repo" rev-parse --short HEAD)
 	row "metasploitable-2 (its VMware Tools)" linuxPreGlibc25.iso "$(pin "$ms2" TOOLS_URL)" "in <$(pin "$ms2" TOOLS_URL).sha256>"
 	row metasploitable-3 ub1404.box "$(pin "$ms3" BOX_URL)" "$(pin "$ms3" BOX_SHA256)"
 	row "parrot-base (then parrot)" "$ova" "https://deb.parrot.sh/parrot/iso/$parrot/$ova" "in \`signed-hashes.txt\` in the same folder (check its signature, Parrot's)"
+	if ! ((media)); then
+		cat <<-EOF
+
+		## The media folder
+
+		This bundle was made without its media folder (\`--no-media\` or \`--minimize\`), so the install
+		builds only the templates that don't need it, and leaves the rest out (its checks say which). Make
+		it on a Linux machine with internet, from this commit ($commit):
+		\`scripts/isos/fetch-media.sh <folder>\` (about 2.7 GB; add \`--images\` for the imported images
+		above). Put it in the bundle as \`media/\` and run \`sudo install.sh\` again.
+		EOF
+	fi
 	if ! ((image_isos)); then
 		cat <<-EOF
 
