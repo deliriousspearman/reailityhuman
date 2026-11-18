@@ -5,7 +5,7 @@
 # with --isos); Node.js too, or its image is used:
 #
 #   deploy/bundle.sh <folder> [--minimize] [--images] [--no-media] [--no-image-isos] [--office <folder>]
-#                    [--isos <list>] [--iso-cache <folder>] [--with-deferred]
+#                    [--isos <list>] [--iso-cache <folder>] [--with-deferred] [--release <folder>]
 #
 #   <folder>/install.sh, lab-install.toml.example   the install, and its config to fill in
 #   <folder>/repo/       the project at this commit, with the panel's website built
@@ -36,15 +36,18 @@
 # --no-media and --no-image-isos. The install then builds only templates that need neither, and
 # DOWNLOAD-LATER.md says how to make what's left out, to bring across later. --isos and --office still
 # add to it; --images can't (it goes in the media folder).
+#
+# --release <folder> then cuts the bundle into parts for a GitHub release, none over 700 MB
+# (deploy/release.sh, which can also be run on its own, with --part-size).
 set -euo pipefail
 
 # Left out of --images by default, to keep the bundle small (DOWNLOAD-LATER.md lists it).
 DEFERRED_IMAGES="metasploitable-3"
 
-usage="usage: deploy/bundle.sh <folder> [--minimize] [--images] [--no-media] [--no-image-isos] [--office <folder>] [--isos <list>] [--iso-cache <folder>] [--with-deferred]"
+usage="usage: deploy/bundle.sh <folder> [--minimize] [--images] [--no-media] [--no-image-isos] [--office <folder>] [--isos <list>] [--iso-cache <folder>] [--with-deferred] [--release <folder>]"
 out=${1:?$usage}
 shift
-images=() media=1 image_isos=1 office="" deferred=0 want_isos="" iso_cache=""
+images=() media=1 image_isos=1 office="" deferred=0 want_isos="" iso_cache="" release=""
 while (($#)); do
 	case $1 in
 		--images) images=(--images) ;;
@@ -55,6 +58,7 @@ while (($#)); do
 		--office) office=${2:?"--office needs the folder Office's download made"}; shift ;;
 		--isos) want_isos=${2:?"--isos needs a list: ISO names, template ids, or all"}; shift ;;
 		--iso-cache) iso_cache=${2:?"--iso-cache needs a folder"}; shift ;;
+		--release) release=${2:?"--release needs a folder for the parts"}; shift ;;
 		*) echo "bundle.sh: unknown option $1 ($usage)" >&2; exit 1 ;;
 	esac
 	shift
@@ -310,3 +314,7 @@ echo "  $out/DOWNLOAD-LATER.md"
 step "SHA256SUMS"
 (cd "$out" && find . -type f ! -name SHA256SUMS -printf '%P\n' | sort | xargs -d '\n' sha256sum >"$out.sums" && mv "$out.sums" SHA256SUMS)
 echo "Done: $out ($(du -sh "$out" | cut -f1)). Carry it across, then on the panel's server: sudo $out/install.sh"
+if [[ -n $release ]]; then
+	step "The release's parts (deploy/release.sh)"
+	"$repo/deploy/release.sh" "$out" "$release"
+fi

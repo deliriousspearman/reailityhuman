@@ -104,6 +104,34 @@ out the media folder and the extras' image ISOs; the install sets up the panel a
 templates that need neither (no Windows: they all need the media folder). `--isos` and `--office`
 still add to it. Good for trying the install, not for a first transfer.
 
+#### On GitHub
+
+A GitHub release takes files under 2 GiB each (any number, up to 1000, and no limit on the total).
+`--release <folder>` cuts the bundle into parts of at most 700 MB there, after making it:
+
+```sh
+deploy/bundle.sh /path/to/lab-bundle --images --office /path/to/office --release /path/to/lab-release
+gh release create bundle-<commit> /path/to/lab-release/*
+```
+
+`deploy/release.sh <bundle> <folder> [--part-size 700MB]` does the same for a bundle made already. The
+bundle goes in sections, each a tar cut into numbered parts (`lab-bundle-<commit>-<section>.tar.000`, …),
+so a download can take only what it wants:
+
+| Section | What | Parts at 700 MB (about) |
+|---|---|---|
+| `core` | The install, the project, Docker's images and packages (always needed) | 2 |
+| `media` | The media folder, less the two below | 5 |
+| `imported-images` | `media/images` (`--images`) | 2 |
+| `office` | `media/windows/office` (`--office`) | 6 |
+| `image-isos` | The extras' image ISOs | 12 |
+| `isos` | Installer ISOs (`--isos`) | — |
+
+With them come `SHA256SUMS-parts` and `JOIN.md`, which says how to put it back: check the parts, then
+`cat` each section's parts into `tar -x`. That gives the same bundle, file for file, which `install.sh`
+checks as always. It needs room for the parts and the bundle at once; the parts can go after. Office's
+files and Microsoft's ISOs aren't for sharing: keep a release with them private.
+
 **`DOWNLOAD-LATER.md`:** everything the install can use that isn't in the bundle, each with its link,
 checksum, what needs it and where it goes:
 - every ISO not chosen with `--isos`;
