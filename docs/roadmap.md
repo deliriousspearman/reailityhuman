@@ -106,7 +106,8 @@ the next step (an xrdp debug log while resizing) is agreed.
   adds the installer ISOs chosen (the install uploads them), and the bundle's `DOWNLOAD-LATER.md`
   lists everything else it can use (the other ISOs, Parrot's OVA, Metasploitable 3's box) with its
   link and checksum, to bring across later. Extras waiting only for an image ISO are built in anyway,
-  and offered once it's there. Each was built through the
+  and offered once it's there. Since 2026-11-18, `bundle.sh --minimize` makes the smallest bundle
+  (about 0.75 GB: no media folder or image ISOs). Each was built through the
   installer in the lab. Also on 2026-11-16: the panel's own builds work offline (the install hands the
   builder each template's command for this network, and the media folder), and PHP's versions aren't
   offered when there was no PHP mirror to build them from. Still open: CachyOS (internet only), and a

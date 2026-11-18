@@ -62,6 +62,11 @@ deploy/bundle.sh /path/to/lab-bundle --images --office /path/to/office \
 **Sizes:** without `--isos`, about 11 GB, or about 15.5 GB with `--images` and `--office`. All 46 ISOs
 add about 89 GB.
 
+**The smallest bundle:** `deploy/bundle.sh /path/to/lab-bundle --minimize`, about 0.75 GB. It leaves
+out everything that can be brought across later: the media folder (`--no-media`) and the extras'
+image ISOs (`--no-image-isos`). The install sets up the panel and builds only the templates that need
+neither; `DOWNLOAD-LATER.md` says how to make the rest. `--isos` and `--office` still add to it.
+
 **`DOWNLOAD-LATER.md`:** everything the install can use that isn't in the bundle, each with its link,
 checksum, what needs it and where it goes:
 - every ISO not chosen with `--isos`;
