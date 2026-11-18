@@ -20,7 +20,8 @@ installer in the lab on 2026-11-16, one piece at a time; a whole new rehearsal h
 
 **On the internet side**, a Linux machine with:
 - Docker;
-- about 25 GB free, or 45 GB with the imported images;
+- about 30 GB free for the recommended bundle below (it, and about 10 GB of Docker images pulled
+  to make the image ISOs, which `docker image rm` can take back after), or 45 GB with `--release`;
 - Node.js, or else bundle.sh uses Node's Docker image;
 - for Office's files, a Windows PC.
 
@@ -59,7 +60,7 @@ deploy/bundle.sh /path/to/lab-bundle --images --office /path/to/office \
 - `--iso-cache` takes ISOs from a folder that has them already (such as a copy of a lab's datastore
   `ISO` folder) instead of downloading them.
 
-**Sizes:** without `--isos`, about 11 GB, or about 15.5 GB with `--images` and `--office`. All 46 ISOs
+**Sizes:** without `--isos`, about 12 GB, or about 16 GB with `--images` and `--office`. All 46 ISOs
 add about 89 GB.
 
 #### Recommended for the first transfer
@@ -68,16 +69,16 @@ add about 89 GB.
 deploy/bundle.sh /path/to/lab-bundle --images --office /path/to/office
 ```
 
-About **15.5 GB**, and no ISOs in it. It has everything that's made rather than downloaded (the media
+About **16 GB** (measured on 2026-11-18), and no ISOs in it. It has everything that's made rather than downloaded (the media
 folder and the extras' image ISOs, which only `bundle.sh` or its scripts can make, at this commit), so
 the first trip needs nothing rebuilt later:
 
 | Part | Size |
 |---|---|
-| `image-isos/`: the Docker extras, k3s and Winlogbeat | 7.6 GB |
+| `image-isos/`: the Docker extras, k3s and Winlogbeat (17; ELK 1.8, Graylog 1.7, GitLab 1.6) | 7.7 GB |
 | `media/windows/office/`: Office's files, for Outlook | 3.5 GB |
-| `media/`: Cloudbase-Init (every Windows template), Exchange's prerequisites, the Linux extras' files, Wazuh, Zimbra, FreeBSD's and Alpine's packages, Packer | 2.7 GB |
-| `media/images/`: Metasploitable 2 and MikroTik CHR 7 and 6 | 1.0 GB |
+| `media/`: Cloudbase-Init (every Windows template), Exchange's prerequisites, the Linux extras' files, Wazuh, Zimbra, FreeBSD's and Alpine's packages, Packer | 3.3 GB |
+| `media/images/`: Metasploitable 2 and MikroTik CHR 7 and 6 | 0.95 GB |
 | `images/`: the panel's and the tools' Docker images | 0.5 GB |
 | `debs/`: Docker for Ubuntu 22.04 and 24.04 | 0.3 GB |
 | `repo/`, the install, `DOWNLOAD-LATER.md`, checksums | 6 MB |
@@ -94,7 +95,7 @@ checksum and the templates that need it. For the Pro Labs (Meridian, Brookfield)
 | `windows-server-2025-eval-26100.1742.iso` | 5.6 GB | windows-server-2025 (and -core), exchange |
 | `kali-linux-2026.2-installer-amd64.iso` | 4.5 GB | kali |
 
-That's about 39 GB to carry in all. Add `sql-server-2025`'s ISO for the SQL Server extra, and the
+That's about 40 GB to carry in all. Add `sql-server-2025`'s ISO for the SQL Server extra, and the
 Linux templates' ISOs for whichever you have mirrors for. Leave out `--office` if the bundle will be
 shared: Microsoft doesn't allow passing Office's files on (nor Windows' and Exchange's ISOs, one
 more reason they're downloaded rather than bundled).
@@ -118,18 +119,19 @@ gh release create bundle-<commit> /path/to/lab-release/*
 bundle goes in sections, each a tar cut into numbered parts (`lab-bundle-<commit>-<section>.tar.000`, …),
 so a download can take only what it wants:
 
-| Section | What | Parts at 700 MB (about) |
+| Section | What | Parts at 700 MB (measured) |
 |---|---|---|
-| `core` | The install, the project, Docker's images and packages (always needed) | 2 |
-| `media` | The media folder, less the two below | 5 |
-| `imported-images` | `media/images` (`--images`) | 2 |
-| `office` | `media/windows/office` (`--office`) | 6 |
-| `image-isos` | The extras' image ISOs | 12 |
+| `core` | The install, the project, Docker's images and packages (always needed) | 2 (730 MB) |
+| `media` | The media folder, less the two below | 5 (3.3 GB) |
+| `imported-images` | `media/images` (`--images`) | 2 (954 MB) |
+| `office` | `media/windows/office` (`--office`) | 6 (3.5 GB) |
+| `image-isos` | The extras' image ISOs | 12 (7.7 GB) |
 | `isos` | Installer ISOs (`--isos`) | — |
 
 With them come `SHA256SUMS-parts` and `JOIN.md`, which says how to put it back: check the parts, then
 `cat` each section's parts into `tar -x`. That gives the same bundle, file for file, which `install.sh`
-checks as always. It needs room for the parts and the bundle at once; the parts can go after. Office's
+checks as always (tried on 2026-11-18 with the recommended bundle: 27 parts, put back identical). It
+needs room for the parts and the bundle at once; the parts can go after. Office's
 files and Microsoft's ISOs aren't for sharing: keep a release with them private.
 
 **`DOWNLOAD-LATER.md`:** everything the install can use that isn't in the bundle, each with its link,
@@ -150,7 +152,7 @@ It gathers:
 | `images/` | Docker images: the panel's, and the tools image the builds run in (Packer, govc, …) |
 | `debs/` | Docker itself, for Ubuntu 22.04 and 24.04 servers without it |
 | `media/` | What the builds would download (below) |
-| `image-isos/` | The Docker extras' images, and k3s's and Winlogbeat's files, an ISO each (about 7.6 GB). The install uploads them to the ISO folder, and the panel attaches them to machines at deploy. `--no-image-isos` leaves them all out, and those extras with them (they're offered once their ISOs are there, with no rebuild) |
+| `image-isos/` | The Docker extras' images, and k3s's and Winlogbeat's files, an ISO each (about 7.7 GB). The install uploads them to the ISO folder, and the panel attaches them to machines at deploy. `--no-image-isos` leaves them all out, and those extras with them (they're offered once their ISOs are there, with no rebuild) |
 | `isos/` | With `--isos`: the installer ISOs chosen. The install uploads them to the ISO folder |
 | `DOWNLOAD-LATER.md` | What isn't in the bundle, and where to get it |
 | `SHA256SUMS` | Every file's checksum |

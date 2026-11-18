@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Makes the offline install's bundle (docs/offline-install.md): everything deploy/install.sh needs on a
 # network without internet, in one folder to carry across. Run it from the repo, on a Linux machine
-# with internet, Docker and about 12 GB free (17 GB with --images and --office, plus the ISOs chosen
-# with --isos); Node.js too, or its image is used:
+# with internet, Docker and about 25 GB free (30 GB with --images and --office, 45 GB with --release,
+# plus the ISOs chosen with --isos); Node.js too, or its image is used:
 #
 #   deploy/bundle.sh <folder> [--minimize] [--images] [--no-media] [--no-image-isos] [--office <folder>]
 #                    [--isos <list>] [--iso-cache <folder>] [--with-deferred] [--release <folder>]
@@ -208,7 +208,7 @@ if ((image_isos)); then
 	# Made in the tools image (Docker's client, xorriso), from the bundle's own copy of the project, so
 	# their names are the ones its panel looks for. As this user, through the host's Docker. Re-running
 	# keeps those made already.
-	step "The extras' image ISOs (about 7.6 GB; GitLab's, ELK's and Graylog's are the largest)"
+	step "The extras' image ISOs (about 7.7 GB; ELK's, Graylog's and GitLab's are the largest)"
 	mkdir -p "$out/image-isos"
 	docker run --rm --user "$(id -u):$(id -g)" --group-add "$(stat -c %g /var/run/docker.sock)" -e HOME=/tmp \
 		-v /var/run/docker.sock:/var/run/docker.sock -v "$out/repo:/repo:ro" -v "$out/image-isos:/out" -e STAGING=/out \
@@ -293,7 +293,7 @@ commit=$(git -C "$repo" rev-parse --short HEAD)
 		This bundle was made without its media folder (\`--no-media\` or \`--minimize\`), so the install
 		builds only the templates that don't need it, and leaves the rest out (its checks say which). Make
 		it on a Linux machine with internet, from this commit ($commit):
-		\`scripts/isos/fetch-media.sh <folder>\` (about 2.7 GB; add \`--images\` for the imported images
+		\`scripts/isos/fetch-media.sh <folder>\` (about 3.3 GB; add \`--images\` for the imported images
 		above). Put it in the bundle as \`media/\` and run \`sudo install.sh\` again.
 		EOF
 	fi
