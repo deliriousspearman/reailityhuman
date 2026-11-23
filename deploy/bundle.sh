@@ -5,7 +5,9 @@
 # plus the ISOs chosen with --isos); Node.js too, or its image is used:
 #
 #   deploy/bundle.sh <folder> [--minimize] [--images] [--no-media] [--no-image-isos] [--office <folder>]
-#                    [--isos <list>] [--iso-cache <folder>] [--with-deferred] [--release <folder>]
+#                    [--isos <list>] [--iso-cache <folder>] [--with-deferred] [--sections <list>]
+#                    [--release <folder>] [--part-size 500MB]
+#   deploy/bundle.sh --fingerprints [--images] [--with-deferred] [--office <folder>]
 #
 #   <folder>/install.sh, lab-install.toml.example   the install, and its config to fill in
 #   <folder>/repo/       the project at this commit, with the panel's website built
@@ -18,7 +20,10 @@
 #   <folder>/DOWNLOAD-LATER.md  everything the install can use that isn't in the bundle (the ISOs not
 #                        chosen, the imported images not fetched): each one's link, checksum and
 #                        where it goes, to bring across later
-#   <folder>/SHA256SUMS  every file's checksum, which install.sh checks first
+#   <folder>/SECTIONS    the commit, and the tag of each section (deploy/sections.sh) it was made with
+#   <folder>/sums/       each section's checksums, sums/<tag>.sha256, which install.sh checks
+#   <folder>/SHA256SUMS  the core's checksums (everything but media/, image-isos/, isos/ and sums/),
+#                        which install.sh checks first
 #
 # --isos takes a comma-separated list of ISOs (isos.txt names, scripts/isos/fetch.sh --list) and
 # template ids (their ISOs), or all: e.g. --isos windows-server-2025,windows-11,exchange,kali. Proxmox
@@ -32,37 +37,71 @@
 # (setup.exe, download.xml and Office\Data; docs/setup-vsphere.md, "Office's files, for Outlook"),
 # copied into media/windows/office. Re-running it into the same folder keeps what's downloaded already.
 #
-# --minimize makes the smallest bundle (about 0.75 GB): every option that leaves something out, so
-# --no-media and --no-image-isos. The install then builds only templates that need neither, and
-# DOWNLOAD-LATER.md says how to make what's left out, to bring across later. --isos and --office still
-# add to it; --images can't (it goes in the media folder).
+# Sections (deploy/sections.sh): core (always), media, imported-images, office, image-isos and isos.
+# --sections <list> makes just those (and the core), e.g. --sections core when the add-ons' releases
+# on GitHub still fit (--fingerprints prints each one's tag without making anything, to check). It
+# stands instead of --images, --no-media, --no-image-isos and --minimize; office needs --office, isos
+# --isos, and imported-images comes with media (fetch-media.sh makes both).
 #
-# --release <folder> then cuts the bundle into parts for a GitHub release, none over 700 MB
-# (deploy/release.sh, which can also be run on its own, with --part-size).
+# --minimize makes the smallest bundle (about 0.75 GB): the core alone (--sections core). The install
+# then builds only templates that need neither the media folder nor image ISOs, and DOWNLOAD-LATER.md
+# says how to get what's left out. --isos and --office still add to it; --images can't.
+#
+# --release <folder> then cuts the bundle into GitHub releases, one per section, in parts of at most
+# 500 MB (--part-size) (deploy/release.sh, which can also be run on its own).
 set -euo pipefail
 
 # Left out of --images by default, to keep the bundle small (DOWNLOAD-LATER.md lists it).
 DEFERRED_IMAGES="metasploitable-3"
 
-usage="usage: deploy/bundle.sh <folder> [--minimize] [--images] [--no-media] [--no-image-isos] [--office <folder>] [--isos <list>] [--iso-cache <folder>] [--with-deferred] [--release <folder>]"
-out=${1:?$usage}
-shift
-images=() media=1 image_isos=1 office="" deferred=0 want_isos="" iso_cache="" release=""
+usage="usage: deploy/bundle.sh <folder> [--minimize] [--images] [--no-media] [--no-image-isos] [--office <folder>] [--isos <list>] [--iso-cache <folder>] [--with-deferred] [--sections <list>] [--release <folder>] [--part-size 500MB], or deploy/bundle.sh --fingerprints [--images] [--with-deferred] [--office <folder>]"
+out=""
+images=() media=1 image_isos=1 office="" deferred=0 want_isos="" iso_cache="" release="" part_size=500MB
+sections="" fingerprints=0 flags=0
 while (($#)); do
 	case $1 in
-		--images) images=(--images) ;;
+		--images) images=(--images) flags=1 ;;
 		--with-deferred) deferred=1 ;;
-		--minimize) media=0 image_isos=0 ;;  # every option that leaves something out
-		--no-media) media=0 ;;
-		--no-image-isos) image_isos=0 ;;
+		--minimize) media=0 image_isos=0 flags=1 ;;  # the core alone
+		--no-media) media=0 flags=1 ;;
+		--no-image-isos) image_isos=0 flags=1 ;;
+		--sections) sections=${2:?"--sections needs a list, e.g. core,media"}; shift ;;
+		--fingerprints) fingerprints=1 ;;
+		--part-size) part_size=${2:?"--part-size needs a size, e.g. 500MB"}; shift ;;
 		--office) office=${2:?"--office needs the folder Office's download made"}; shift ;;
 		--isos) want_isos=${2:?"--isos needs a list: ISO names, template ids, or all"}; shift ;;
 		--iso-cache) iso_cache=${2:?"--iso-cache needs a folder"}; shift ;;
 		--release) release=${2:?"--release needs a folder for the parts"}; shift ;;
-		*) echo "bundle.sh: unknown option $1 ($usage)" >&2; exit 1 ;;
+		-*) echo "bundle.sh: unknown option $1 ($usage)" >&2; exit 1 ;;
+		*) [[ -z $out ]] || { echo "bundle.sh: one folder only ($usage)" >&2; exit 1; }; out=$1 ;;
 	esac
 	shift
 done
+repo=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+# shellcheck source=deploy/sections.sh
+source "$repo/deploy/sections.sh"
+if [[ -n $sections ]]; then
+	((flags == 0)) || { echo "bundle.sh: --sections stands instead of --images, --no-media, --no-image-isos and --minimize" >&2; exit 1; }
+	media=0 image_isos=0 want_office=0 want_isos_section=0
+	for s in ${sections//,/ }; do
+		case $s in
+			core) ;;
+			media) media=1 ;;
+			imported-images) images=(--images) ;;
+			image-isos) image_isos=1 ;;
+			office) want_office=1 ;;
+			isos) want_isos_section=1 ;;
+			*) echo "bundle.sh: --sections: no section $s (they're: ${SECTIONS_ALL// /, })" >&2; exit 1 ;;
+		esac
+	done
+	if ((${#images[@]})) && ! ((media)); then
+		echo "bundle.sh: --sections: imported-images comes with media (fetch-media.sh makes both): add media" >&2; exit 1
+	fi
+	((want_office == 0)) || [[ -n $office ]] || { echo "bundle.sh: --sections office needs --office <folder>" >&2; exit 1; }
+	((want_isos_section == 0)) || [[ -n $want_isos ]] || { echo "bundle.sh: --sections isos needs --isos <list>" >&2; exit 1; }
+	((want_office)) || office=""
+	((want_isos_section)) || want_isos=""
+fi
 if ! ((media)) && { ((${#images[@]})) || ((deferred)); }; then
 	echo "bundle.sh: --images and --with-deferred go in the media folder, which --no-media and --minimize leave out" >&2
 	exit 1
@@ -75,7 +114,24 @@ if [[ -n $iso_cache && ! -d $iso_cache ]]; then
 	echo "bundle.sh: --iso-cache: no folder $iso_cache" >&2
 	exit 1
 fi
-repo=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+
+# The tag each section would have, from the last commit (deploy/sections.sh).
+fingerprints_of() { # <project folder>
+	echo "core bundle-$(git -C "$repo" rev-parse --short HEAD)"
+	echo "media $(fingerprint media "$1")"
+	echo "imported-images $(fingerprint imported-images "$1" "$deferred")"
+	echo "image-isos $(fingerprint image-isos "$1")"
+	if [[ -n $office ]]; then echo "office $(fingerprint office "$1" "$office")"; else echo "office -"; fi
+	echo "isos -"
+}
+if ((fingerprints)); then
+	tmp=$(mktemp -d)
+	trap 'rm -rf "$tmp"' EXIT
+	git -C "$repo" archive HEAD | tar -x -C "$tmp"
+	fingerprints_of "$tmp" | awk '{ printf "%-16s %s\n", $1, ($2 == "-" ? "(any: from what is put in it)" : $2) }'
+	exit 0
+fi
+[[ -n $out ]] || { echo "$usage" >&2; exit 1; }
 mkdir -p "$out"/{images,debs}
 out=$(cd "$out" && pwd)
 step() { echo "==> $*"; }
@@ -96,6 +152,9 @@ fi
 rm -rf "$out/repo/frontend/node_modules" "$out/repo/frontend/.svelte-kit"
 cp "$repo/deploy/install.sh" "$out/install.sh"
 cp "$repo/deploy/install/lab-install.toml.example" "$out/lab-install.toml.example"
+# The tag each section has, made from this copy of the project: SECTIONS, DOWNLOAD-LATER.md, sums/.
+declare -A expect
+while read -r s t; do expect[$s]=$t; done < <(fingerprints_of "$out/repo")
 
 step "Each ISO's size and SHA-256, for the install's checks (deploy/install/isos.sha256)"
 # <name> <file> <size> <sha256>, for ISOs published uncompressed (a compressed one's unpacked size and
@@ -217,7 +276,6 @@ if ((image_isos)); then
 fi
 
 step "DOWNLOAD-LATER.md: what isn't in the bundle, and where to get it"
-pin() { sed -n "s/^$2=\${$2:-\(.*\)}$/\1/p; s/^$2=\([^$]*\)$/\1/p" "$1" | head -1; }
 commit=$(git -C "$repo" rev-parse --short HEAD)
 {
 	cat <<-EOF
@@ -228,6 +286,29 @@ commit=$(git -C "$repo" rev-parse --short HEAD)
 	On a machine with internet, download what you want, check it against its checksum, and carry it
 	across. Put it where it says, and run \`sudo install.sh\` again. That's safe: it keeps what's built
 	and builds only what's new (\`--only <template id>,…\` builds just those).
+
+	## Add-ons from GitHub
+
+	If this project's GitHub has releases of the bundle (\`deploy/release.sh\`), what's left out of
+	this one may be there, ready made: download every file of the release named into the folder with
+	this bundle's \`join.sh\` (the core release's), and run \`bash join.sh\` again. A release with
+	another name is made from other versions: it works, less what changed (the install's checks say).
+
+	| Section | Release | In this bundle |
+	|---|---|---|
+	EOF
+	for s in media imported-images image-isos office; do
+		t=${expect[$s]}
+		[[ $t == - ]] && t="any office-*"
+		case $s in
+			media) inb=$media ;;
+			imported-images) inb=${#images[@]} ;;
+			image-isos) inb=$image_isos ;;
+			office) inb=$([[ -n $office ]] && echo 1 || echo 0) ;;
+		esac
+		echo "| $s | \`$t\` | $( ((inb)) && echo yes || echo no) |"
+	done
+	cat <<-EOF
 
 	## Installer ISOs
 
@@ -290,9 +371,9 @@ commit=$(git -C "$repo" rev-parse --short HEAD)
 
 		## The media folder
 
-		This bundle was made without its media folder (\`--no-media\` or \`--minimize\`), so the install
-		builds only the templates that don't need it, and leaves the rest out (its checks say which). Make
-		it on a Linux machine with internet, from this commit ($commit):
+		This bundle was made without its media folder, so the install builds only the templates that
+		don't need it, and leaves the rest out (its checks say which). Release \`${expect[media]}\` has it
+		(above). Or make it on a Linux machine with internet, from this commit ($commit):
 		\`scripts/isos/fetch-media.sh <folder>\` (about 3.3 GB; add \`--images\` for the imported images
 		above). Put it in the bundle as \`media/\` and run \`sudo install.sh\` again.
 		EOF
@@ -302,8 +383,8 @@ commit=$(git -C "$repo" rev-parse --short HEAD)
 
 		## The extras' image ISOs
 
-		This bundle was made with \`--no-image-isos\`, so the Docker extras, k3s and Winlogbeat are left
-		out. They're made, not downloaded: on a Linux machine with internet and Docker, from this commit
+		This bundle was made without them, so the Docker extras, k3s and Winlogbeat are left out. Release
+		\`${expect[image-isos]}\` has them (above). Or make them: on a Linux machine with internet and Docker, from this commit
 		($commit; their names must match), \`STAGING=<folder> scripts/isos/fetch-images.sh --all --no-upload\`.
 		Put them in the bundle's \`image-isos/\` folder and run \`sudo install.sh\` again.
 		EOF
@@ -311,10 +392,30 @@ commit=$(git -C "$repo" rev-parse --short HEAD)
 } >"$out/DOWNLOAD-LATER.md"
 echo "  $out/DOWNLOAD-LATER.md"
 
-step "SHA256SUMS"
-(cd "$out" && find . -type f ! -name SHA256SUMS -printf '%P\n' | sort | xargs -d '\n' sha256sum >"$out.sums" && mv "$out.sums" SHA256SUMS)
+step "Each section's checksums (sums/), SECTIONS and SHA256SUMS"
+sums_of() { # <section> <tag>
+	write_section_sums "$out" "$1" "$2"
+	if [[ -f $out/sums/$2.sha256 ]]; then echo "  $2: $(grep -c . "$out/sums/$2.sha256") files"; fi
+}
+mkdir -p "$out/sums"
+# Only the sections made this run: one made by an earlier run keeps its sums file (and its tag), and
+# one put in by hand has none (install.sh says so).
+((media)) && sums_of media "${expect[media]}"
+((${#images[@]})) && sums_of imported-images "${expect[imported-images]}"
+((image_isos)) && sums_of image-isos "${expect[image-isos]}"
+[[ -n $office ]] && sums_of office "${expect[office]}"
+if [[ -n $want_isos ]] && section_has "$out" isos; then
+	expect[isos]=$(fingerprint isos "$repo" "$out")
+	sums_of isos "${expect[isos]}"
+fi
+{
+	echo "commit $(git -C "$repo" rev-parse HEAD)"
+	for s in $SECTIONS_ALL; do echo "$s ${expect[$s]}"; done
+} >"$out/SECTIONS"
+write_core_sums "$out"
+echo "  core (${expect[core]}): $(grep -c . "$out/SHA256SUMS") files"
 echo "Done: $out ($(du -sh "$out" | cut -f1)). Carry it across, then on the panel's server: sudo $out/install.sh"
 if [[ -n $release ]]; then
-	step "The release's parts (deploy/release.sh)"
-	"$repo/deploy/release.sh" "$out" "$release"
+	step "The GitHub releases (deploy/release.sh)"
+	"$repo/deploy/release.sh" "$out" "$release" --part-size "$part_size"
 fi

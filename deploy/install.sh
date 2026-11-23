@@ -70,6 +70,22 @@ else
 	step "Checking the bundle"
 	ok "checked already (this bundle's SHA256SUMS hasn't changed)"
 fi
+# Its sections (deploy/sections.sh), each against its own sums file, from the bundle's copy of the
+# project. A bundle made before sections were has no SECTIONS file: SHA256SUMS covered it all.
+if [[ -f $bundle/SECTIONS && -f $bundle/repo/deploy/check-bundle.sh ]]; then
+	step "The bundle's sections"
+	sections_ok=1
+	while read -r level text; do
+		case $level in
+			ok) ok "$text" ;;
+			warn) warn "$text" ;;
+			fail) printf '  %s✘ FAIL%s %s\n' "$c_fail" "$c_off" "$text"; sections_ok=0 ;;
+			*) printf '  %s·     %s %s\n' "$c_dim" "$c_off" "$text" ;;
+		esac
+	done < <(bash "$bundle/repo/deploy/check-bundle.sh" "$bundle" "$root/install/bundle-checks" || true)
+	((sections_ok)) || fail "a section of the bundle is damaged or unpacked only in part (above)" \
+		"download that release's parts again and unpack them with join.sh, then run $0 again"
+fi
 
 if ! command -v docker >/dev/null || ! docker compose version >/dev/null 2>&1; then
 	# shellcheck source=/dev/null
