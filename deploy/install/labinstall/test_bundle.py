@@ -4,6 +4,7 @@ check-bundle.sh): fingerprints, every file in one section, and a bundle cut into
 pytest deploy/install/labinstall/test_bundle.py
 """
 
+import json
 import os
 import re
 import shutil
@@ -131,8 +132,8 @@ def check(bundle: Path, stamps: Path) -> tuple[int, list[str]]:
     return r.returncode, r.stdout.splitlines()
 
 
-def release(bundle: Path, rel: Path) -> None:
-    subprocess.run(["bash", str(DEPLOY / "release.sh"), str(bundle), str(rel), "--part-size", "2KB"],
+def release(bundle: Path, rel: Path, *more: str) -> None:
+    subprocess.run(["bash", str(DEPLOY / "release.sh"), str(bundle), str(rel), "--part-size", "2KB", *more],
                    check=True, capture_output=True, text=True)
 
 
@@ -235,9 +236,8 @@ def test_upload_script_marks_only_the_core_latest(tmp_path: Path):
     release(b, rel)
     up = (rel / "upload.sh").read_text()
     assert subprocess.run(["bash", "-n", str(rel / "upload.sh")]).returncode == 0
-    assert "for tag in media-aaaaaa imported-images-bbbbbb office-16.0.1-en-us image-isos-cccccc bundle-0123456" in up
-    assert "--target 0123456789abcdef0123456789abcdef01234567" in up
-    assert '[[ $tag == bundle-* ]] && latest=--latest' in up
+    assert "tags=(media-aaaaaa imported-images-bbbbbb office-16.0.1-en-us image-isos-cccccc bundle-0123456)" in up
+    assert "commit=0123456789abcdef0123456789abcdef01234567" in up and "core=bundle-0123456" in up
 
 
 @pytest.mark.skipif(not os.access("/bin/bash", os.X_OK), reason="needs bash")
@@ -246,3 +246,143 @@ def test_a_bundle_from_before_sections_isnt_released(tmp_path: Path):
     (b / "SECTIONS").unlink()
     r = subprocess.run(["bash", str(DEPLOY / "release.sh"), str(b), str(tmp_path / "rel")], capture_output=True, text=True)
     assert r.returncode == 1 and "older bundle.sh" in r.stderr
+
+
+def parts(folder: Path) -> list[str]:
+    return sorted(p.name for p in folder.iterdir() if re.search(r"\.tar\.\d{3}$", p.name))
+
+
+def test_a_release_over_split_over_is_also_offered_split(tmp_path: Path):
+    b = fake_bundle(tmp_path)
+    rel = tmp_path / "rel"
+    release(b, rel, "--split-over", "5KB")  # so at most 2 parts of 2 KB in each piece
+    for d in [d for d in rel.iterdir() if d.is_dir() and "-part" not in d.name]:
+        whole = parts(d)
+        total = sum((d / p).stat().st_size for p in whole)
+        pieces = sorted(rel.glob(f"{d.name}-part*"), key=lambda p: int(p.name.rsplit("-part", 1)[1]))
+        if total <= 5000:
+            assert not pieces, d.name
+            continue
+        assert len(pieces) == -(-len(whole) // 2), d.name
+        got = [p for piece in pieces for p in parts(piece)]
+        assert got == whole, d.name  # every part once, in order
+        for piece in pieces:
+            assert 1 <= len(parts(piece)) <= 2
+            assert sum((piece / p).stat().st_size for p in parts(piece)) <= 5000
+            assert (piece / f"{d.name}.sha256").read_bytes() == (d / f"{d.name}.sha256").read_bytes()
+            assert all((piece / p).samefile(d / p) for p in parts(piece))  # hard links, not copies
+            assert "NOTES.md" in os.listdir(piece) and f"`{d.name}`" in (piece / "NOTES.md").read_text()
+    media_pieces = sorted(p.name for p in rel.glob("media-aaaaaa-part*"))
+    assert media_pieces, "media should be split at 5KB"
+    assert f"`media-aaaaaa-part1` … `{media_pieces[-1]}`" in (rel / "bundle-0123456/JOIN.md").read_text()
+    up = (rel / "upload.sh").read_text()
+    assert "media-aaaaaa " + " ".join(media_pieces) + " " in up
+
+    # The core and the media pieces (not the whole media release): joined and checked as before.
+    dl, dest, stamps = tmp_path / "dl", tmp_path / "lab-bundle", tmp_path / "stamps"
+    download(rel, "bundle-0123456", dl)
+    download(rel, media_pieces[0], dl)
+    r = join(dl, dest, check_=False)
+    assert r.returncode == 1 and "media-aaaaaa:" in r.stderr and "not downloaded" in r.stderr
+    for p in media_pieces[1:]:
+        download(rel, p, dl)
+    join(dl, dest)
+    code, lines = check(dest, stamps)
+    assert code == 0 and "ok media: media-aaaaaa (3 files)" in lines, lines
+
+
+def test_split_over_zero_never_splits(tmp_path: Path):
+    b = fake_bundle(tmp_path)
+    rel = tmp_path / "rel"
+    release(b, rel, "--split-over", "0")
+    assert not list(rel.glob("*-part*"))
+    assert "Or, split" in (rel / "bundle-0123456/JOIN.md").read_text()
+    r = subprocess.run(["bash", str(DEPLOY / "release.sh"), str(b), str(tmp_path / "r2"), "--part-size", "2KB",
+                        "--split-over", "1KB"], capture_output=True, text=True)
+    assert r.returncode == 1 and "can't be less than --part-size" in r.stderr
+
+
+FAKE_GH = r"""#!/usr/bin/env python3
+# gh, as far as upload.sh uses it: releases kept as folders under $FAKE_GH, each call logged.
+import hashlib, json, os, shutil, sys
+from pathlib import Path
+root = Path(os.environ["FAKE_GH"])
+args = sys.argv[1:]
+with open(root / "calls.log", "a") as log:
+    log.write(" ".join(a.rsplit("/", 1)[-1] for a in args) + "\n")
+opts, rest, i = {}, [], 2
+while i < len(args):
+    if args[i] in ("--repo", "--target", "--title", "--notes-file", "--json", "-q"):
+        opts[args[i]] = args[i + 1]; i += 2
+    else:
+        rest.append(args[i]); i += 1
+verb, tag = args[1], rest[0]
+d = root / "releases" / tag
+if verb == "view":
+    if not d.is_dir():
+        sys.exit(1)
+    if opts["--json"] == "assets":
+        for f in sorted((d / "assets").iterdir()):
+            print(f.name, "sha256:" + hashlib.sha256(f.read_bytes()).hexdigest())
+    else:
+        print((d / "body").read_text())
+    sys.exit(0)
+if verb == "create":
+    (d / "assets").mkdir(parents=True)
+    (d / "meta").write_text(json.dumps({"target": opts["--target"], "latest": "--latest" in rest}))
+if verb in ("create", "edit"):
+    (d / "body").write_text(Path(opts["--notes-file"]).read_text())
+for f in rest[1:]:
+    if not f.startswith("-"):
+        shutil.copy(f, d / "assets" / Path(f).name)
+"""
+
+
+def test_upload_script_creates_then_mends_releases_with_a_fake_gh(tmp_path: Path):
+    b = fake_bundle(tmp_path)
+    rel = tmp_path / "rel"
+    release(b, rel, "--split-over", "5KB")
+    bin_, state = tmp_path / "bin", tmp_path / "gh"
+    bin_.mkdir(); state.mkdir()
+    (bin_ / "gh").write_text(FAKE_GH)
+    (bin_ / "gh").chmod(0o755)
+    env = {**os.environ, "PATH": f"{bin_}:{os.environ['PATH']}", "FAKE_GH": str(state)}
+
+    def upload() -> list[str]:
+        (state / "calls.log").write_text("")
+        out = subprocess.run(["bash", str(rel / "upload.sh"), "--repo", "me/it"], env=env, capture_output=True,
+                             text=True, check=True).stdout
+        return out.splitlines()
+
+    out = upload()
+    made = sorted(d.name for d in rel.iterdir() if d.is_dir())
+    assert sorted(p.name for p in (state / "releases").iterdir()) == made
+    for t in made:
+        local = sorted(p.name for p in (rel / t).iterdir() if p.name != "NOTES.md")
+        assert sorted(p.name for p in (state / "releases" / t / "assets").iterdir()) == local, t
+        meta = json.loads((state / "releases" / t / "meta").read_text())
+        assert meta == {"target": "0123456789abcdef0123456789abcdef01234567", "latest": t == "bundle-0123456"}, t
+    assert out[-2] == "bundle-0123456: creating it, with " + str(len(os.listdir(rel / "bundle-0123456")) - 1) + " file(s)"
+
+    # Again: nothing to do.
+    out = upload()
+    assert all(line.endswith(": on GitHub already, as it is here") for line in out[:-1]), out
+    assert not any(" create " in c or " upload " in c or " edit " in c
+                   for c in (state / "calls.log").read_text().splitlines())
+
+    # A cut-short upload, a changed JOIN.md and new notes: just those are mended.
+    (state / "releases/media-aaaaaa/assets/media-aaaaaa.tar.001").unlink()
+    (rel / "bundle-0123456/JOIN.md").write_text("changed")
+    (rel / "office-16.0.1-en-us/NOTES.md").write_text("new notes")
+    out = upload()
+    calls = [c for c in (state / "calls.log").read_text().splitlines() if " view " not in c]
+    # (The core's pieces share its JOIN.md, hard linked, so theirs changed too. The log keeps paths' last part.)
+    core_pieces = [p.name for p in rel.glob("bundle-0123456-part*")]
+    assert core_pieces
+    assert sorted(calls) == sorted([
+        "release upload media-aaaaaa --repo it --clobber media-aaaaaa.tar.001",
+        "release upload bundle-0123456 --repo it --clobber JOIN.md",
+        "release edit office-16.0.1-en-us --repo it --notes-file NOTES.md --latest=false",
+    ] + [f"release upload {p} --repo it --clobber JOIN.md" for p in core_pieces]), calls
+    assert (state / "releases/bundle-0123456/assets/JOIN.md").read_text() == "changed"
+    assert (state / "releases/office-16.0.1-en-us/body").read_text() == "new notes"

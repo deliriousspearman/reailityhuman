@@ -125,6 +125,21 @@ bash /path/to/lab-release/upload.sh        # needs gh, logged in, and the commit
 | `office-<version>-<language>` | Office's files (`--office`) | A new Office download | 8 (3.7 GB) |
 | `isos-<fingerprint>` | Installer ISOs (`--isos`) | The ISOs chosen change | — |
 
+**A release over 2 GB is also offered split**, for a machine that can't download that much at once:
+releases `<tag>-part1`, `<tag>-part2`, … of at most 2 GB of parts each (`--split-over`; `0` for
+never). They hold the very same files as the whole release (hard links in the release folder, so no
+extra room), so download every file of all of them instead of the whole release, or a mix: `join.sh`
+says if a part is still missing. At 500 MB parts that's:
+
+| Release | Also as |
+|---|---|
+| `media-<fingerprint>` (7 parts) | `-part1` (4 parts, 2.0 GB), `-part2` (3, 1.4 GB) |
+| `office-<version>-<language>` (8) | `-part1` (4, 2.0 GB), `-part2` (4, 1.7 GB) |
+| `image-isos-<fingerprint>` (17) | `-part1` and `-part2` (4 each, 2.0 GB), `-part3` to `-part5` (3 each, 1.5, 1.5 and 1.2 GB) |
+
+The core and `imported-images-…` are under 2 GB, so they aren't split. The core's `JOIN.md` lists each
+add-on's split releases.
+
 **Add-ons are named by what's in them**, not by the commit: a fingerprint of what decides their
 contents. So a later commit usually needs only a new core (2 files): the add-on releases already on
 GitHub still fit, and `upload.sh` skips them. Each core's `SECTIONS` file lists the add-ons it was
@@ -134,8 +149,10 @@ GitHub still fit.
 
 **Each release folder** holds the parts (`<tag>.tar.000`, …), their checksums (`<tag>.sha256`) and
 `NOTES.md`; the core's also has `join.sh` and `JOIN.md`. **`upload.sh`** creates each release not on
-GitHub yet (the core marked Latest, the add-ons not), and uploads any file a cut-short upload left out;
-a release there with all its files is left alone. `deploy/release.sh <bundle> <folder>` does the same
+GitHub yet (the core marked Latest, the rest not). For a release there already, it uploads any file
+missing there (a cut-short upload) or changed since, by the SHA-256 GitHub keeps of each file, and
+updates its notes if they changed; a release as it is here is left alone. Making the releases again
+from the same bundle gives the same parts, so only what really changed goes up again. `deploy/release.sh <bundle> <folder>` does the same
 for a bundle made already.
 
 **To put it back,** download every file of the core release, and of each add-on wanted, into one

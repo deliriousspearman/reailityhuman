@@ -6,7 +6,7 @@
 #
 #   deploy/bundle.sh <folder> [--minimize] [--images] [--no-media] [--no-image-isos] [--office <folder>]
 #                    [--isos <list>] [--iso-cache <folder>] [--with-deferred] [--sections <list>]
-#                    [--release <folder>] [--part-size 500MB]
+#                    [--release <folder>] [--part-size 500MB] [--split-over 2GB]
 #   deploy/bundle.sh --fingerprints [--images] [--with-deferred] [--office <folder>]
 #
 #   <folder>/install.sh, lab-install.toml.example   the install, and its config to fill in
@@ -48,15 +48,16 @@
 # says how to get what's left out. --isos and --office still add to it; --images can't.
 #
 # --release <folder> then cuts the bundle into GitHub releases, one per section, in parts of at most
-# 500 MB (--part-size) (deploy/release.sh, which can also be run on its own).
+# 500 MB (--part-size) (deploy/release.sh, which can also be run on its own). A release over 2 GB
+# (--split-over; 0 for never) is also offered as <tag>-part1, <tag>-part2, … of at most that each.
 set -euo pipefail
 
 # Left out of --images by default, to keep the bundle small (DOWNLOAD-LATER.md lists it).
 DEFERRED_IMAGES="metasploitable-3"
 
-usage="usage: deploy/bundle.sh <folder> [--minimize] [--images] [--no-media] [--no-image-isos] [--office <folder>] [--isos <list>] [--iso-cache <folder>] [--with-deferred] [--sections <list>] [--release <folder>] [--part-size 500MB], or deploy/bundle.sh --fingerprints [--images] [--with-deferred] [--office <folder>]"
+usage="usage: deploy/bundle.sh <folder> [--minimize] [--images] [--no-media] [--no-image-isos] [--office <folder>] [--isos <list>] [--iso-cache <folder>] [--with-deferred] [--sections <list>] [--release <folder>] [--part-size 500MB] [--split-over 2GB], or deploy/bundle.sh --fingerprints [--images] [--with-deferred] [--office <folder>]"
 out=""
-images=() media=1 image_isos=1 office="" deferred=0 want_isos="" iso_cache="" release="" part_size=500MB
+images=() media=1 image_isos=1 office="" deferred=0 want_isos="" iso_cache="" release="" part_size=500MB split_over=2GB
 sections="" fingerprints=0 flags=0
 while (($#)); do
 	case $1 in
@@ -68,6 +69,7 @@ while (($#)); do
 		--sections) sections=${2:?"--sections needs a list, e.g. core,media"}; shift ;;
 		--fingerprints) fingerprints=1 ;;
 		--part-size) part_size=${2:?"--part-size needs a size, e.g. 500MB"}; shift ;;
+		--split-over) split_over=${2:?"--split-over needs a size, e.g. 2GB, or 0"}; shift ;;
 		--office) office=${2:?"--office needs the folder Office's download made"}; shift ;;
 		--isos) want_isos=${2:?"--isos needs a list: ISO names, template ids, or all"}; shift ;;
 		--iso-cache) iso_cache=${2:?"--iso-cache needs a folder"}; shift ;;
@@ -417,5 +419,5 @@ echo "  core (${expect[core]}): $(grep -c . "$out/SHA256SUMS") files"
 echo "Done: $out ($(du -sh "$out" | cut -f1)). Carry it across, then on the panel's server: sudo $out/install.sh"
 if [[ -n $release ]]; then
 	step "The GitHub releases (deploy/release.sh)"
-	"$repo/deploy/release.sh" "$out" "$release" --part-size "$part_size"
+	"$repo/deploy/release.sh" "$out" "$release" --part-size "$part_size" --split-over "$split_over"
 fi
