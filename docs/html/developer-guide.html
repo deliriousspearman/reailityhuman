@@ -1058,7 +1058,7 @@ and <code>SSH_KNOWN_HOSTS</code>, plus <code>DEPLOY_USER</code> if it isn't the 
 <li>Reloads Caddy.</li>
 </ol>
 <p>Overlapping deploys can leave the API down, so batch your pushes.</p>
-<p><strong>Offline installs</strong> use <code>deploy/bundle.sh</code> (online side; <code>deploy/release.sh</code> cuts its output into parts for a GitHub release) and <code>deploy/install.sh</code> with the
+<p><strong>Offline installs</strong> use <code>deploy/bundle.sh</code> (online side; <code>deploy/release.sh</code> cuts its output into GitHub releases, one per section, named by the fingerprints in <code>deploy/sections.sh</code>: when <code>fetch-media.sh</code> starts reading pins from another file, add it to <code>MEDIA_INPUTS</code> there, which <code>test_bundle.py</code> checks) and <code>deploy/install.sh</code> with the
 <code>labinstall</code> package (offline side). These build the panel and every template from a carried-in
 bundle; see <a href="../offline-install.md">offline-install.md</a>. Its template list is
 <code>deploy/install/manifest.toml</code>: each entry's <code>catalogue</code> must exist in <code>templates.yaml</code>, and every

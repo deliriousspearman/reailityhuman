@@ -552,7 +552,7 @@ and `SSH_KNOWN_HOSTS`, plus `DEPLOY_USER` if it isn't the default.
 
 Overlapping deploys can leave the API down, so batch your pushes.
 
-**Offline installs** use `deploy/bundle.sh` (online side; `deploy/release.sh` cuts its output into parts for a GitHub release) and `deploy/install.sh` with the
+**Offline installs** use `deploy/bundle.sh` (online side; `deploy/release.sh` cuts its output into GitHub releases, one per section, named by the fingerprints in `deploy/sections.sh`: when `fetch-media.sh` starts reading pins from another file, add it to `MEDIA_INPUTS` there, which `test_bundle.py` checks) and `deploy/install.sh` with the
 `labinstall` package (offline side). These build the panel and every template from a carried-in
 bundle; see [offline-install.md](offline-install.md). Its template list is
 `deploy/install/manifest.toml`: each entry's `catalogue` must exist in `templates.yaml`, and every

@@ -100,39 +100,57 @@ Linux templates' ISOs for whichever you have mirrors for. Leave out `--office` i
 shared: Microsoft doesn't allow passing Office's files on (nor Windows' and Exchange's ISOs, one
 more reason they're downloaded rather than bundled).
 
-**The smallest bundle:** `deploy/bundle.sh /path/to/lab-bundle --minimize`, about 0.75 GB. It leaves
+**The smallest bundle:** `deploy/bundle.sh /path/to/lab-bundle --minimize` (the core alone, as `--sections core`), about 0.75 GB. It leaves
 out the media folder and the extras' image ISOs; the install sets up the panel and builds only the
 templates that need neither (no Windows: they all need the media folder). `--isos` and `--office`
 still add to it. Good for trying the install, not for a first transfer.
 
 #### On GitHub
 
-A GitHub release takes files under 2 GiB each (any number, up to 1000, and no limit on the total).
-`--release <folder>` cuts the bundle into parts of at most 700 MB there, after making it:
+A GitHub release takes files under 2 GiB each (up to 1000 of them, and no limit on the total).
+`--release <folder>` cuts the bundle into releases there, **one per section**, each in parts of at
+most 500 MB (`--part-size` changes it):
 
 ```sh
 deploy/bundle.sh /path/to/lab-bundle --images --office /path/to/office --release /path/to/lab-release
-gh release create bundle-<commit> /path/to/lab-release/*
+bash /path/to/lab-release/upload.sh        # needs gh, logged in, and the commit pushed to GitHub
 ```
 
-`deploy/release.sh <bundle> <folder> [--part-size 700MB]` does the same for a bundle made already. The
-bundle goes in sections, each a tar cut into numbered parts (`lab-bundle-<commit>-<section>.tar.000`, …),
-so a download can take only what it wants:
+| Release | What | Changes when | Parts at 500 MB |
+|---|---|---|---|
+| `bundle-<commit>` | The core: the install, the project, Docker's images and packages (always needed) | Every commit | 2 (765 MB) |
+| `media-<fingerprint>` | The media folder, less the two below | Its pins change (`fetch-media.sh`, `prepare.sh`, …) | 7 (3.4 GB) |
+| `image-isos-<fingerprint>` | The extras' image ISOs | An image tag in `extras.yaml` changes | 17 (8.2 GB) |
+| `imported-images-<fingerprint>` | MikroTik CHR, Metasploitable (`--images`) | Their pins change | 2 (1.0 GB) |
+| `office-<version>-<language>` | Office's files (`--office`) | A new Office download | 8 (3.7 GB) |
+| `isos-<fingerprint>` | Installer ISOs (`--isos`) | The ISOs chosen change | — |
 
-| Section | What | Parts at 700 MB (measured) |
-|---|---|---|
-| `core` | The install, the project, Docker's images and packages (always needed) | 2 (730 MB) |
-| `media` | The media folder, less the two below | 5 (3.3 GB) |
-| `imported-images` | `media/images` (`--images`) | 2 (954 MB) |
-| `office` | `media/windows/office` (`--office`) | 6 (3.5 GB) |
-| `image-isos` | The extras' image ISOs | 12 (7.7 GB) |
-| `isos` | Installer ISOs (`--isos`) | — |
+**Add-ons are named by what's in them**, not by the commit: a fingerprint of what decides their
+contents. So a later commit usually needs only a new core (2 files): the add-on releases already on
+GitHub still fit, and `upload.sh` skips them. Each core's `SECTIONS` file lists the add-ons it was
+made with, and its release's notes and `JOIN.md` name them. `bundle.sh --fingerprints` prints the
+tags without making anything; `--sections core` (or a list) makes just those, when the add-ons on
+GitHub still fit.
 
-With them come `SHA256SUMS-parts` and `JOIN.md`, which says how to put it back: check the parts, then
-`cat` each section's parts into `tar -x`. That gives the same bundle, file for file, which `install.sh`
-checks as always (tried on 2026-11-18 with the recommended bundle: 27 parts, put back identical). It
-needs room for the parts and the bundle at once; the parts can go after. Office's
-files and Microsoft's ISOs aren't for sharing: keep a release with them private.
+**Each release folder** holds the parts (`<tag>.tar.000`, …), their checksums (`<tag>.sha256`) and
+`NOTES.md`; the core's also has `join.sh` and `JOIN.md`. **`upload.sh`** creates each release not on
+GitHub yet (the core marked Latest, the add-ons not), and uploads any file a cut-short upload left out;
+a release there with all its files is left alone. `deploy/release.sh <bundle> <folder>` does the same
+for a bundle made already.
+
+**To put it back,** download every file of the core release, and of each add-on wanted, into one
+folder, and run `bash join.sh` there (Linux, or WSL on Windows). It checks each release's parts and
+unpacks them into `lab-bundle/`. An add-on can follow later: download it into the same folder and run
+`join.sh` again.
+
+**The install checks each section** against its own sums file (`sums/<tag>.sha256`); the bundle's
+`SHA256SUMS` covers the core only, so a core without add-ons passes. It then lists each section: there
+as the core expects; there but another release (a warning: what changed shows as not ready); there
+without a sums file (made by hand, so not checked); or not there, with the release to get. Only a
+damaged section stops it.
+
+It needs room for the parts and the bundle at once; the parts can go after. Office's files and
+Microsoft's ISOs aren't for sharing: keep releases with them private.
 
 **`DOWNLOAD-LATER.md`:** everything the install can use that isn't in the bundle, each with its link,
 checksum, what needs it and where it goes:
@@ -154,8 +172,10 @@ It gathers:
 | `media/` | What the builds would download (below) |
 | `image-isos/` | The Docker extras' images, and k3s's and Winlogbeat's files, an ISO each (about 7.7 GB). The install uploads them to the ISO folder, and the panel attaches them to machines at deploy. `--no-image-isos` leaves them all out, and those extras with them (they're offered once their ISOs are there, with no rebuild) |
 | `isos/` | With `--isos`: the installer ISOs chosen. The install uploads them to the ISO folder |
-| `DOWNLOAD-LATER.md` | What isn't in the bundle, and where to get it |
-| `SHA256SUMS` | Every file's checksum |
+| `DOWNLOAD-LATER.md` | What isn't in the bundle, and where to get it (the add-on releases on GitHub, or how to make them) |
+| `SECTIONS` | The commit, and the tag of each section it was made with |
+| `sums/` | Each section's checksums, `<tag>.sha256` |
+| `SHA256SUMS` | The core's checksums (everything but `media/`, `image-isos/`, `isos/` and `sums/`) |
 
 **What `media/` holds:**
 - WordPress, Nextcloud and Chinook (the databases' sample data);
